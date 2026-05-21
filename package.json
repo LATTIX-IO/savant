@@ -1,0 +1,20 @@
+{
+  "name": "savant",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "pnpm lint && pnpm typecheck && pnpm build",
+    "dev": "pnpm --filter @savant/web dev",
+    "dev:web": "pnpm --filter @savant/web dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.6"
+  }
+}

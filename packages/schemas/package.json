@@ -1,0 +1,13 @@
+{
+  "name": "@savant/schemas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@savant/types": "workspace:*"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./tenant-skill-repo-contract": "./src/tenant-skill-repo-contract.ts"
+  }
+}

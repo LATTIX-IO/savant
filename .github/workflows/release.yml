@@ -1,0 +1,591 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version tag to publish (for example v0.2.0 or v0.2.0-rc.1)
+        required: true
+        type: string
+      prerelease:
+        description: Mark the GitHub release and package set as a prerelease
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  verify:
+    name: Verify release inputs
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-22.04
+    outputs:
+      release_version: ${{ steps.release_meta.outputs.release_version }}
+      prerelease: ${{ steps.release_meta.outputs.prerelease }}
+      target_commitish: ${{ steps.release_meta.outputs.target_commitish }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Derive release metadata
+        id: release_meta
+        shell: bash
+        env:
+          WORKFLOW_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          WORKFLOW_RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+
+          if [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            version="${GITHUB_REF_NAME}"
+            prerelease=false
+            target_commitish="${GITHUB_SHA}"
+            if [[ "$version" == *-* ]]; then
+              prerelease=true
+            fi
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_run" ]]; then
+            crate_version="$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')"
+            version="v${crate_version}-ci.${WORKFLOW_RUN_NUMBER}.${WORKFLOW_RUN_ATTEMPT}"
+            prerelease=true
+            target_commitish="${WORKFLOW_RUN_HEAD_SHA}"
+          else
+            version="${{ inputs.version }}"
+            prerelease="${{ inputs.prerelease }}"
+            target_commitish="${GITHUB_SHA}"
+          fi
+
+          if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Release version '$version' must look like v1.2.3 or v1.2.3-rc.1" >&2
+            exit 1
+          fi
+          echo "release_version=$version" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$prerelease" >> "$GITHUB_OUTPUT"
+          echo "target_commitish=$target_commitish" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: verify-${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04
+
+      - name: Configure aws-lc C standard
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo 'AWS_LC_SYS_C_STD=11' >> "$GITHUB_ENV"
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@10008029e4a4ab952eea28f7f4fecbbb6ea63767 # cargo-audit
+
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@43d63066c313f326186510e6e5feab4dd2391cfd # cargo-deny
+
+      - name: Cargo audit
+        run: cargo audit --deny warnings
+
+      - name: Cargo deny
+        run: cargo deny check advisories bans sources
+
+      - name: Install Grype
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Grype filesystem scan
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.local/bin/grype" dir:. --fail-on high -o sarif > grype-results.sarif
+
+      - name: Install Semgrep
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install semgrep
+
+      - name: Semgrep static analysis
+        shell: bash
+        run: |
+          set -euo pipefail
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --metrics=off \
+            --error \
+            --sarif \
+            --output semgrep-results.sarif \
+            .
+
+      - name: Run tests
+        run: cargo test --workspace --all-features
+
+      - name: Install Linux desktop test dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup2.4-dev libjavascriptcoregtk-4.0-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Run desktop shell tests
+        run: cargo test --manifest-path tauri-ui/src-tauri/Cargo.toml
+
+  build-release-assets:
+    name: Build release assets ${{ matrix.platform_id }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    env:
+      WINDOWS_SIGNING_CERT_PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_PFX_BASE64 }}
+      WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
+      APPLE_SIGNING_CERT_P12_BASE64: ${{ secrets.APPLE_SIGNING_CERT_P12_BASE64 }}
+      APPLE_SIGNING_CERT_PASSWORD: ${{ secrets.APPLE_SIGNING_CERT_PASSWORD }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform_id: windows-amd64
+            bundles: msi
+          - os: macos-15-intel
+            platform_id: macos-amd64
+            bundles: dmg
+          - os: macos-15
+            platform_id: macos-arm64
+            bundles: dmg
+          - os: ubuntu-22.04
+            platform_id: linux-amd64
+            bundles: appimage,deb
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.verify.outputs.target_commitish }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust build artifacts
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: release-desktop-${{ matrix.os }}-${{ matrix.platform_id }}
+
+      - name: Configure aws-lc C standard
+        if: runner.os == 'Linux'
+        shell: bash
+        run: echo 'AWS_LC_SYS_C_STD=11' >> "$GITHUB_ENV"
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup2.4-dev libjavascriptcoregtk-4.0-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Tauri CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install tauri-cli --locked --version 1.8.3
+
+      - name: Import Windows code-signing certificate
+        if: runner.os == 'Windows' && env.WINDOWS_SIGNING_CERT_PFX_BASE64 != '' && env.WINDOWS_SIGNING_CERT_PASSWORD != ''
+        id: windows_signing_cert
+        shell: pwsh
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP 'mesh-node-windows-signing.pfx'
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_PFX_BASE64)
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+
+          $securePassword = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERT_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $certPath -Password $securePassword -CertStoreLocation Cert:\CurrentUser\My -Exportable
+          if (-not $certificate) {
+            throw 'Unable to import the Windows code-signing certificate.'
+          }
+
+          "thumbprint=$($certificate.Thumbprint)" | Add-Content $env:GITHUB_OUTPUT
+
+      - name: Import Apple signing certificate
+        if: runner.os == 'macOS' && env.APPLE_SIGNING_CERT_P12_BASE64 != '' && env.APPLE_SIGNING_CERT_PASSWORD != ''
+        id: apple_signing_cert
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          keychain_path="$RUNNER_TEMP/mesh-node-signing.keychain-db"
+          cert_path="$RUNNER_TEMP/mesh-node-apple-signing.p12"
+          keychain_password="mesh-node-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          CERT_PATH="$cert_path" python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+
+          Path(os.environ['CERT_PATH']).write_bytes(base64.b64decode(os.environ['APPLE_SIGNING_CERT_P12_BASE64']))
+          PY
+
+          security create-keychain -p "$keychain_password" "$keychain_path"
+          security set-keychain-settings -lut 21600 "$keychain_path"
+          security unlock-keychain -p "$keychain_password" "$keychain_path"
+          security import "$cert_path" -k "$keychain_path" -P "$APPLE_SIGNING_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$keychain_password" "$keychain_path"
+          security list-keychains -d user -s "$keychain_path"
+
+          identity="$(security find-identity -v -p codesigning "$keychain_path" | awk -F '"' 'NR==1 {print $2}')"
+          if [[ -z "$identity" ]]; then
+            echo 'Unable to determine an Apple signing identity from the imported certificate.' >&2
+            exit 1
+          fi
+
+          echo "keychain_path=$keychain_path" >> "$GITHUB_OUTPUT"
+          echo "keychain_password=$keychain_password" >> "$GITHUB_OUTPUT"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+
+      - name: Build bundled desktop installer (unix)
+        if: runner.os != 'Windows'
+        working-directory: tauri-ui
+        shell: bash
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Build bundled desktop installer (windows)
+        if: runner.os == 'Windows'
+        working-directory: tauri-ui
+        shell: pwsh
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Authenticode sign Windows installers
+        if: runner.os == 'Windows' && steps.windows_signing_cert.outputs.thumbprint != ''
+        shell: pwsh
+        run: |
+          $timestampServer = 'http://timestamp.digicert.com'
+          $certificate = Get-ChildItem "Cert:\CurrentUser\My\${{ steps.windows_signing_cert.outputs.thumbprint }}" -ErrorAction Stop
+          $installers = Get-ChildItem -Path 'tauri-ui/src-tauri/target/release/bundle' -Recurse -Filter *.msi
+
+          foreach ($installer in $installers) {
+            $signature = Set-AuthenticodeSignature -FilePath $installer.FullName -Certificate $certificate -TimestampServer $timestampServer -HashAlgorithm SHA256
+            if ($signature.Status -ne 'Valid') {
+              $statusMessage = if ($signature.StatusMessage) { $signature.StatusMessage } else { $signature.Status }
+              throw "Authenticode signing failed for '$($installer.FullName)': $statusMessage"
+            }
+          }
+
+      - name: Codesign macOS disk images
+        if: runner.os == 'macOS' && steps.apple_signing_cert.outputs.identity != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          while IFS= read -r dmg; do
+            codesign --force --timestamp --sign "${{ steps.apple_signing_cert.outputs.identity }}" "$dmg"
+            codesign --verify --verbose=2 "$dmg"
+          done < <(find tauri-ui/src-tauri/target/release/bundle -type f -name '*.dmg' | sort)
+
+      - name: Collect installer artifacts (unix)
+        if: runner.os != 'Windows'
+        id: collect_unix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            find tauri-ui/src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) | sort
+          )
+
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo 'No bundled installers were produced.' >&2
+            exit 1
+          fi
+
+          for file in "${files[@]}"; do
+            shasum -a 256 "$file" > "$file.sha256"
+          done
+
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${files[@]}"
+            for file in "${files[@]}"; do
+              printf '%s.sha256\n' "$file"
+            done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Collect installer artifacts (windows)
+        if: runner.os == 'Windows'
+        id: collect_windows
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path 'tauri-ui/src-tauri/target/release/bundle' -Recurse -Filter *.msi | Select-Object -ExpandProperty FullName
+          if (-not $files) {
+            throw 'No bundled installers were produced.'
+          }
+
+          foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256"
+          }
+
+          Add-Content $env:GITHUB_OUTPUT 'files<<EOF'
+          foreach ($file in $files) {
+            Add-Content $env:GITHUB_OUTPUT $file
+          }
+          foreach ($file in $files) {
+            Add-Content $env:GITHUB_OUTPUT "$file.sha256"
+          }
+          Add-Content $env:GITHUB_OUTPUT 'EOF'
+
+      - name: Upload staged release assets (unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.platform_id }}
+          path: ${{ steps.collect_unix.outputs.files }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload staged release assets (windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-${{ matrix.platform_id }}
+          path: ${{ steps.collect_windows.outputs.files }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summarize staged native assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${{ needs.verify.outputs.release_version }}"
+          native_signing='GPG detached signatures added at publish time'
+
+          if [[ "${{ runner.os }}" == 'Windows' && -n "${{ steps.windows_signing_cert.outputs.thumbprint }}" ]]; then
+            native_signing='Authenticode'
+          elif [[ "${{ runner.os }}" == 'macOS' && -n "${{ steps.apple_signing_cert.outputs.identity }}" ]]; then
+            native_signing='codesign'
+          elif [[ "${{ runner.os }}" == 'Windows' || "${{ runner.os }}" == 'macOS' ]]; then
+            native_signing='not configured'
+          fi
+
+          {
+            echo "## Native release assets staged"
+            echo
+            echo "- Release: $release_url"
+            echo "- Version: `${{ needs.verify.outputs.release_version }}`"
+            echo "- Platform artifact set: `${{ matrix.platform_id }}`"
+            echo "- Installer bundle targets: `${{ matrix.bundles }}`"
+            echo "- Native platform signing: `$native_signing`"
+            echo
+            echo "These signed installers are staged as workflow artifacts and published by the single release job after every platform build succeeds."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean up Apple signing keychain
+        if: always() && runner.os == 'macOS' && steps.apple_signing_cert.outputs.keychain_path != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          security delete-keychain "${{ steps.apple_signing_cert.outputs.keychain_path }}"
+
+  publish-release:
+    name: Publish release
+    needs:
+      - verify
+      - build-release-assets
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_GPG_PRIVATE_KEY: ${{ secrets.RELEASE_GPG_PRIVATE_KEY }}
+      RELEASE_GPG_PASSPHRASE: ${{ secrets.RELEASE_GPG_PASSPHRASE }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ needs.verify.outputs.target_commitish }}
+          fetch-depth: 0
+
+      - name: Download staged release assets
+        uses: actions/download-artifact@87c55149d96e628cc2ef7e6fc2aab372015aec85 # v4.1.3
+        with:
+          pattern: release-*
+          path: dist/release-assets
+          merge-multiple: true
+
+      - name: Determine previous release tag
+        id: previous_tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --tags
+          previous_tag="$({
+            git tag --merged "${{ needs.verify.outputs.target_commitish }}" --sort=-version:refname \
+              | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' \
+              | grep -vx "${{ needs.verify.outputs.release_version }}" \
+              | head -n1
+          } || true)"
+          echo "previous_tag=$previous_tag" >> "$GITHUB_OUTPUT"
+
+      - name: Generate release notes once
+        id: release_notes
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        env:
+          RELEASE_VERSION: ${{ needs.verify.outputs.release_version }}
+          TARGET_COMMITISH: ${{ needs.verify.outputs.target_commitish }}
+          PREVIOUS_TAG: ${{ steps.previous_tag.outputs.previous_tag }}
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const tagName = process.env.RELEASE_VERSION;
+            const targetCommitish = process.env.TARGET_COMMITISH;
+            const previousTag = process.env.PREVIOUS_TAG || undefined;
+
+            const response = await github.rest.repos.generateReleaseNotes({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tagName,
+              target_commitish: targetCommitish,
+              ...(previousTag ? { previous_tag_name: previousTag } : {}),
+            });
+
+            fs.mkdirSync(path.join(process.env.GITHUB_WORKSPACE, 'dist'), { recursive: true });
+            const releaseNotesPath = path.join(process.env.GITHUB_WORKSPACE, 'dist', 'release-notes.md');
+            const body = response.data.body.trim();
+            fs.writeFileSync(releaseNotesPath, `# ${tagName}\n\n${body}\n`, 'utf8');
+
+            core.setOutput('release_name', response.data.name || tagName);
+
+      - name: Generate changelog draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ./scripts/update_changelog.py \
+            --version "${{ needs.verify.outputs.release_version }}" \
+            --notes-file dist/release-notes.md \
+            --changelog-file CHANGELOG.md
+          cp CHANGELOG.md "dist/CHANGELOG-${{ needs.verify.outputs.release_version }}.md"
+
+      - name: Generate desktop installer manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ./scripts/generate_desktop_update_manifest.py \
+            --assets-dir dist/release-assets \
+            --release-version "${{ needs.verify.outputs.release_version }}" \
+            --release-base-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${{ needs.verify.outputs.release_version }}" \
+            --notes-url "https://github.com/${GITHUB_REPOSITORY}/releases/tag/${{ needs.verify.outputs.release_version }}" \
+            --output dist/release-assets/latest.json
+
+      - name: Require release signing secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$RELEASE_GPG_PRIVATE_KEY" || -z "$RELEASE_GPG_PASSPHRASE" ]]; then
+            echo 'Release signing requires RELEASE_GPG_PRIVATE_KEY and RELEASE_GPG_PASSPHRASE secrets.' >&2
+            echo 'Export a dedicated release-signing key from Kleopatra/Gpg4win, store the armored private key in GitHub secrets, and rerun the release.' >&2
+            exit 1
+          fi
+
+      - name: Import release GPG signing key
+        id: release_gpg
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          export GNUPGHOME="$RUNNER_TEMP/mesh-node-gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+
+          key_path="$RUNNER_TEMP/mesh-node-release-private.key.asc"
+          printf '%s' "$RELEASE_GPG_PRIVATE_KEY" > "$key_path"
+          gpg --batch --import "$key_path"
+
+          fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '/^fpr:/ { print $10; exit }')"
+          if [[ -z "$fingerprint" ]]; then
+            echo 'Unable to resolve a secret-key fingerprint after importing the release key.' >&2
+            exit 1
+          fi
+
+          echo "$fingerprint:6:" | gpg --batch --import-ownertrust
+          gpg --batch --armor --export "$fingerprint" > dist/mesh-node-release-signing-public-key.asc
+
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
+      - name: Create detached signatures for published files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t files_to_sign < <(
+            find dist/release-assets -maxdepth 1 -type f ! -name '*.asc' -printf '%p\n' | sort
+            printf 'dist/CHANGELOG-%s.md\n' "${{ needs.verify.outputs.release_version }}"
+          )
+
+          for file in "${files_to_sign[@]}"; do
+            gpg --batch --yes --armor --pinentry-mode loopback \
+              --passphrase "$RELEASE_GPG_PASSPHRASE" \
+              --local-user "${{ steps.release_gpg.outputs.fingerprint }}" \
+              --detach-sign \
+              --output "$file.asc" \
+              "$file"
+          done
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ needs.verify.outputs.release_version }}
+          target_commitish: ${{ needs.verify.outputs.target_commitish }}
+          prerelease: ${{ needs.verify.outputs.prerelease == 'true' }}
+          name: ${{ steps.release_notes.outputs.release_name }}
+          body_path: dist/release-notes.md
+          files: |
+            dist/release-assets/*
+            dist/CHANGELOG-${{ needs.verify.outputs.release_version }}.md
+            dist/CHANGELOG-${{ needs.verify.outputs.release_version }}.md.asc
+            dist/mesh-node-release-signing-public-key.asc
+
+      - name: Summarize published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          release_url="https://github.com/${GITHUB_REPOSITORY}/releases/tag/${{ needs.verify.outputs.release_version }}"
+          {
+            echo "## Release published"
+            echo
+            echo "- Release: $release_url"
+            echo "- Version: `${{ needs.verify.outputs.release_version }}`"
+            echo "- Previous tag baseline: `${{ steps.previous_tag.outputs.previous_tag || 'none' }}`"
+            echo "- Release notes writer: `single publish job`"
+            echo "- Changelog artifact: `CHANGELOG-${{ needs.verify.outputs.release_version }}.md`"
+            echo "- Desktop feed manifest: `latest.json`"
+            echo "- Detached signatures: `GPG .asc per artifact/checksum/changelog`"
+            echo "- Release signing public key: `mesh-node-release-signing-public-key.asc`"
+            echo
+            echo "Release notes are generated once and reused for the GitHub release body plus the changelog draft artifact, which avoids the duplicated note generation caused by matrix jobs updating the same release in parallel."
+            echo "Windows installers are Authenticode-signed when the Windows certificate secrets are configured, macOS disk images are codesigned when the Apple certificate secrets are configured, and every published installer/checksum/manifest/changelog artifact is detached-signed with the Kleopatra-managed GPG release key."
+          } >> "$GITHUB_STEP_SUMMARY"

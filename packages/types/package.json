@@ -1,0 +1,11 @@
+{
+  "name": "@savant/types",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./control-plane": "./src/control-plane.ts",
+    "./tenant-skill-repo": "./src/tenant-skill-repo.ts"
+  }
+}

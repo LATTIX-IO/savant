@@ -1,0 +1,468 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: mesh-node-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Detect mesh-node checkout access
+        id: mesh_node_access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets['GH_PAT'] }}
+        run: |
+          set -euo pipefail
+          CLEAN_GH_PAT="$(printf '%s' "${GH_PAT:-}" | tr -d '\r\n')"
+          if [[ -z "$CLEAN_GH_PAT" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT is not configured for private mesh-node checkout." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          status="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLEAN_GH_PAT}" \
+            -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/LATTIX-IO/mesh-node)"
+
+          if [[ "$status" == "200" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "token=${CLEAN_GH_PAT}" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT can access LATTIX-IO/mesh-node." >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT cannot access LATTIX-IO/mesh-node (GitHub API status ${status})." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out mesh-node
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: LATTIX-IO/mesh-node
+          path: mesh-node
+          token: ${{ steps.mesh_node_access.outputs.token }}
+          submodules: recursive
+
+      - name: Explain mesh-node validation skip
+        if: steps.mesh_node_access.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Skipping mesh-node validation: ${{ steps.mesh_node_access.outputs.reason }}"
+
+      - name: Set up Python
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Rust toolchain
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust build artifacts
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+
+      - name: Configure aws-lc C standard
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: echo 'AWS_LC_SYS_C_STD=11' >> "$GITHUB_ENV"
+
+      - name: Install cargo-audit
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: taiki-e/install-action@10008029e4a4ab952eea28f7f4fecbbb6ea63767 # cargo-audit
+
+      - name: Install cargo-deny
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: taiki-e/install-action@43d63066c313f326186510e6e5feab4dd2391cfd # cargo-deny
+
+      - name: Cargo audit
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo audit --deny warnings
+
+      - name: Cargo deny
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo deny check advisories bans sources
+
+      - name: Install Grype
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Grype filesystem scan
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          "$HOME/.local/bin/grype" dir:./mesh-node --fail-on high -o sarif > grype-results.sarif
+
+      - name: Install Semgrep
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install semgrep
+
+      - name: Semgrep static analysis
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          semgrep scan \
+            --config p/security-audit \
+            --config p/secrets \
+            --metrics=off \
+            --error \
+            --sarif \
+            --output semgrep-results.sarif \
+            mesh-node
+
+      - name: Decide whether SARIF upload is available
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        id: code_scanning_upload
+        shell: bash
+        env:
+          REPO_VARS_JSON: ${{ toJson(vars) }}
+        run: |
+          set -euo pipefail
+          enabled=false
+          reason="GitHub code scanning upload is disabled for private repositories unless GitHub Advanced Security is enabled."
+          override="$(python -c 'import json, os; data = json.loads(os.environ.get("REPO_VARS_JSON") or "{}"); print(str(data.get("ENABLE_GITHUB_CODE_SCANNING_UPLOAD", "")).lower())')"
+
+          if [[ "${{ github.event.repository.private }}" == "false" ]]; then
+            enabled=true
+            reason="Repository is public, so code scanning uploads are supported."
+          elif [[ "$override" == "true" ]]; then
+            enabled=true
+            reason="ENABLE_GITHUB_CODE_SCANNING_UPLOAD=true explicitly enabled SARIF uploads."
+          fi
+
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+
+      - name: Explain SARIF upload skip
+        if: steps.mesh_node_access.outputs.enabled == 'true' && steps.code_scanning_upload.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Skipping SARIF uploads: ${{ steps.code_scanning_upload.outputs.reason }}"
+
+      - name: Upload Grype SARIF
+        if: always() && steps.mesh_node_access.outputs.enabled == 'true' && github.event_name != 'pull_request' && steps.code_scanning_upload.outputs.enabled == 'true'
+        uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+        with:
+          sarif_file: grype-results.sarif
+          category: grype
+
+      - name: Upload Semgrep SARIF
+        if: always() && steps.mesh_node_access.outputs.enabled == 'true' && github.event_name != 'pull_request' && steps.code_scanning_upload.outputs.enabled == 'true'
+        uses: github/codeql-action/upload-sarif@95e58e9a2cdfd71adc6e0353d5c52f41a045d225 # v4
+        with:
+          sarif_file: semgrep-results.sarif
+          category: semgrep
+
+  quality:
+    name: Code quality and tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Detect mesh-node checkout access
+        id: mesh_node_access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets['GH_PAT'] }}
+        run: |
+          set -euo pipefail
+          CLEAN_GH_PAT="$(printf '%s' "${GH_PAT:-}" | tr -d '\r\n')"
+          if [[ -z "$CLEAN_GH_PAT" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT is not configured for private mesh-node checkout." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          status="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLEAN_GH_PAT}" \
+            -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/LATTIX-IO/mesh-node)"
+
+          if [[ "$status" == "200" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "token=${CLEAN_GH_PAT}" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT can access LATTIX-IO/mesh-node." >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT cannot access LATTIX-IO/mesh-node (GitHub API status ${status})." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out mesh-node
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: LATTIX-IO/mesh-node
+          path: mesh-node
+          token: ${{ steps.mesh_node_access.outputs.token }}
+          submodules: recursive
+
+      - name: Explain mesh-node validation skip
+        if: steps.mesh_node_access.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Skipping mesh-node validation: ${{ steps.mesh_node_access.outputs.reason }}"
+
+      - name: Install Rust toolchain
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust build artifacts
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: quality-${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04
+      - name: Configure aws-lc C standard
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: echo 'AWS_LC_SYS_C_STD=11' >> "$GITHUB_ENV"
+
+      - name: Check formatting
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo fmt --all -- --check
+
+      - name: Lint with clippy
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+
+      - name: Run tests
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo test --workspace --all-features
+
+      - name: Install Linux desktop test dependencies
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup2.4-dev libjavascriptcoregtk-4.0-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Run desktop shell tests
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        working-directory: mesh-node
+        run: cargo test --manifest-path tauri-ui/src-tauri/Cargo.toml
+
+  build-installers:
+    name: Build installer ${{ matrix.platform_id }}
+    needs:
+      - security
+      - quality
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            platform_id: windows-amd64
+            bundles: msi
+          - os: macos-15-intel
+            platform_id: macos-amd64
+            bundles: dmg
+          - os: macos-15
+            platform_id: macos-arm64
+            bundles: dmg
+          - os: ubuntu-22.04
+            platform_id: linux-amd64
+            bundles: appimage,deb
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Detect mesh-node checkout access
+        id: mesh_node_access
+        shell: bash
+        env:
+          GH_PAT: ${{ secrets['GH_PAT'] }}
+        run: |
+          set -euo pipefail
+          CLEAN_GH_PAT="$(printf '%s' "${GH_PAT:-}" | tr -d '\r\n')"
+          if [[ -z "$CLEAN_GH_PAT" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT is not configured for private mesh-node checkout." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          status="$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer ${CLEAN_GH_PAT}" \
+            -H 'Accept: application/vnd.github+json' \
+            https://api.github.com/repos/LATTIX-IO/mesh-node)"
+
+          if [[ "$status" == "200" ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "token=${CLEAN_GH_PAT}" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT can access LATTIX-IO/mesh-node." >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=GH_PAT cannot access LATTIX-IO/mesh-node (GitHub API status ${status})." >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out mesh-node
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          repository: LATTIX-IO/mesh-node
+          path: mesh-node
+          token: ${{ steps.mesh_node_access.outputs.token }}
+          submodules: recursive
+
+      - name: Explain mesh-node validation skip
+        if: steps.mesh_node_access.outputs.enabled != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Skipping mesh-node validation: ${{ steps.mesh_node_access.outputs.reason }}"
+
+      - name: Install Rust toolchain
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+
+      - name: Cache Rust build artifacts
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          key: desktop-shell-${{ matrix.os }}-${{ matrix.platform_id }}
+
+      - name: Configure aws-lc C standard
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: echo 'AWS_LC_SYS_C_STD=11' >> "$GITHUB_ENV"
+
+      - name: Install Linux desktop dependencies
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libglib2.0-dev libgtk-3-dev libsoup2.4-dev libjavascriptcoregtk-4.0-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev patchelf
+
+      - name: Install Tauri CLI
+        if: steps.mesh_node_access.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo install tauri-cli --locked --version 1.8.3
+
+      - name: Build bundled desktop installer (unix)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os != 'Windows'
+        working-directory: mesh-node/tauri-ui
+        shell: bash
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Build bundled desktop installer (windows)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Windows'
+        working-directory: mesh-node/tauri-ui
+        shell: pwsh
+        run: cargo tauri build --bundles ${{ matrix.bundles }}
+
+      - name: Collect installer artifacts (unix)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os != 'Windows'
+        id: collect_unix
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(
+            find mesh-node/tauri-ui/src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' \) | sort
+          )
+
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo 'No bundled installers were produced.' >&2
+            exit 1
+          fi
+
+          for file in "${files[@]}"; do
+            shasum -a 256 "$file" > "$file.sha256"
+          done
+
+          {
+            echo 'files<<EOF'
+            printf '%s\n' "${files[@]}"
+            for file in "${files[@]}"; do
+              printf '%s.sha256\n' "$file"
+            done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Collect installer artifacts (windows)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Windows'
+        id: collect_windows
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path 'mesh-node/tauri-ui/src-tauri/target/release/bundle' -Recurse -Filter *.msi | Select-Object -ExpandProperty FullName
+          if (-not $files) {
+            throw 'No bundled installers were produced.'
+          }
+
+          foreach ($file in $files) {
+            $hash = (Get-FileHash -Algorithm SHA256 $file).Hash.ToLowerInvariant()
+            "$hash  $(Split-Path $file -Leaf)" | Set-Content "$file.sha256"
+          }
+
+          Add-Content $env:GITHUB_OUTPUT 'files<<EOF'
+          foreach ($file in $files) {
+            Add-Content $env:GITHUB_OUTPUT $file
+          }
+          foreach ($file in $files) {
+            Add-Content $env:GITHUB_OUTPUT "$file.sha256"
+          }
+          Add-Content $env:GITHUB_OUTPUT 'EOF'
+
+      - name: Upload installer artifact (unix)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os != 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesh-node-installer-${{ matrix.platform_id }}
+          path: ${{ steps.collect_unix.outputs.files }}
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload installer artifact (windows)
+        if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Windows'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: mesh-node-installer-${{ matrix.platform_id }}
+          path: ${{ steps.collect_windows.outputs.files }}
+          if-no-files-found: error
+          retention-days: 14

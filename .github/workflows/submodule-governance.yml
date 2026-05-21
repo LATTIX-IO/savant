@@ -1,0 +1,58 @@
+name: Submodule Validation
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      max_wait_seconds:
+        description: Maximum time to wait for child PR checks to settle
+        required: false
+        default: '900'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-submodule-pointers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Summarize submodule pointer changes
+        shell: bash
+        run: |
+          {
+            echo "## Submodule validation"
+            echo
+            echo "This workflow reports submodule pointer state only."
+            echo "It does not create child branches, open child PRs, or aggregate child CI back into the monorepo."
+            echo
+
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              base_ref="${{ github.base_ref }}"
+              git fetch origin "$base_ref" --depth=1
+              summary="$(git diff --submodule=short "origin/${base_ref}...HEAD")"
+
+              if [ -n "$summary" ]; then
+                echo "### PR diff"
+                echo
+                echo '```text'
+                printf '%s\n' "$summary"
+                echo '```'
+              else
+                echo "No submodule pointer changes detected in this pull request."
+              fi
+            else
+              echo "### Current submodule pointers"
+              echo
+              echo '```text'
+              git submodule status --cached --recursive || true
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

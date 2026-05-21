@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:api.anthropic.com)",
+      "PowerShell($src = \"C:\\\\Users\\\\JamesBooth\\\\.claude\\\\projects\\\\D--lattix-savant\\\\f48d5a8c-f8e9-4b69-bdca-56b37e1208e1\\\\tool-results\\\\webfetch-1779396325025-x8g05a.bin\"; Get-Item $src | Format-List Length, FullName; $bytes = [System.IO.File]::ReadAllBytes\\($src\\); \"First bytes: $\\($bytes[0..7] -join ','\\)\")"
+    ]
+  }
+}

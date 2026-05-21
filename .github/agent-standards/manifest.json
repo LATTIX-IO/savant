@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "bundleVersionFile": ".github/agent-standards/VERSION",
+  "sources": {
+    "agents": "AGENTS.md",
+    "copilotInstructions": ".github/copilot-instructions.md",
+    "instructions": ".github/instructions",
+    "prompts": ".github/prompts"
+  },
+  "targets": {
+    "fromGitmodules": true,
+    "preserveLocalFiles": true,
+    "generatedHeader": true
+  }
+}

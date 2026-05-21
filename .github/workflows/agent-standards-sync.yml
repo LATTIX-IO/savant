@@ -1,0 +1,122 @@
+name: Agent Standards Sync
+
+on:
+  pull_request:
+    paths:
+      - AGENTS.md
+      - .github/copilot-instructions.md
+      - .github/instructions/**
+      - .github/prompts/**
+      - .github/agent-standards/**
+      - scripts/sync-agent-standards.ps1
+      - scripts/sync-agent-standards.sh
+  push:
+    branches:
+      - main
+    paths:
+      - AGENTS.md
+      - .github/copilot-instructions.md
+      - .github/instructions/**
+      - .github/prompts/**
+      - .github/agent-standards/**
+      - scripts/sync-agent-standards.ps1
+      - scripts/sync-agent-standards.sh
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: Apply, commit, and push generated child-repo standards updates
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: agent-standards-sync-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    name: Preview generated standards drift
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
+
+      - name: Preview drift
+        id: preview
+        shell: pwsh
+        continue-on-error: true
+        run: ./scripts/sync-agent-standards.ps1 -Check -All
+
+      - name: Summarize preview
+        shell: bash
+        run: |
+          {
+            echo "## Agent standards sync preview"
+            echo
+            if [ "${{ steps.preview.outcome }}" = "success" ]; then
+              echo "Generated child-repo standards are already synchronized."
+            else
+              echo "Generated child-repo standards would change after this PR lands."
+              echo
+              echo "The push-to-main job applies and pushes those generated updates automatically using the configured bot token."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  apply:
+    name: Apply and push generated standards
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply == 'true')
+    runs-on: ubuntu-latest
+    env:
+      CHILD_REPO_PUSH_TOKEN: ${{ secrets.LATTIX_BOT_PAT }}
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
+          persist-credentials: true
+
+      - name: Verify child repository push token
+        shell: bash
+        run: |
+          if [ -z "${CHILD_REPO_PUSH_TOKEN}" ]; then
+            echo "::error::Missing required secret LATTIX_BOT_PAT. This workflow needs a bot token with contents:write access to every child repository it syncs."
+            exit 1
+          fi
+
+      - name: Configure git identity and authenticated remotes
+        shell: bash
+        run: |
+          git config --global user.name "lattix-agent-standards-bot"
+          git config --global user.email "lattix-agent-standards-bot@users.noreply.github.com"
+          git config --global url."https://x-access-token:${CHILD_REPO_PUSH_TOKEN}@github.com/".insteadOf "https://github.com/"
+          git config --global url."https://x-access-token:${CHILD_REPO_PUSH_TOKEN}@github.com/".insteadOf "git@github.com:"
+
+      - name: Apply, commit, and push child repository updates
+        shell: pwsh
+        run: ./scripts/sync-agent-standards.ps1 -Write -All -Push
+
+      - name: Commit and push updated submodule pointers
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t submodule_paths < <(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
+          if [ "${#submodule_paths[@]}" -gt 0 ]; then
+            git add -- "${submodule_paths[@]}"
+          fi
+
+          if git diff --cached --quiet; then
+            echo "No submodule pointer updates to commit."
+            exit 0
+          fi
+
+          git commit -m "chore(agent-standards): update generated standards pointers"
+          git push origin HEAD:${GITHUB_REF_NAME}

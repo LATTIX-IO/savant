@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type {
   ApiErrorResponse,
   RepoBootstrapTemplateResponse,
   RepoContractValidationCheck,
+  RepoContractValidationResponse,
   RepositorySyncMode,
 } from "@savant/types";
 
@@ -36,8 +37,52 @@ type ProvisionPreviewState =
   | { status: "error"; message: string }
   | { status: "success"; data: RepoBootstrapTemplateResponse["data"] };
 
+type ConnectValidationState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: RepoContractValidationResponse["data"] };
+
+const EXAMPLE_CONNECT_SNAPSHOT = [
+  "docs/README.md",
+  "registry/skills.yaml",
+  "registry/dependencies.yaml",
+  "registry/owners.yaml",
+  "registry/routing-policies.yaml",
+  "tier1/standards/compliance-review/SKILL.md",
+  "tier1/standards/compliance-review/metadata.yaml",
+  "tier2/methodology/legal/contract-review-assistant/SKILL.md",
+  "tier2/methodology/legal/contract-review-assistant/metadata.yaml",
+  "tier2/methodology/legal/contract-review-assistant/eval/dataset.yaml",
+  "tier3/workflow/research/triage-helper/SKILL.md",
+  "tier3/workflow/research/triage-helper/metadata.yaml",
+  "evals/datasets/contracts.yaml",
+  "evals/rubrics/default.yaml",
+  "templates/README.md",
+].join("\n");
+
 function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
   return typeof value === "object" && value !== null && "error" in value;
+}
+
+function parseSnapshotPaths(value: string): string[] {
+  return [...new Set(
+    value
+      .split(/[\r\n,]+/)
+      .map((entry) => entry.trim())
+      .filter(Boolean),
+  )];
+}
+
+function getValidationTone(checks: readonly RepoContractValidationCheck[]): "moss" | "brass" | "blood" {
+  if (checks.some((check) => check.status === "fail")) {
+    return "blood";
+  }
+
+  if (checks.some((check) => check.status === "warn" || check.status === "pending")) {
+    return "brass";
+  }
+
+  return "moss";
 }
 
 export function OnboardingModal() {
@@ -49,9 +94,14 @@ export function OnboardingModal() {
   const [branch, setBranch] = useState("main");
   const [name, setName] = useState("Finance Skills");
   const [syncMode, setSyncMode] = useState<RepositorySyncMode>("webhook");
+  const [repoTreeSnapshot, setRepoTreeSnapshot] = useState("");
   const [provisionPreview, setProvisionPreview] = useState<ProvisionPreviewState>({
     status: "idle",
   });
+  const [connectValidation, setConnectValidation] = useState<ConnectValidationState>({
+    status: "idle",
+  });
+  const snapshotPaths = useMemo(() => parseSnapshotPaths(repoTreeSnapshot), [repoTreeSnapshot]);
 
   useEffect(() => {
     if (!open || step !== 3 || path !== "provision") {
@@ -118,6 +168,73 @@ export function OnboardingModal() {
     };
   }, [branch, name, open, path, provider, repoUrl, step, syncMode]);
 
+  useEffect(() => {
+    if (!open || step !== 3 || path !== "connect") {
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadValidation() {
+      setConnectValidation({ status: "loading" });
+
+      try {
+        const response = await fetch("/api/repositories/validate-contract", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            defaultBranch: branch,
+            displayName: name,
+            observedPaths: snapshotPaths.length > 0 ? snapshotPaths : undefined,
+            path: "connect",
+            provider,
+            repoUrl,
+            syncMode,
+          }),
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json()) as
+          | RepoContractValidationResponse
+          | ApiErrorResponse;
+
+        if (!response.ok || isApiErrorResponse(payload)) {
+          throw new Error(
+            isApiErrorResponse(payload)
+              ? payload.error.message
+              : "Could not validate the repository contract.",
+          );
+        }
+
+        if (active) {
+          setConnectValidation({ status: "success", data: payload.data });
+        }
+      } catch (error) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setConnectValidation({
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not validate the repository contract.",
+        });
+      }
+    }
+
+    void loadValidation();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [branch, name, open, path, provider, repoUrl, snapshotPaths, step, syncMode]);
+
   if (!open) return null;
 
   const next = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
@@ -126,7 +243,16 @@ export function OnboardingModal() {
   const close = () => {
     hide();
     setStep(0);
+    setConnectValidation({ status: "idle" });
+    setProvisionPreview({ status: "idle" });
   };
+
+  const connectTone =
+    connectValidation.status === "success"
+      ? getValidationTone(connectValidation.data.checks)
+      : connectValidation.status === "error"
+        ? "blood"
+        : "brass";
 
   return (
     <div
@@ -378,6 +504,42 @@ export function OnboardingModal() {
                     </label>
                   </div>
                 </div>
+
+                {path === "connect" && (
+                  <div className="field">
+                    <div className="row between" style={{ alignItems: "center", gap: 10 }}>
+                      <div className="field-label" style={{ marginBottom: 0 }}>Repository tree snapshot</div>
+                      <div className="row" style={{ gap: 8 }}>
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => setRepoTreeSnapshot(EXAMPLE_CONNECT_SNAPSHOT)}
+                        >
+                          Load example snapshot
+                        </button>
+                        {repoTreeSnapshot ? (
+                          <button
+                            type="button"
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => setRepoTreeSnapshot("")}
+                          >
+                            Clear
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                    <textarea
+                      rows={8}
+                      value={repoTreeSnapshot}
+                      onChange={(e) => setRepoTreeSnapshot(e.target.value)}
+                      placeholder="Paste one repository path per line to preview the contract check before live provider tree fetch is wired."
+                      style={{ minHeight: 148, resize: "vertical" }}
+                    />
+                    <div className="field-help">
+                      Optional for this slice. Paste a path list from a provider tree export to run a real contract check now, or leave it blank to see the pending pre-flight state.
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -467,36 +629,77 @@ export function OnboardingModal() {
                     Validate repository structure
                   </div>
                   <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 520 }}>
-                    Savant ran a dry-run check against {repoUrl} on branch <span className="mono">{branch}</span>.
+                    Savant ran a contract check against {repoUrl} on branch <span className="mono">{branch}</span>.
                   </div>
                 </div>
 
                 <div className="panel" style={{ marginBottom: 14 }}>
                   <div className="panel-hd">
                     <div className="panel-title">Repository check</div>
-                    <span className="chip chip-moss">
-                      <Ic.Check style={{ width: 10, height: 10 }} />
-                      ready to ingest
+                    <span className={`chip chip-${connectTone}`}>
+                      {connectValidation.status === "success" && connectTone === "moss" ? (
+                        <Ic.Check style={{ width: 10, height: 10 }} />
+                      ) : connectValidation.status === "error" || connectTone === "blood" ? (
+                        <Ic.XCircle style={{ width: 10, height: 10 }} />
+                      ) : (
+                        <Ic.Warn style={{ width: 10, height: 10 }} />
+                      )}
+                      {connectValidation.status === "success"
+                        ? connectValidation.data.ready
+                          ? "ready to ingest"
+                          : connectTone === "blood"
+                            ? "needs repair"
+                            : "pre-flight pending"
+                        : connectValidation.status === "error"
+                          ? "validation failed"
+                          : "validating"}
                     </span>
                   </div>
                   <div className="panel-bd" style={{ padding: "0 var(--pad-card)" }}>
-                    <ValidateRow ok label="Authentication" meta="oauth-app · wexler-hahn-prod" />
-                    <ValidateRow ok label="Default branch resolved" meta={branch} />
-                    <ValidateRow ok label="Skill manifest found" meta=".savant/manifest.yaml" />
-                    <ValidateRow ok label="Skills discovered" meta="12 skills · 4 tier-1, 6 tier-2, 2 tier-3" />
-                    <ValidateRow ok label="Eval scaffolding" meta="rubric.yaml · 248 cases" />
-                    <ValidateRow warn label="Webhook secret rotation" meta="missing — Savant will use installation token" />
-                    <ValidateRow ok label="Branch protection" meta="enforced on main" />
+                    {connectValidation.status === "loading" && (
+                      <ValidateRow
+                        warn
+                        label="Repository validation"
+                        meta={
+                          snapshotPaths.length > 0
+                            ? `Inspecting ${snapshotPaths.length} provided repository paths`
+                            : "Waiting for a provider tree fetch or a pasted repository path snapshot"
+                        }
+                      />
+                    )}
+
+                    {connectValidation.status === "error" && (
+                      <ValidateRow fail label="Repository validation" meta={connectValidation.message} />
+                    )}
+
+                    {connectValidation.status === "success" && (
+                      <>
+                        {connectValidation.data.checks.map((check) => (
+                          <ValidateCheckRow key={check.key} check={check} />
+                        ))}
+                      </>
+                    )}
                   </div>
                 </div>
 
-                <div className="note">
-                  <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
-                  <div style={{ fontSize: 12 }}>
-                    On finish, Savant will ingest 12 skills as <span className="mono">draft</span>.
-                    No skill is moved to staging or production without explicit approval.
+                {connectValidation.status === "success" && (
+                  <div className={`note ${connectTone === "blood" ? "blood" : connectTone === "brass" ? "brass" : ""}`}>
+                    {connectTone === "moss" ? (
+                      <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                    ) : connectTone === "blood" ? (
+                      <Ic.XCircle className="n-icon" style={{ color: "var(--oxblood)" }} />
+                    ) : (
+                      <Ic.Warn className="n-icon" style={{ color: "var(--brass)" }} />
+                    )}
+                    <div style={{ fontSize: 12 }}>
+                      {connectValidation.data.ready
+                        ? `The provided snapshot matched the Savant contract. ${connectValidation.data.summary.discoveredSkillPackageCount} skill package roots were discovered and can be indexed in a later slice.`
+                        : connectValidation.data.summary.observedPathCount === 0
+                          ? "No repository tree snapshot was provided yet, so Savant is holding the contract check at pre-flight. Paste a path list or wait for live provider tree fetch integration to complete the validation."
+                          : connectValidation.data.nextSteps.join(" ")}
+                    </div>
                   </div>
-                </div>
+                )}
               </>
             )
           )}
@@ -520,7 +723,7 @@ export function OnboardingModal() {
                 <button type="button" className="btn btn-brass" onClick={close}>
                   <Ic.Check className="b-icon" />
                   <span>
-                    {path === "provision" ? "Finish — review bootstrap plan" : "Finish — ingest 12 skills"}
+                    {path === "provision" ? "Finish — review bootstrap plan" : "Finish — review validation"}
                   </span>
                 </button>
               )}

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { tenantSkillRepoContract } from "@savant/schemas/tenant-skill-repo-contract";
 import type {
   GitProvider,
@@ -163,6 +161,15 @@ function buildTopLevelDirectoryCheck(missingTopLevelDirectories: readonly string
   );
 }
 
+function buildPendingTopLevelDirectoryCheck(): RepoContractValidationCheck {
+  return createCheck(
+    "top-level-directories",
+    "Required top-level directories",
+    "pending",
+    "Repository tree snapshot required before top-level contract completeness can be checked",
+  );
+}
+
 function buildRegistryCheck(missingRegistryFiles: readonly string[]): RepoContractValidationCheck {
   return createCheck(
     "registry-files",
@@ -174,9 +181,19 @@ function buildRegistryCheck(missingRegistryFiles: readonly string[]): RepoContra
   );
 }
 
+function buildPendingRegistryCheck(): RepoContractValidationCheck {
+  return createCheck(
+    "registry-files",
+    "Required registry files",
+    "pending",
+    "Repository tree snapshot required before registry files can be verified",
+  );
+}
+
 function buildSkillRootsCheck(
   request: RepoContractValidationRequest,
   discoveredSkillPackageRoots: readonly string[],
+  hasObservedSnapshot: boolean,
 ): RepoContractValidationCheck {
   if (request.path === "provision") {
     return createCheck(
@@ -184,6 +201,15 @@ function buildSkillRootsCheck(
       "Tiered skill roots",
       "ok",
       "Bootstrap creates tier1, tier2, and tier3 roots for future skill packages",
+    );
+  }
+
+  if (!hasObservedSnapshot) {
+    return createCheck(
+      "skill-roots",
+      "Skill packages discovered",
+      "pending",
+      "Repository tree snapshot required before Savant can discover skill packages",
     );
   }
 
@@ -207,6 +233,7 @@ function buildSkillRootsCheck(
 function buildEvalScaffoldingCheck(
   request: RepoContractValidationRequest,
   observedPaths: readonly string[],
+  hasObservedSnapshot: boolean,
 ): RepoContractValidationCheck {
   const hasEvalDirectory = observedPaths.some(
     (path) => path.startsWith("evals/") || path.includes("/eval/"),
@@ -218,6 +245,15 @@ function buildEvalScaffoldingCheck(
       "Evaluation scaffolding",
       "ok",
       "Repository template includes dataset, rubric, baseline, and retained run roots",
+    );
+  }
+
+  if (!hasObservedSnapshot) {
+    return createCheck(
+      "eval-scaffolding",
+      "Evaluation scaffolding",
+      "pending",
+      "Repository tree snapshot required before eval assets can be checked",
     );
   }
 
@@ -264,6 +300,7 @@ function buildSnapshotCheck(
 function buildNextSteps(
   request: RepoContractValidationRequest,
   ready: boolean,
+  hasObservedSnapshot: boolean,
   missingTopLevelDirectories: readonly string[],
   missingRegistryFiles: readonly string[],
 ): string[] {
@@ -275,9 +312,15 @@ function buildNextSteps(
     ];
   }
 
-  if (!ready && missingTopLevelDirectories.length === 0 && missingRegistryFiles.length === 0) {
+  if (!hasObservedSnapshot) {
     return [
       "Complete provider authorization and fetch the repository tree before ingest.",
+      "Paste or import a repository path snapshot to preview the contract check before live provider sync is wired.",
+    ];
+  }
+
+  if (!ready && missingTopLevelDirectories.length === 0 && missingRegistryFiles.length === 0) {
+    return [
       "Re-run contract validation with observed repository paths.",
     ];
   }
@@ -404,18 +447,19 @@ export function validateTenantSkillRepoContract(
           syncMode: request.syncMode,
         }))
       : uniqueNormalizedPaths(request.observedPaths ?? []);
+  const hasObservedSnapshot = request.path === "provision" || observedPaths.length > 0;
 
   const topLevelPaths = buildTopLevelPaths();
   const registryPaths = buildRegistryPaths();
   const observedTopLevels = new Set(observedPaths.map((path) => path.split("/")[0] ?? path));
   const observedPathSet = new Set(observedPaths);
 
-  const missingTopLevelDirectories = topLevelPaths.filter(
-    (path) => !observedTopLevels.has(path),
-  );
-  const missingRegistryFiles = registryPaths.filter(
-    (path) => !observedPathSet.has(normalizePath(path)),
-  );
+  const missingTopLevelDirectories = hasObservedSnapshot
+    ? topLevelPaths.filter((path) => !observedTopLevels.has(path))
+    : [];
+  const missingRegistryFiles = hasObservedSnapshot
+    ? registryPaths.filter((path) => !observedPathSet.has(normalizePath(path)))
+    : [];
   const discoveredSkillPackageRoots = inferSkillPackageRoots(observedPaths);
   const syncMode = request.syncMode ?? "webhook";
 
@@ -423,16 +467,20 @@ export function validateTenantSkillRepoContract(
     checkProviderSupport(request.provider, syncMode),
     checkBranch(request.defaultBranch),
     buildSnapshotCheck(request, observedPaths),
-    buildTopLevelDirectoryCheck(missingTopLevelDirectories),
-    buildRegistryCheck(missingRegistryFiles),
-    buildSkillRootsCheck(request, discoveredSkillPackageRoots),
-    buildEvalScaffoldingCheck(request, observedPaths),
+    hasObservedSnapshot
+      ? buildTopLevelDirectoryCheck(missingTopLevelDirectories)
+      : buildPendingTopLevelDirectoryCheck(),
+    hasObservedSnapshot
+      ? buildRegistryCheck(missingRegistryFiles)
+      : buildPendingRegistryCheck(),
+    buildSkillRootsCheck(request, discoveredSkillPackageRoots, hasObservedSnapshot),
+    buildEvalScaffoldingCheck(request, observedPaths, hasObservedSnapshot),
   ];
 
   const ready =
     request.path === "provision"
       ? !checks.some((check) => check.status === "fail")
-      : observedPaths.length > 0 && !checks.some((check) => check.status === "fail");
+      : hasObservedSnapshot && !checks.some((check) => check.status === "fail");
 
   return {
     ready,
@@ -443,6 +491,7 @@ export function validateTenantSkillRepoContract(
     nextSteps: buildNextSteps(
       request,
       ready,
+      hasObservedSnapshot,
       missingTopLevelDirectories,
       missingRegistryFiles,
     ),

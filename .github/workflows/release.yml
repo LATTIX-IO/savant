@@ -556,7 +556,7 @@ jobs:
           done
 
       - name: Publish release assets
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ needs.verify.outputs.release_version }}
           target_commitish: ${{ needs.verify.outputs.target_commitish }}

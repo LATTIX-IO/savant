@@ -28,7 +28,7 @@ jobs:
       security-events: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -60,7 +60,7 @@ jobs:
 
       - name: Check out mesh-node
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: LATTIX-IO/mesh-node
           path: mesh-node
@@ -197,7 +197,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -229,7 +229,7 @@ jobs:
 
       - name: Check out mesh-node
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: LATTIX-IO/mesh-node
           path: mesh-node
@@ -309,7 +309,7 @@ jobs:
             bundles: appimage,deb
     steps:
       - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -341,7 +341,7 @@ jobs:
 
       - name: Check out mesh-node
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: LATTIX-IO/mesh-node
           path: mesh-node

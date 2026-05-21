@@ -1,8 +1,7 @@
-import "server-only";
-
 import { randomUUID } from "node:crypto";
 
 import type {
+  RegistryUpdatePreview,
   RepoScaffoldDirectory,
   RepoScaffoldFile,
   SkillScaffoldPayload,
@@ -178,6 +177,64 @@ function buildBaselineJson(skillId: string): string {
   ) + "\n";
 }
 
+function buildRegistryUpdates(
+  request: SkillScaffoldRequest,
+  skillUuid: string,
+  skillId: string,
+  packagePath: string,
+): RegistryUpdatePreview[] {
+  const dependencies = request.dependencies ?? [];
+
+  return [
+    {
+      path: "registry/skills.yaml",
+      purpose: "Register the new skill for discovery and indexing.",
+      preview:
+        [
+          "- skill_uuid: " + toYamlScalar(skillUuid),
+          "  skill_id: " + toYamlScalar(skillId),
+          "  display_name: " + toYamlScalar(request.displayName),
+          "  package_path: " + toYamlScalar(packagePath),
+          "  tier: " + request.tier,
+          "  status: " + toYamlScalar(request.status ?? "draft"),
+        ].join("\n") + "\n",
+    },
+    {
+      path: "registry/owners.yaml",
+      purpose: "Link the skill to its primary owner for review and escalation.",
+      preview:
+        [
+          "- owner: " + toYamlScalar(request.owner),
+          "  skills:",
+          "    - " + toYamlScalar(skillId),
+        ].join("\n") + "\n",
+    },
+    {
+      path: "registry/dependencies.yaml",
+      purpose: "Capture declared upstream skill dependencies.",
+      preview:
+        [
+          "- skill_id: " + toYamlScalar(skillId),
+          "  depends_on:",
+          ...(dependencies.length > 0
+            ? dependencies.map((entry) => `    - ${toYamlScalar(entry)}`)
+            : ["    []"]),
+        ].join("\n") + "\n",
+    },
+    {
+      path: "registry/routing-policies.yaml",
+      purpose: "Seed a default routing policy entry for future release selection.",
+      preview:
+        [
+          "- skill_id: " + toYamlScalar(skillId),
+          "  default_channel: " + toYamlScalar("draft"),
+          "  match:",
+          "    tier: " + request.tier,
+        ].join("\n") + "\n",
+    },
+  ];
+}
+
 export function generateSkillScaffold(
   request: SkillScaffoldRequest,
 ): SkillScaffoldPayload {
@@ -186,6 +243,7 @@ export function generateSkillScaffold(
   const skillId = deriveSkillId(request, skillSlug);
   const skillUuid = randomUUID();
   const directories = buildDirectories(packagePath);
+  const registryUpdates = buildRegistryUpdates(request, skillUuid, skillId, packagePath);
 
   const files: RepoScaffoldFile[] = [
     {
@@ -226,8 +284,10 @@ export function generateSkillScaffold(
     packagePath,
     directories,
     files,
+    registryUpdates,
     notes: [
       "Commit the generated scaffold to the tenant-owned repository before indexing.",
+      "Apply the registry update previews alongside the generated skill package so indexing can discover the new skill.",
       "Replace placeholder dataset, rubric, and baseline content with tenant-specific evaluation assets.",
       "Keep the generated skill_uuid stable across later edits and releases.",
     ],

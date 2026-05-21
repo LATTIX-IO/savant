@@ -131,12 +131,19 @@ export interface SkillScaffoldRequest {
   dependencies?: string[] | undefined;
 }
 
+export interface RegistryUpdatePreview {
+  path: string;
+  purpose: string;
+  preview: string;
+}
+
 export interface SkillScaffoldPayload {
   skillUuid: string;
   skillId: string;
   packagePath: string;
   directories: RepoScaffoldDirectory[];
   files: RepoScaffoldFile[];
+  registryUpdates: RegistryUpdatePreview[];
   notes: string[];
 }
 

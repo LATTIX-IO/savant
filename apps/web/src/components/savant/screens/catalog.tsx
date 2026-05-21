@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
+import { SkillCreateModal } from "@/components/savant/skill-create-modal";
 import {
   BranchRef,
   CommitRef,
@@ -23,6 +24,7 @@ export function CatalogScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
   const [focusId, setFocusId] = useState<string>(SKILLS[0]!.id);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const filtered = useMemo(() => {
     let list: Skill[] = SKILLS;
@@ -74,7 +76,7 @@ export function CatalogScreen() {
             <Ic.Sort className="b-icon" />
             Export catalog
           </button>
-          <button type="button" className="btn btn-primary">
+          <button type="button" className="btn btn-primary" onClick={() => setCreateOpen(true)}>
             <Ic.Plus className="b-icon" />
             New skill
           </button>
@@ -214,6 +216,8 @@ export function CatalogScreen() {
 
         {selected ? <CatalogPreview skill={selected} /> : null}
       </div>
+
+      <SkillCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

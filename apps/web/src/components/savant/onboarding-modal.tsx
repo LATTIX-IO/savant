@@ -1,6 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+import type {
+  ApiErrorResponse,
+  RepoBootstrapTemplateResponse,
+  RepoContractValidationCheck,
+  RepositorySyncMode,
+} from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
 import { useOnboarding } from "@/components/savant/onboarding-context";
@@ -24,6 +31,15 @@ const STEPS = [
   { title: "Validate", sub: "Confirm structure and manifests" },
 ];
 
+type ProvisionPreviewState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: RepoBootstrapTemplateResponse["data"] };
+
+function isApiErrorResponse(value: unknown): value is ApiErrorResponse {
+  return typeof value === "object" && value !== null && "error" in value;
+}
+
 export function OnboardingModal() {
   const { open, hide } = useOnboarding();
   const [step, setStep] = useState(0);
@@ -32,6 +48,75 @@ export function OnboardingModal() {
   const [repoUrl, setRepoUrl] = useState("github.com/wexler-hahn/finance-skills");
   const [branch, setBranch] = useState("main");
   const [name, setName] = useState("Finance Skills");
+  const [syncMode, setSyncMode] = useState<RepositorySyncMode>("webhook");
+  const [provisionPreview, setProvisionPreview] = useState<ProvisionPreviewState>({
+    status: "idle",
+  });
+
+  useEffect(() => {
+    if (!open || step !== 3 || path !== "provision") {
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadPreview() {
+      setProvisionPreview({ status: "loading" });
+
+      try {
+        const response = await fetch("/api/repositories/bootstrap-template", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            defaultBranch: branch,
+            displayName: name,
+            provider,
+            repoUrl,
+            syncMode,
+          }),
+          signal: controller.signal,
+        });
+
+        const payload = (await response.json()) as
+          | RepoBootstrapTemplateResponse
+          | ApiErrorResponse;
+
+        if (!response.ok || isApiErrorResponse(payload)) {
+          throw new Error(
+            isApiErrorResponse(payload)
+              ? payload.error.message
+              : "Could not generate a repository bootstrap preview.",
+          );
+        }
+
+        if (active) {
+          setProvisionPreview({ status: "success", data: payload.data });
+        }
+      } catch (error) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setProvisionPreview({
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not generate a repository bootstrap preview.",
+        });
+      }
+    }
+
+    void loadPreview();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [branch, name, open, path, provider, repoUrl, step, syncMode]);
 
   if (!open) return null;
 
@@ -274,10 +359,22 @@ export function OnboardingModal() {
                   <div className="field-label">Sync mode</div>
                   <div className="row" style={{ gap: 8 }}>
                     <label className="row" style={{ gap: 6, fontSize: 12.5 }}>
-                      <input type="radio" name="sync" defaultChecked /> Webhook (real-time)
+                      <input
+                        checked={syncMode === "webhook"}
+                        name="sync"
+                        type="radio"
+                        onChange={() => setSyncMode("webhook")}
+                      />{" "}
+                      Webhook (real-time)
                     </label>
                     <label className="row" style={{ gap: 6, fontSize: 12.5, color: "var(--muted)" }}>
-                      <input type="radio" name="sync" /> Polled (every 5 min)
+                      <input
+                        checked={syncMode === "poll"}
+                        name="sync"
+                        type="radio"
+                        onChange={() => setSyncMode("poll")}
+                      />{" "}
+                      Polled (every 5 min)
                     </label>
                   </div>
                 </div>
@@ -286,46 +383,122 @@ export function OnboardingModal() {
           )}
 
           {step === 3 && (
-            <>
-              <div className="onb-bd-hd">
-                <div className="eyebrow" style={{ marginBottom: 6 }}>
-                  Step 4 of 4
+            path === "provision" ? (
+              <>
+                <div className="onb-bd-hd">
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>
+                    Step 4 of 4
+                  </div>
+                  <div className="h-display" style={{ fontSize: 26 }}>
+                    Preview repository bootstrap
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 520 }}>
+                    Savant generated a contract-aware scaffold preview for {repoUrl} on branch{" "}
+                    <span className="mono">{branch}</span>.
+                  </div>
                 </div>
-                <div className="h-display" style={{ fontSize: 26 }}>
-                  Validate repository structure
-                </div>
-                <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 520 }}>
-                  Savant ran a dry-run check against {repoUrl} on branch <span className="mono">{branch}</span>.
-                </div>
-              </div>
 
-              <div className="panel" style={{ marginBottom: 14 }}>
-                <div className="panel-hd">
-                  <div className="panel-title">Repository check</div>
-                  <span className="chip chip-moss">
-                    <Ic.Check style={{ width: 10, height: 10 }} />
-                    ready to ingest
-                  </span>
-                </div>
-                <div className="panel-bd" style={{ padding: "0 var(--pad-card)" }}>
-                  <ValidateRow ok label="Authentication" meta="oauth-app · wexler-hahn-prod" />
-                  <ValidateRow ok label="Default branch resolved" meta={branch} />
-                  <ValidateRow ok label="Skill manifest found" meta=".savant/manifest.yaml" />
-                  <ValidateRow ok label="Skills discovered" meta="12 skills · 4 tier-1, 6 tier-2, 2 tier-3" />
-                  <ValidateRow ok label="Eval scaffolding" meta="rubric.yaml · 248 cases" />
-                  <ValidateRow warn label="Webhook secret rotation" meta="missing — Savant will use installation token" />
-                  <ValidateRow ok label="Branch protection" meta="enforced on main" />
-                </div>
-              </div>
+                <div className="panel" style={{ marginBottom: 14 }}>
+                  <div className="panel-hd">
+                    <div className="panel-title">Bootstrap preview</div>
+                    <span
+                      className={`chip ${
+                        provisionPreview.status === "error"
+                          ? "chip-blood"
+                          : provisionPreview.status === "success"
+                            ? "chip-moss"
+                            : "chip-paper"
+                      }`}
+                    >
+                      {provisionPreview.status === "success" ? (
+                        <Ic.Check style={{ width: 10, height: 10 }} />
+                      ) : provisionPreview.status === "error" ? (
+                        <Ic.XCircle style={{ width: 10, height: 10 }} />
+                      ) : (
+                        <Ic.Warn style={{ width: 10, height: 10 }} />
+                      )}
+                      {provisionPreview.status === "success"
+                        ? "ready to scaffold"
+                        : provisionPreview.status === "error"
+                          ? "preview failed"
+                          : "generating preview"}
+                    </span>
+                  </div>
 
-              <div className="note">
-                <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
-                <div style={{ fontSize: 12 }}>
-                  On finish, Savant will ingest 12 skills as <span className="mono">draft</span>.
-                  No skill is moved to staging or production without explicit approval.
+                  <div className="panel-bd" style={{ padding: "0 var(--pad-card)" }}>
+                    {provisionPreview.status === "loading" && (
+                      <ValidateRow
+                        warn
+                        label="Bootstrap preview"
+                        meta="Generating directories, registry files, and eval scaffolding"
+                      />
+                    )}
+
+                    {provisionPreview.status === "error" && (
+                      <ValidateRow fail label="Bootstrap preview" meta={provisionPreview.message} />
+                    )}
+
+                    {provisionPreview.status === "success" && (
+                      <>
+                        {provisionPreview.data.checks.map((check) => (
+                          <ValidateCheckRow key={check.key} check={check} />
+                        ))}
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </>
+
+                <div className="note">
+                  <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                  <div style={{ fontSize: 12 }}>
+                    {provisionPreview.status === "success"
+                      ? `The generated scaffold includes ${provisionPreview.data.summary.directoryCount} directories and ${provisionPreview.data.summary.fileCount} files, including registry manifests and evaluation roots.`
+                      : "Savant is preparing the repository scaffold preview. Once provider write operations land, this plan will be committed directly to your tenant-owned repository."}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="onb-bd-hd">
+                  <div className="eyebrow" style={{ marginBottom: 6 }}>
+                    Step 4 of 4
+                  </div>
+                  <div className="h-display" style={{ fontSize: 26 }}>
+                    Validate repository structure
+                  </div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 520 }}>
+                    Savant ran a dry-run check against {repoUrl} on branch <span className="mono">{branch}</span>.
+                  </div>
+                </div>
+
+                <div className="panel" style={{ marginBottom: 14 }}>
+                  <div className="panel-hd">
+                    <div className="panel-title">Repository check</div>
+                    <span className="chip chip-moss">
+                      <Ic.Check style={{ width: 10, height: 10 }} />
+                      ready to ingest
+                    </span>
+                  </div>
+                  <div className="panel-bd" style={{ padding: "0 var(--pad-card)" }}>
+                    <ValidateRow ok label="Authentication" meta="oauth-app · wexler-hahn-prod" />
+                    <ValidateRow ok label="Default branch resolved" meta={branch} />
+                    <ValidateRow ok label="Skill manifest found" meta=".savant/manifest.yaml" />
+                    <ValidateRow ok label="Skills discovered" meta="12 skills · 4 tier-1, 6 tier-2, 2 tier-3" />
+                    <ValidateRow ok label="Eval scaffolding" meta="rubric.yaml · 248 cases" />
+                    <ValidateRow warn label="Webhook secret rotation" meta="missing — Savant will use installation token" />
+                    <ValidateRow ok label="Branch protection" meta="enforced on main" />
+                  </div>
+                </div>
+
+                <div className="note">
+                  <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                  <div style={{ fontSize: 12 }}>
+                    On finish, Savant will ingest 12 skills as <span className="mono">draft</span>.
+                    No skill is moved to staging or production without explicit approval.
+                  </div>
+                </div>
+              </>
+            )
           )}
 
           <div className="onb-bd-foot">
@@ -346,7 +519,9 @@ export function OnboardingModal() {
               ) : (
                 <button type="button" className="btn btn-brass" onClick={close}>
                   <Ic.Check className="b-icon" />
-                  <span>Finish — ingest 12 skills</span>
+                  <span>
+                    {path === "provision" ? "Finish — review bootstrap plan" : "Finish — ingest 12 skills"}
+                  </span>
                 </button>
               )}
             </div>
@@ -383,5 +558,16 @@ function ValidateRow({
       <span style={{ fontSize: 12.5, color: "var(--ink-2)" }}>{label}</span>
       <span className="v-meta mono">{meta}</span>
     </div>
+  );
+}
+
+function ValidateCheckRow({ check }: { check: RepoContractValidationCheck }) {
+  return (
+    <ValidateRow
+      warn={check.status === "warn" || check.status === "pending"}
+      fail={check.status === "fail"}
+      label={check.label}
+      meta={check.meta}
+    />
   );
 }

@@ -8,8 +8,8 @@ import type {
 
 import {
   hasAuth0EnvConfig,
-  isConfiguredAuth0Value,
   resolveAuth0AppBaseUrl,
+  resolveAuth0ClientId,
   resolveAuth0Domain,
   type Auth0Env,
 } from "../../lib/auth0-config.ts";
@@ -88,19 +88,6 @@ function slugifyWorkspaceName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "workspace";
-}
-
-function readConfiguredEnvValue(env: Auth0Env, key: string): string | null {
-  const value = env[key];
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  if (!isConfiguredAuth0Value(value)) {
-    return null;
-  }
-
-  return value.trim();
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -212,7 +199,7 @@ export function mergeTenantWorkspaceSettings(
 export function buildPublicAuthSettings(env: Auth0Env = process.env): PublicAuthProviderSettings {
   const appBaseUrl = resolveAuth0AppBaseUrl(env);
   const tenantDomain = resolveAuth0Domain(env);
-  const clientId = readConfiguredEnvValue(env, "AUTH0_CLIENT_ID");
+  const clientId = resolveAuth0ClientId(env);
 
   const hasPublicConfig = Boolean(appBaseUrl || tenantDomain || clientId);
   const status = hasAuth0EnvConfig(env)

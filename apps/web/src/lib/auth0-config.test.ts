@@ -15,6 +15,7 @@ import {
   isProtectedDashboardPath,
   normalizeReturnToPath,
   resolveAuth0AppBaseUrl,
+  resolveAuth0ClientId,
   resolveAuth0Domain,
 } from "./auth0-config.ts";
 
@@ -107,11 +108,29 @@ test("resolveAuth0Domain accepts both AUTH0_DOMAIN and AUTH0_ISSUER_BASE_URL", (
   );
 });
 
+test("resolveAuth0ClientId accepts both server and public aliases", () => {
+  assert.equal(resolveAuth0ClientId({ AUTH0_CLIENT_ID: "server-client-id" }), "server-client-id");
+  assert.equal(
+    resolveAuth0ClientId({ NEXT_PUBLIC_AUTH0_CLIENT_ID: "public-client-id" }),
+    "public-client-id",
+  );
+});
+
 test("hasAuth0EnvConfig accepts legacy Auth0 issuer/base-url environment aliases", () => {
   assert.equal(
     hasAuth0EnvConfig({
       AUTH0_ISSUER_BASE_URL: "https://dev-tenant.us.auth0.com/",
       AUTH0_CLIENT_ID: "client-id",
+      AUTH0_CLIENT_SECRET: "client-secret",
+      AUTH0_SECRET: "session-secret",
+    }),
+    true,
+  );
+
+  assert.equal(
+    hasAuth0EnvConfig({
+      NEXT_PUBLIC_AUTH0_DOMAIN: "https://dev-tenant.us.auth0.com/",
+      NEXT_PUBLIC_AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",
       AUTH0_SECRET: "session-secret",
     }),

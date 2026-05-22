@@ -1,9 +1,17 @@
 import type { Route } from "next";
+import { headers } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { buildAuthStatusHref, normalizeReturnToPath } from "@/lib/auth0-config";
-import { getAuth0Diagnostics, type Auth0Diagnostics, type DiagnosticEnvStatus } from "@/lib/auth0-diagnostics";
+import {
+  doOriginsMatch,
+  getAuth0Diagnostics,
+  getAuthBlockingIssues,
+  getOnboardingBlockingIssues,
+  resolveRequestOrigin,
+  type DiagnosticEnvStatus,
+} from "@/lib/auth0-diagnostics";
 
 export const dynamic = "force-dynamic";
 
@@ -21,9 +29,17 @@ type AuthStatusSearchParams = {
 function StatusChip({
   status,
 }: {
-  status: "configured" | "development-bypass" | "unconfigured" | "reachable" | "unreachable" | "not-configured";
+  status:
+    | "configured"
+    | "development-bypass"
+    | "unconfigured"
+    | "reachable"
+    | "unreachable"
+    | "not-configured"
+    | "ready"
+    | "blocked";
 }) {
-  if (status === "configured" || status === "reachable") {
+  if (status === "configured" || status === "reachable" || status === "ready") {
     return (
       <span className="chip chip-moss">
         <span className="dot" />
@@ -38,6 +54,10 @@ function StatusChip({
 
   if (status === "unreachable") {
     return <span className="chip chip-blood">unreachable</span>;
+  }
+
+  if (status === "blocked") {
+    return <span className="chip chip-blood">blocked</span>;
   }
 
   return <span className="chip chip-paper">{status}</span>;
@@ -114,38 +134,21 @@ function sourceLabel(source: string | undefined): string {
   return "This deployment";
 }
 
-function actionItems(diagnostics: Auth0Diagnostics): string[] {
-  const actions: string[] = [];
-
-  if (diagnostics.clientSecretStatus !== "configured") {
-    actions.push("Set a real AUTH0_CLIENT_SECRET in the deployment environment.");
+function renderYesNoChip(value: boolean | null, labels?: { yes: string; no: string; empty?: string }) {
+  if (value === null) {
+    return <span className="chip chip-paper">{labels?.empty ?? "n/a"}</span>;
   }
 
-  if (diagnostics.sessionSecretStatus !== "configured") {
-    actions.push("Set a real AUTH0_SECRET for encrypted server-side session cookies.");
+  if (value) {
+    return (
+      <span className="chip chip-moss">
+        <span className="dot" />
+        {labels?.yes ?? "yes"}
+      </span>
+    );
   }
 
-  if (diagnostics.appBaseUrlStatus !== "configured") {
-    actions.push("Set APP_BASE_URL or NEXT_PUBLIC_APP_URL so callback/logout URLs resolve cleanly.");
-  }
-
-  if (diagnostics.discovery.status === "unreachable") {
-    actions.push("Verify the Auth0 tenant domain or custom domain and ensure the deployment can reach the discovery endpoint.");
-  }
-
-  if (diagnostics.databaseStatus !== "configured") {
-    actions.push("Set DATABASE_URL before expecting real onboarding checkout persistence to work.");
-  }
-
-  if (diagnostics.stripeWebhookStatus !== "configured") {
-    actions.push("Set STRIPE_WEBHOOK_SECRET before expecting the hosted onboarding flow to provision tenants end to end.");
-  }
-
-  if (actions.length === 0) {
-    actions.push("Auth0 looks configured. If login still fails, verify the allowed callback/logout URLs in the Auth0 dashboard match the values below and then retry the Universal Login flow.");
-  }
-
-  return actions;
+  return <span className="chip chip-blood">{labels?.no ?? "no"}</span>;
 }
 
 export default async function AuthStatusPage({
@@ -154,13 +157,22 @@ export default async function AuthStatusPage({
   searchParams: Promise<AuthStatusSearchParams>;
 }) {
   const params = await searchParams;
+  const headerStore = await headers();
   const diagnostics = await getAuth0Diagnostics();
   const requestedSource = sourceLabel(params.source);
   const returnTo = normalizeReturnToPath(params.returnTo, "/dashboard");
   const retrySigninHref = `/signin?returnTo=${encodeURIComponent(returnTo)}` as Route;
   const retrySignupHref = `/signup?returnTo=${encodeURIComponent(returnTo)}` as Route;
   const retryOnboardingHref = returnTo as Route;
-  const actions = actionItems(diagnostics);
+  const requestOrigin = resolveRequestOrigin({
+    forwardedProto: headerStore.get("x-forwarded-proto"),
+    forwardedHost: headerStore.get("x-forwarded-host"),
+    host: headerStore.get("host"),
+    nodeEnv: process.env.NODE_ENV,
+  });
+  const requestOriginMatchesAppBaseUrl = doOriginsMatch(requestOrigin, diagnostics.appBaseUrl);
+  const authActions = getAuthBlockingIssues(diagnostics, requestOrigin);
+  const onboardingActions = getOnboardingBlockingIssues(diagnostics);
 
   return (
     <section className="marketing-section" style={{ paddingTop: 96 }}>
@@ -176,7 +188,8 @@ export default async function AuthStatusPage({
             and the non-secret onboarding prerequisites without exposing any credentials.
           </p>
           <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
-            <StatusChip status={diagnostics.overallStatus} />
+            <StatusChip status={diagnostics.authFlowStatus} />
+            <StatusChip status={diagnostics.onboardingFlowStatus} />
             <StatusChip status={diagnostics.discovery.status} />
             <span className="chip chip-paper">Universal Login · enabled</span>
           </div>
@@ -194,9 +207,9 @@ export default async function AuthStatusPage({
         <div className="panel">
           <div className="panel-hd">
             <div>
-              <div className="panel-title">What to do next</div>
+              <div className="panel-title">What blocks sign in</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
-                Fix the flagged items below, redeploy, then retry the same entry flow.
+                These items must be fixed before hosted Auth0 login can work reliably in production.
               </div>
             </div>
             <Link href="/" className="btn btn-sm">
@@ -205,11 +218,15 @@ export default async function AuthStatusPage({
           </div>
           <div className="panel-bd">
             <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
-              {actions.map((item) => (
+              {authActions.length > 0 ? authActions.map((item) => (
                 <li key={item} style={{ color: "var(--ink-3)", lineHeight: 1.55 }}>
                   {item}
                 </li>
-              ))}
+              )) : (
+                <li style={{ color: "var(--ink-3)", lineHeight: 1.55 }}>
+                  Auth0 looks ready. If login still fails, verify the Allowed Callback URLs and Allowed Logout URLs in Auth0 exactly match the values shown below.
+                </li>
+              )}
             </ul>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", marginTop: 18 }}>
               <Link href={retrySigninHref} className="btn btn-sm">
@@ -222,6 +239,31 @@ export default async function AuthStatusPage({
                 Retry onboarding
               </Link>
             </div>
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-hd">
+            <div>
+              <div className="panel-title">What blocks onboarding</div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+                These items do not affect Universal Login itself, but they do block the production Stripe onboarding flow.
+              </div>
+            </div>
+            <StatusChip status={diagnostics.onboardingFlowStatus} />
+          </div>
+          <div className="panel-bd">
+            <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
+              {onboardingActions.length > 0 ? onboardingActions.map((item) => (
+                <li key={item} style={{ color: "var(--ink-3)", lineHeight: 1.55 }}>
+                  {item}
+                </li>
+              )) : (
+                <li style={{ color: "var(--ink-3)", lineHeight: 1.55 }}>
+                  Onboarding prerequisites look ready. After sign-in works, the Stripe-backed provisioning flow should be able to continue.
+                </li>
+              )}
+            </ul>
           </div>
         </div>
 
@@ -265,12 +307,12 @@ export default async function AuthStatusPage({
           <div className="panel-bd">
             <DiagnosticRow
               label="Tenant domain"
-              sub="AUTH0_DOMAIN or AUTH0_ISSUER_BASE_URL."
+              sub="AUTH0_DOMAIN, AUTH0_ISSUER_BASE_URL, or their NEXT_PUBLIC_* aliases."
               value={renderEnvStatusSummary(diagnostics.tenantDomainStatus, diagnostics.tenantDomain)}
             />
             <DiagnosticRow
               label="Client ID"
-              sub="Browser-safe identifier for the Auth0 regular web application."
+              sub="Browser-safe identifier for the Auth0 regular web application, including NEXT_PUBLIC_AUTH0_CLIENT_ID fallback support."
               value={renderEnvStatusSummary(diagnostics.clientIdStatus, diagnostics.clientId)}
             />
             <DiagnosticRow
@@ -303,9 +345,23 @@ export default async function AuthStatusPage({
               value={renderEnvStatusSummary(diagnostics.publicAppUrlStatus, diagnostics.publicAppUrl)}
             />
             <DiagnosticRow
-              label="Origins aligned"
+              label="Public URL aligned"
               sub="Useful when the browser origin and callback origin drift apart between environments."
-              value={<span className="chip chip-paper">{diagnostics.appBaseUrlMatchesPublicAppUrl === null ? "n/a" : diagnostics.appBaseUrlMatchesPublicAppUrl ? "yes" : "no"}</span>}
+              value={renderYesNoChip(diagnostics.appBaseUrlMatchesPublicAppUrl)}
+            />
+            <DiagnosticRow
+              label="Current request origin"
+              sub="Derived from forwarded headers or host so you can compare the live deployment URL against APP_BASE_URL."
+              value={<span className="mono" style={{ fontSize: 12.5 }}>{requestOrigin ?? "Unavailable"}</span>}
+            />
+            <DiagnosticRow
+              label="Current origin aligned"
+              sub="If this is 'no', the browser is hitting a different origin than the callback/logout URLs the SDK is using."
+              value={renderYesNoChip(requestOriginMatchesAppBaseUrl, {
+                yes: "yes",
+                no: "no",
+                empty: "n/a",
+              })}
             />
             <DiagnosticRow
               label="Callback URL"
@@ -357,7 +413,7 @@ export default async function AuthStatusPage({
             <div>
               <div className="panel-title">Onboarding prerequisites</div>
               <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
-                These do not block Auth0 itself, but they do block a production-ready Stripe onboarding flow.
+                These remain separate from the sign-in checklist so production auth issues are easier to spot.
               </div>
             </div>
           </div>

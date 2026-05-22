@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildAuth0Diagnostics, loadAuth0Discovery } from "./auth0-diagnostics.ts";
+import {
+  buildAuth0Diagnostics,
+  doOriginsMatch,
+  getAuthBlockingIssues,
+  getOnboardingBlockingIssues,
+  loadAuth0Discovery,
+  resolveRequestOrigin,
+} from "./auth0-diagnostics.ts";
 
 test("buildAuth0Diagnostics summarizes hosted Auth0 and onboarding readiness without exposing secrets", () => {
   const result = buildAuth0Diagnostics({
@@ -30,6 +37,26 @@ test("buildAuth0Diagnostics summarizes hosted Auth0 and onboarding readiness wit
   assert.equal(result.databaseStatus, "placeholder");
   assert.equal(result.stripeSecretStatus, "configured");
   assert.equal(result.stripeWebhookStatus, "placeholder");
+  assert.equal(result.authFlowStatus, "blocked");
+  assert.equal(result.onboardingFlowStatus, "blocked");
+});
+
+test("buildAuth0Diagnostics accepts public Auth0 aliases used in some deployments", () => {
+  const result = buildAuth0Diagnostics({
+    NEXT_PUBLIC_AUTH0_DOMAIN: "https://tenant.example.com/",
+    NEXT_PUBLIC_AUTH0_CLIENT_ID: "public-client-id",
+    AUTH0_CLIENT_SECRET: "client-secret",
+    AUTH0_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    APP_BASE_URL: "https://savantrepo.com",
+    DATABASE_URL: "postgres://db.example.com/savant",
+    STRIPE_SECRET_KEY: "sk_test_123",
+    STRIPE_WEBHOOK_SECRET: "whsec_123",
+  });
+
+  assert.equal(result.tenantDomain, "tenant.example.com");
+  assert.equal(result.clientId, "public-client-id");
+  assert.equal(result.authFlowStatus, "ready");
+  assert.equal(result.onboardingFlowStatus, "ready");
 });
 
 test("loadAuth0Discovery reports reachable tenant metadata when discovery succeeds", async () => {
@@ -60,4 +87,50 @@ test("loadAuth0Discovery reports unreachable when discovery fails", async () => 
   assert.equal(result.authorizationEndpoint, null);
   assert.equal(result.tokenEndpoint, null);
   assert.match(result.errorMessage ?? "", /ENOTFOUND/);
+});
+
+test("resolveRequestOrigin derives the deployed origin from forwarded headers", () => {
+  assert.equal(
+    resolveRequestOrigin({
+      forwardedProto: "https",
+      forwardedHost: "savantrepo.com",
+      nodeEnv: "production",
+    }),
+    "https://savantrepo.com",
+  );
+
+  assert.equal(
+    resolveRequestOrigin({
+      host: "localhost:3000",
+      nodeEnv: "development",
+    }),
+    "http://localhost:3000",
+  );
+
+  assert.equal(doOriginsMatch("https://savantrepo.com", "https://savantrepo.com/auth/callback"), true);
+  assert.equal(doOriginsMatch("https://preview.savantrepo.com", "https://savantrepo.com"), false);
+});
+
+test("auth and onboarding blockers are reported separately", () => {
+  const diagnostics = {
+    ...buildAuth0Diagnostics({
+      APP_BASE_URL: "https://savantrepo.com",
+      STRIPE_SECRET_KEY: "sk_test_123",
+    }),
+    discovery: {
+      status: "not-configured" as const,
+      issuer: null,
+      authorizationEndpoint: null,
+      tokenEndpoint: null,
+      errorMessage: null,
+    },
+  };
+
+  const authIssues = getAuthBlockingIssues(diagnostics, "https://savantrepo.com");
+  const onboardingIssues = getOnboardingBlockingIssues(diagnostics);
+
+  assert.equal(authIssues.some((issue) => issue.includes("AUTH0_CLIENT_SECRET")), true);
+  assert.equal(authIssues.some((issue) => issue.includes("DATABASE_URL")), false);
+  assert.equal(onboardingIssues.some((issue) => issue.includes("DATABASE_URL")), true);
+  assert.equal(onboardingIssues.some((issue) => issue.includes("AUTH0_CLIENT_SECRET")), false);
 });

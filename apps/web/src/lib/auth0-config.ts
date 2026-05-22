@@ -4,14 +4,20 @@ export const AUTH0_ENV_KEYS = [
   "AUTH0_DOMAIN",
   "AUTH0_ISSUER_BASE_URL",
   "AUTH0_CLIENT_ID",
+  "NEXT_PUBLIC_AUTH0_DOMAIN",
+  "NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL",
+  "NEXT_PUBLIC_AUTH0_CLIENT_ID",
   "AUTH0_CLIENT_SECRET",
   "AUTH0_SECRET",
 ] as const;
 
-const AUTH0_REQUIRED_DIRECT_KEYS = [
-  "AUTH0_CLIENT_ID",
+const AUTH0_REQUIRED_SECRET_KEYS = [
   "AUTH0_CLIENT_SECRET",
   "AUTH0_SECRET",
+] as const;
+const AUTH0_CLIENT_ID_FALLBACK_KEYS = [
+  "AUTH0_CLIENT_ID",
+  "NEXT_PUBLIC_AUTH0_CLIENT_ID",
 ] as const;
 
 const AUTH0_APP_BASE_URL_FALLBACK_KEYS = [
@@ -26,6 +32,8 @@ const AUTH0_APP_BASE_URL_FALLBACK_KEYS = [
 const AUTH0_DOMAIN_FALLBACK_KEYS = [
   "AUTH0_DOMAIN",
   "AUTH0_ISSUER_BASE_URL",
+  "NEXT_PUBLIC_AUTH0_DOMAIN",
+  "NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL",
 ] as const;
 
 export type Auth0EnvKey = (typeof AUTH0_ENV_KEYS)[number];
@@ -34,6 +42,24 @@ export type DashboardAuthAction = "allow" | "redirect-to-login" | "require-auth0
 export type AuthStatusSource = "signin" | "signup" | "onboarding" | "unavailable";
 
 const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+
+export function resolveAuth0ClientId(env: Auth0Env): string | null {
+  for (const key of AUTH0_CLIENT_ID_FALLBACK_KEYS) {
+    const value = env[key];
+
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    if (!isConfiguredAuth0Value(value)) {
+      continue;
+    }
+
+    return value.trim();
+  }
+
+  return null;
+}
 const RETURN_TO_SANITIZE_BASE = "https://savant.local";
 const PROTECTED_DASHBOARD_PREFIXES = [
   "/o",
@@ -67,7 +93,8 @@ export function isConfiguredAuth0Value(value: string | undefined): boolean {
 
 export function hasAuth0EnvConfig(env: Auth0Env): boolean {
   return Boolean(resolveAuth0Domain(env))
-    && AUTH0_REQUIRED_DIRECT_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
+    && Boolean(resolveAuth0ClientId(env))
+    && AUTH0_REQUIRED_SECRET_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
 }
 
 function normalizeAuth0AppBaseUrlCandidate(value: string): string {

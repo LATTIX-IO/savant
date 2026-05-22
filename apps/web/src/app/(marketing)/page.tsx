@@ -406,8 +406,6 @@ export default async function LandingPage() {
           <div>
             <h4>Company</h4>
             <ul>
-              <li><a href="mailto:hello@savant.app">Contact</a></li>
-              <li><a href="mailto:hello@savant.app">Careers</a></li>
               <li><a href="mailto:security@savant.app">Security</a></li>
             </ul>
           </div>
@@ -421,8 +419,7 @@ export default async function LandingPage() {
           </div>
         </div>
         <div className="marketing-footer-base">
-          <span>© {new Date().getFullYear()} Savant Platform, Inc.</span>
-          <span className="mono">v1.0 · {new Date().toISOString().slice(0, 10)}</span>
+          <span>© {new Date().getFullYear()} Lattix Technologies Corp.</span>
         </div>
       </footer>
     </>

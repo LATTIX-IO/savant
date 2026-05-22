@@ -383,8 +383,101 @@ export interface MemberRecord {
   last: string;
 }
 
+export type PublicAuthProvider = "auth0" | (string & {});
+export type PublicAuthProviderStatus = "configured" | "development-bypass" | "unconfigured";
+
+export interface PublicAuthProviderSettings {
+  provider: PublicAuthProvider;
+  status: PublicAuthProviderStatus;
+  tenantDomain: string | null;
+  clientId: string | null;
+  appBaseUrl: string | null;
+  callbackUrl: string | null;
+  logoutUrl: string | null;
+  applicationType: "regular_web";
+  tokenEndpointAuthMethod: "client_secret_post";
+  sessionMode: "server-side session";
+}
+
+export type AIProviderId = "openai" | "anthropic" | "azure-openai" | (string & {});
+export type AIConnectionStatus = "active" | "needs-rotation" | "revoked";
+
+export interface AIConnectionSummary {
+  aiConnectionUuid: string;
+  provider: AIProviderId;
+  label: string;
+  defaultModel: string;
+  purpose: string;
+  status: AIConnectionStatus;
+  lastUsed: string;
+  lastRotated: string;
+  secretStore: string;
+  usageScope: string;
+  supportsExecution: boolean;
+  supportsJudging: boolean;
+  isDefaultExecution: boolean;
+  isDefaultJudge: boolean;
+}
+
+export interface WorkspaceGeneralSettings {
+  workspaceName: string;
+  workspaceSlug: string;
+  subdomain: string;
+  defaultTier: SkillTier;
+  timeZone: string;
+  approvalRequirement: number;
+  stagingBurnInHours: number;
+  requireEvalSuite: boolean;
+}
+
+export interface WorkspaceSecuritySettings {
+  bundleSigningKeyRef: string;
+  bundleSigningKeyLastRotated: string;
+  customerManagedKey: boolean;
+  keyVaultProvider: string;
+  auditRetentionYears: number;
+  evalRetentionDays: number;
+  streamToSiem: boolean;
+}
+
+export interface WorkspaceNotificationSettings {
+  approvalRequestedChannels: string[];
+  regressionDetectedChannels: string[];
+  rollbackExecutedChannels: string[];
+  policyViolationChannels: string[];
+  weeklySummaryEnabled: boolean;
+  weeklySummaryChannels: string[];
+}
+
+export interface WorkspaceBillingSettings {
+  planName: string;
+  renewalDate: string;
+  skillsIncluded: number;
+  activeSkills: number;
+  includedSeats: number;
+  usedSeats: number;
+  evalRunCapMonthly: number;
+  evalRunsUsedMonthly: number;
+  distributionsMonthly: number;
+  storageGbUsed: number;
+  storageGbCap: number;
+  apiCallsMonthly: number;
+  apiCallsDeltaPct: number;
+}
+
+export interface WorkspaceSettingsPayload {
+  general: WorkspaceGeneralSettings;
+  authentication: PublicAuthProviderSettings;
+  aiConnections: AIConnectionSummary[];
+  members: MemberRecord[];
+  security: WorkspaceSecuritySettings;
+  notifications: WorkspaceNotificationSettings;
+  billing: WorkspaceBillingSettings;
+}
+
 export type OverviewResponse = ResourceResponse<OverviewPayload>;
 export type RepositoryListResponse = CollectionResponse<RepositoryListItem>;
 export type RepositoryDetailResponse = ResourceResponse<RepositoryDetailPayload>;
 export type SkillListResponse = CollectionResponse<SkillListItem>;
 export type SkillDetailResponse = ResourceResponse<SkillDetailPayload>;
+export type WorkspaceSettingsResponse = ResourceResponse<WorkspaceSettingsPayload>;

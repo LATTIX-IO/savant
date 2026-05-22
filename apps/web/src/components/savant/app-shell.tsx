@@ -8,8 +8,10 @@ import { Fragment, type ReactNode } from "react";
 import { Ic } from "@/components/savant/icons";
 import { OnboardingProvider } from "@/components/savant/onboarding-context";
 import { OnboardingModal } from "@/components/savant/onboarding-modal";
-import { TweaksProvider } from "@/components/savant/tweaks-context";
+import { SavantLogo } from "@/components/savant/savant-logo";
+import { TweaksProvider, useTweaks } from "@/components/savant/tweaks-context";
 import { TweaksPanel } from "@/components/savant/tweaks-panel";
+import type { AuthViewer } from "@/lib/auth0-session";
 import {
   ORG,
   SKILLS,
@@ -21,7 +23,7 @@ import {
 } from "@/lib/savant-data";
 
 const TITLE_BY_PATH: Record<string, { group: string; title: string }> = {
-  "/": { group: "Workspace", title: "Overview" },
+  "/dashboard": { group: "Workspace", title: "Overview" },
   "/skills": { group: "Workspace", title: "Skills" },
   "/repositories": { group: "Workspace", title: "Repositories" },
   "/evaluations": { group: "Workspace", title: "Evaluations" },
@@ -32,13 +34,19 @@ const TITLE_BY_PATH: Record<string, { group: string; title: string }> = {
   "/settings": { group: "System", title: "Settings" },
 };
 
-export function SavantShell({ children }: { children: ReactNode }) {
+export function SavantShell({
+  children,
+  viewer,
+}: {
+  children: ReactNode;
+  viewer: AuthViewer;
+}) {
   return (
     <TweaksProvider>
       <OnboardingProvider>
         <div className="app">
-          <Sidebar />
-          <TopBar />
+          <Sidebar viewer={viewer} />
+          <TopBar viewer={viewer} />
           <div className="page">{children}</div>
           <OnboardingModal />
           <TweaksPanel />
@@ -48,7 +56,7 @@ export function SavantShell({ children }: { children: ReactNode }) {
   );
 }
 
-function Sidebar() {
+function Sidebar({ viewer }: { viewer: AuthViewer }) {
   const pathname = usePathname() || "/";
 
   type Item = {
@@ -56,11 +64,11 @@ function Sidebar() {
     label: string;
     icon: (p: React.SVGProps<SVGSVGElement>) => React.JSX.Element;
     count: number | null;
-    match: (p: string) => boolean;
+    match: (path: string) => boolean;
   };
 
   const workspaceItems: Item[] = [
-    { href: "/", label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/" },
+    { href: "/dashboard", label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/dashboard" },
     { href: "/skills", label: "Skills", icon: Ic.Skills, count: SKILLS.length, match: (p) => p.startsWith("/skills") },
     { href: "/repositories", label: "Repositories", icon: Ic.Repo, count: REPOS.length, match: (p) => p.startsWith("/repositories") },
     { href: "/evaluations", label: "Evaluations", icon: Ic.Eval, count: EVAL_RUNS.filter((r) => r.status === "running").length || EVAL_RUNS.length, match: (p) => p.startsWith("/evaluations") },
@@ -88,14 +96,8 @@ function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <Link href="/" className="brand">
-        <div className="brand-mark">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
-            <rect x="3" y="3" width="18" height="18" rx="2" stroke="var(--ink)" strokeWidth="1.5" />
-            <path d="M7 12h10M7 8h10M7 16h6" stroke="var(--moss)" strokeWidth="1.5" strokeLinecap="round" />
-          </svg>
-        </div>
-        <div className="brand-name">Savant</div>
+      <Link href="/dashboard" className="brand" aria-label="Savant dashboard">
+        <SavantLogo className="brand-logo" />
       </Link>
 
       <nav className="nav">
@@ -117,10 +119,10 @@ function Sidebar() {
       </div>
 
       <div className="sidebar-foot">
-        <div className="avatar">{ORG.user.initials}</div>
+        <div className="avatar">{viewer.initials}</div>
         <div style={{ minWidth: 0 }}>
-          <div className="foot-user-name">{ORG.user.name}</div>
-          <div className="foot-user-role">{ORG.user.role}</div>
+          <div className="foot-user-name">{viewer.displayName}</div>
+          <div className="foot-user-role">{viewer.subtitle}</div>
         </div>
         <button type="button" className="icon-btn" style={{ marginLeft: "auto" }}>
           <Ic.ChevR style={{ width: 12, height: 12 }} />
@@ -130,11 +132,13 @@ function Sidebar() {
   );
 }
 
-function TopBar() {
+function TopBar({ viewer }: { viewer: AuthViewer }) {
   const pathname = usePathname() || "/";
+  const { resolvedTheme, set } = useTweaks();
 
   type Crumb = readonly [label: string, target: Route | null | "current"];
   let crumbs: Crumb[];
+
   if (pathname.startsWith("/skills/") && pathname !== "/skills") {
     const slug = pathname.split("/")[2] ?? "";
     const skill = SKILLS.find((s) => s.id === slug);
@@ -148,6 +152,9 @@ function TopBar() {
     crumbs = [[info.group, null], [info.title, "current"]];
   }
 
+  const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
+  const themeToggleTitle = resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+
   return (
     <header className="topbar">
       <button
@@ -159,8 +166,8 @@ function TopBar() {
           style={{
             width: 16,
             height: 16,
-            background: "var(--ink)",
-            color: "var(--linen)",
+            background: "var(--solid)",
+            color: "var(--on-solid)",
             display: "grid",
             placeItems: "center",
             borderRadius: 3,
@@ -200,14 +207,33 @@ function TopBar() {
         <span className="kbd">⌘ K</span>
       </div>
 
+      <button
+        type="button"
+        className="icon-btn"
+        aria-label={themeToggleTitle}
+        aria-pressed={resolvedTheme === "dark"}
+        title={themeToggleTitle}
+        onClick={() => set("theme", nextTheme)}
+      >
+        {resolvedTheme === "dark" ? (
+          <Ic.Sun style={{ width: 14, height: 14 }} />
+        ) : (
+          <Ic.Moon style={{ width: 14, height: 14 }} />
+        )}
+      </button>
+
       <button type="button" className="icon-btn" title="Notifications">
         <Ic.Bell style={{ width: 14, height: 14 }} />
         <span className="badge-dot" />
       </button>
 
-      <Link href="/settings" className="icon-btn" title="Settings">
-        <Ic.Settings style={{ width: 14, height: 14 }} />
-      </Link>
+      <a
+        href={viewer.isAuthenticated ? "/auth/logout" : "/auth/login"}
+        className="btn btn-sm"
+        style={{ whiteSpace: "nowrap" }}
+      >
+        {viewer.isAuthenticated ? "Log out" : "Log in"}
+      </a>
     </header>
   );
 }

@@ -1,10 +1,13 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+
 import { ACCENT_PALETTES, useTweaks, type AccentKey, type DensityKey } from "@/components/savant/tweaks-context";
+import { type ThemePreference } from "@/lib/theme-preference";
 
 const ACCENT_KEYS = Object.keys(ACCENT_PALETTES) as AccentKey[];
 const DENSITY_OPTIONS: DensityKey[] = ["compact", "regular", "roomy"];
+const THEME_OPTIONS: ThemePreference[] = ["system", "light", "dark"];
 
 export function TweaksPanel() {
   const { values, set } = useTweaks();
@@ -27,6 +30,15 @@ export function TweaksPanel() {
         </button>
       </div>
       <div className="twk-body">
+        <div className="twk-sect">Appearance</div>
+        <Row label="Theme">
+          <Segmented
+            value={values.theme}
+            options={THEME_OPTIONS}
+            onChange={(v) => set("theme", v)}
+          />
+        </Row>
+
         <div className="twk-sect">Accent</div>
         <Row label="Accent color">
           <div className="twk-chips" role="radiogroup" aria-label="Accent">
@@ -103,7 +115,7 @@ function Segmented<T extends string>({
           aria-checked={o === value}
           onClick={() => onChange(o)}
         >
-          {o}
+          {o.charAt(0).toUpperCase() + o.slice(1)}
         </button>
       ))}
     </div>

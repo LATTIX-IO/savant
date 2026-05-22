@@ -1,12 +1,23 @@
 "use client";
 
+import type {
+  AIConnectionStatus,
+  AIConnectionSummary,
+  PublicAuthProviderSettings,
+  WorkspaceBillingSettings,
+  WorkspaceGeneralSettings,
+  WorkspaceNotificationSettings,
+  WorkspaceSecuritySettings,
+  WorkspaceSettingsPayload,
+} from "@savant/types";
 import { useState, type CSSProperties, type ReactNode } from "react";
 
-import { MEMBERS } from "@/lib/savant-data";
+import type { AuthViewer } from "@/lib/auth0-session";
 
 type SectionId =
   | "general"
   | "auth"
+  | "ai"
   | "members"
   | "security"
   | "notifications"
@@ -15,13 +26,20 @@ type SectionId =
 const SECTIONS: { id: SectionId; label: string; sub: string }[] = [
   { id: "general", label: "General", sub: "Org identity & defaults" },
   { id: "auth", label: "Authentication", sub: "SSO, IdP, MFA" },
+  { id: "ai", label: "AI providers", sub: "BYO models & key routing" },
   { id: "members", label: "Members", sub: "Users & groups" },
   { id: "security", label: "Security", sub: "Keys, audit retention" },
   { id: "notifications", label: "Notifications", sub: "Alerts & subscriptions" },
   { id: "billing", label: "Billing", sub: "Plan & usage" },
 ];
 
-export function SettingsScreen() {
+export function SettingsScreen({
+  viewer,
+  settings,
+}: {
+  viewer: AuthViewer;
+  settings: WorkspaceSettingsPayload;
+}) {
   const [section, setSection] = useState<SectionId>("general");
 
   return (
@@ -35,7 +53,8 @@ export function SettingsScreen() {
           </div>
           <h1 className="h-display">Workspace settings</h1>
           <div className="page-head-sub">
-            Configuration for the Wexler &amp; Hahn workspace. Changes are written to the audit log.
+            Configuration for the {settings.general.workspaceName} workspace, backed by current auth, membership,
+            and AI connection metadata.
           </div>
         </div>
       </div>
@@ -50,7 +69,7 @@ export function SettingsScreen() {
                 style={{
                   padding: "10px 12px",
                   borderRadius: 5,
-                  cursor: "default",
+                  cursor: "pointer",
                   background: section === s.id ? "var(--moss-soft)" : "transparent",
                   transition: "background 100ms var(--ease)",
                   position: "relative",
@@ -86,12 +105,13 @@ export function SettingsScreen() {
         </div>
 
         <div>
-          {section === "general" && <GeneralSection />}
-          {section === "auth" && <AuthSection />}
-          {section === "members" && <MembersSection />}
-          {section === "security" && <SecuritySection />}
-          {section === "notifications" && <NotificationsSection />}
-          {section === "billing" && <BillingSection />}
+          {section === "general" && <GeneralSection settings={settings.general} />}
+          {section === "auth" && <AuthSection viewer={viewer} settings={settings.authentication} />}
+          {section === "ai" && <AIProvidersSection connections={settings.aiConnections} />}
+          {section === "members" && <MembersSection members={settings.members} />}
+          {section === "security" && <SecuritySection settings={settings.security} />}
+          {section === "notifications" && <NotificationsSection settings={settings.notifications} />}
+          {section === "billing" && <BillingSection settings={settings.billing} />}
         </div>
       </div>
     </div>
@@ -178,15 +198,18 @@ function FormRow({
 function TextInput({
   defaultValue,
   mono,
+  readOnly,
   style,
 }: {
   defaultValue: string;
   mono?: boolean;
+  readOnly?: boolean;
   style?: CSSProperties;
 }) {
   return (
     <input
       defaultValue={defaultValue}
+      readOnly={readOnly}
       style={{
         width: "100%",
         maxWidth: 420,
@@ -228,8 +251,8 @@ function Toggle({ on }: { on: boolean }) {
           width: 16,
           height: 16,
           borderRadius: "50%",
-          background: "var(--linen)",
-          boxShadow: "0 1px 2px rgba(0,0,0,.15)",
+          background: "var(--glass-toggle-knob)",
+          boxShadow: "var(--glass-toggle-knob-shadow)",
           transition: "left 160ms var(--ease)",
         }}
       />
@@ -248,17 +271,100 @@ const selectStyle: CSSProperties = {
   minWidth: 200,
 };
 
-function GeneralSection() {
+function displayOrFallback(value: string | null, fallback = "Not configured"): string {
+  return value ?? fallback;
+}
+
+function formatProviderLabel(provider: string): string {
+  if (provider === "openai") return "OpenAI";
+  if (provider === "anthropic") return "Anthropic";
+  if (provider === "azure-openai") return "Azure OpenAI";
+  return provider;
+}
+
+function formatList(values: string[]): string {
+  return values.join(" · ");
+}
+
+function formatCapabilities(connection: AIConnectionSummary): string {
+  if (connection.supportsExecution && connection.supportsJudging) {
+    return "Execution + judging";
+  }
+
+  if (connection.supportsExecution) {
+    return "Execution";
+  }
+
+  if (connection.supportsJudging) {
+    return "Judging";
+  }
+
+  return "Inactive";
+}
+
+function AuthStatusChip({ status }: { status: PublicAuthProviderSettings["status"] }) {
+  if (status === "configured") {
+    return (
+      <span className="chip chip-moss">
+        <span className="dot" />
+        configured · Auth0
+      </span>
+    );
+  }
+
+  if (status === "development-bypass") {
+    return (
+      <span className="chip chip-brass">
+        <span className="dot" />
+        development bypass
+      </span>
+    );
+  }
+
+  return <span className="chip chip-paper">not configured</span>;
+}
+
+function AIConnectionStatusChip({ status }: { status: AIConnectionStatus }) {
+  if (status === "active") {
+    return (
+      <span className="chip chip-moss">
+        <span className="dot" />
+        active
+      </span>
+    );
+  }
+
+  if (status === "needs-rotation") {
+    return (
+      <span className="chip chip-brass">
+        <span className="dot" />
+        rotate soon
+      </span>
+    );
+  }
+
+  return (
+    <span className="chip chip-blood">
+      <span className="dot" />
+      revoked
+    </span>
+  );
+}
+
+function GeneralSection({ settings }: { settings: WorkspaceGeneralSettings }) {
   return (
     <>
       <SettingsPanel title="Workspace" sub="Identity used across releases, audit, and signed bundles.">
         <FormRow label="Workspace name" sub="Shown in the top bar and on release bundles.">
-          <TextInput defaultValue="Wexler & Hahn" />
+          <TextInput defaultValue={settings.workspaceName} />
         </FormRow>
-        <FormRow label="Subdomain" sub="The URL where Savant is served.">
+        <FormRow label="Workspace slug" sub="Stable identifier used across control-plane records.">
+          <TextInput defaultValue={settings.workspaceSlug} mono readOnly />
+        </FormRow>
+        <FormRow label="Subdomain" sub="The Savant-managed workspace hostname prefix.">
           <div className="row" style={{ gap: 6 }}>
             <TextInput
-              defaultValue="wexler-hahn"
+              defaultValue={settings.subdomain}
               mono
               style={{ width: 200, height: 32, padding: "0 10px", borderRadius: 4 }}
             />
@@ -271,18 +377,18 @@ function GeneralSection() {
           label="Default tier"
           sub="Tier applied to skills ingested without an explicit manifest entry."
         >
-          <select defaultValue="2" style={selectStyle}>
+          <select defaultValue={String(settings.defaultTier)} style={selectStyle}>
             <option value="1">Tier 1 — strict</option>
             <option value="2">Tier 2 — standard</option>
             <option value="3">Tier 3 — lightweight</option>
           </select>
         </FormRow>
         <FormRow label="Time zone" sub="Used for audit timestamps and release windows.">
-          <select defaultValue="us-east" style={selectStyle}>
-            <option value="us-east">America / New York</option>
-            <option value="us-west">America / Los Angeles</option>
-            <option value="eu">Europe / London</option>
-            <option value="utc">UTC</option>
+          <select defaultValue={settings.timeZone} style={selectStyle}>
+            <option value="America / New York">America / New York</option>
+            <option value="America / Los Angeles">America / Los Angeles</option>
+            <option value="Europe / London">Europe / London</option>
+            <option value="UTC">UTC</option>
           </select>
         </FormRow>
       </SettingsPanel>
@@ -293,7 +399,7 @@ function GeneralSection() {
           sub="Number of approvers required for production release."
         >
           <div className="row" style={{ gap: 8 }}>
-            <TextInput defaultValue="2" mono style={{ width: 64 }} />
+            <TextInput defaultValue={String(settings.approvalRequirement)} mono style={{ width: 64 }} />
             <span className="muted" style={{ fontSize: 12 }}>
               + compliance for Tier 1
             </span>
@@ -301,54 +407,100 @@ function GeneralSection() {
         </FormRow>
         <FormRow label="Staging burn-in" sub="Required time in staging before production promotion.">
           <div className="row" style={{ gap: 8 }}>
-            <TextInput defaultValue="24" mono style={{ width: 64 }} />
+            <TextInput defaultValue={String(settings.stagingBurnInHours)} mono style={{ width: 64 }} />
             <span className="muted" style={{ fontSize: 12 }}>
               hours
             </span>
           </div>
         </FormRow>
         <FormRow label="Eval suite required" sub="Block release if no eval suite is attached.">
-          <Toggle on={true} />
+          <Toggle on={settings.requireEvalSuite} />
         </FormRow>
       </SettingsPanel>
     </>
   );
 }
 
-function AuthSection() {
+function AuthSection({
+  viewer,
+  settings,
+}: {
+  viewer: AuthViewer;
+  settings: PublicAuthProviderSettings;
+}) {
   return (
     <>
       <SettingsPanel
-        title="Single sign-on"
-        sub="Identity is owned by your IdP. Group membership drives RBAC."
-        actions={
-          <span className="chip chip-moss">
-            <span className="dot" />
-            enabled · Okta
-          </span>
-        }
+        title="Auth0 web application"
+        sub="Official Next.js SDK integration with server-side sessions and hosted Universal Login."
+        actions={<AuthStatusChip status={settings.status} />}
       >
-        <FormRow label="Provider" sub="Currently active identity provider.">
-          <div className="row" style={{ gap: 10 }}>
-            <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
-              Okta · SAML
+        <FormRow label="Current session" sub="The currently resolved user in this browser session.">
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <span className={`chip ${viewer.isAuthenticated ? "chip-moss" : "chip-paper"}`}>
+              <span className="dot" />
+              {viewer.isAuthenticated ? "authenticated" : "guest"}
             </span>
-            <button type="button" className="btn btn-sm">
-              Change provider
-            </button>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>{viewer.displayName}</span>
+            <span className="muted" style={{ fontSize: 12 }}>
+              {viewer.email ?? viewer.subtitle}
+            </span>
           </div>
         </FormRow>
-        <FormRow label="ACS URL" sub="Configure this in your IdP application.">
-          <TextInput defaultValue="https://wexler-hahn.savant.app/auth/saml/acs" mono />
+        <FormRow label="Provider" sub="Currently active identity provider.">
+          <div className="row" style={{ gap: 10, flexWrap: "wrap" }}>
+            <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
+              Auth0 · Regular Web Application
+            </span>
+            <a href="/auth/login" className="btn btn-sm">
+              Test login
+            </a>
+            <a href="/auth/login?screen_hint=signup" className="btn btn-sm">
+              Test signup
+            </a>
+            <a href="/auth/logout" className="btn btn-sm">
+              Logout
+            </a>
+          </div>
         </FormRow>
-        <FormRow label="Entity ID">
-          <TextInput defaultValue="urn:savant:wexler-hahn" mono />
+        <FormRow label="Tenant domain" sub="Matches the Auth0 tenant configured for this workspace.">
+          <TextInput defaultValue={displayOrFallback(settings.tenantDomain)} mono readOnly />
+        </FormRow>
+        <FormRow label="Client ID" sub="Safe for browser-side redirects; keep the client secret server-side only.">
+          <TextInput defaultValue={displayOrFallback(settings.clientId)} mono readOnly />
         </FormRow>
         <FormRow
-          label="JIT provisioning"
-          sub="Create users on first SSO sign-in if their email domain matches."
+          label="Application type"
+          sub="Auth0 should be configured as a confidential regular web application."
         >
-          <Toggle on={true} />
+          <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
+            {settings.applicationType}
+          </span>
+        </FormRow>
+        <FormRow label="Base URL" sub="Must match the origin currently allowed in your Auth0 application.">
+          <TextInput defaultValue={displayOrFallback(settings.appBaseUrl)} mono readOnly />
+        </FormRow>
+        <FormRow label="Callback URL" sub="Registered in Auth0 under Allowed Callback URLs.">
+          <TextInput defaultValue={displayOrFallback(settings.callbackUrl)} mono readOnly />
+        </FormRow>
+        <FormRow label="Logout URL" sub="Registered in Auth0 under Allowed Logout URLs.">
+          <TextInput defaultValue={displayOrFallback(settings.logoutUrl)} mono readOnly />
+        </FormRow>
+        <FormRow
+          label="Token auth method"
+          sub="The installed Auth0 Next.js SDK uses client_secret_post for confidential clients with a client secret."
+        >
+          <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
+            {settings.tokenEndpointAuthMethod}
+          </span>
+        </FormRow>
+        <FormRow
+          label="Session mode"
+          sub="Authentication happens on the server with encrypted cookies managed by the SDK."
+        >
+          <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
+            {settings.sessionMode}
+          </span>
         </FormRow>
       </SettingsPanel>
 
@@ -413,11 +565,114 @@ function AuthSection() {
   );
 }
 
-function MembersSection() {
+function AIProvidersSection({ connections }: { connections: AIConnectionSummary[] }) {
+  const defaultExecution = connections.find((connection) => connection.isDefaultExecution) ?? null;
+  const defaultJudge = connections.find((connection) => connection.isDefaultJudge) ?? null;
+
+  return (
+    <>
+      <SettingsPanel
+        title="Bring-your-own AI connections"
+        sub="Tenant-scoped provider credentials used for evaluation execution, judging, and recommendation generation."
+        actions={
+          <button type="button" className="btn btn-sm">
+            Connect provider
+          </button>
+        }
+      >
+        <div className="note" style={{ marginBottom: 14 }}>
+          <span className="n-icon">🔐</span>
+          <div>
+            Raw API keys stay in external secret storage. Savant stores only metadata, stable UUIDs, usage history, and rotation posture.
+          </div>
+        </div>
+
+        <div
+          className="panel-bd tight"
+          style={{ margin: "0 calc(-1 * var(--pad-card))", borderTop: "1px solid var(--rule)" }}
+        >
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Connection</th>
+                <th>Default model</th>
+                <th>Capabilities</th>
+                <th>Scope</th>
+                <th>Secret store</th>
+                <th>Rotation</th>
+                <th style={{ textAlign: "right" }}>Last used</th>
+              </tr>
+            </thead>
+            <tbody>
+              {connections.map((connection) => (
+                <tr key={connection.aiConnectionUuid}>
+                  <td>
+                    <div className="tbl-name-text">
+                      <span className="pri">{connection.label}</span>
+                      <span className="sec mono">
+                        {formatProviderLabel(connection.provider)} · {connection.aiConnectionUuid}
+                      </span>
+                    </div>
+                  </td>
+                  <td>
+                    <span className="chip chip-paper">{connection.defaultModel}</span>
+                  </td>
+                  <td>
+                    <div className="col" style={{ gap: 4 }}>
+                      <AIConnectionStatusChip status={connection.status} />
+                      <span className="muted" style={{ fontSize: 11.5 }}>
+                        {formatCapabilities(connection)}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="muted">{connection.usageScope}</td>
+                  <td className="muted">{connection.secretStore}</td>
+                  <td className="subtle">{connection.lastRotated}</td>
+                  <td className="subtle" style={{ textAlign: "right" }}>
+                    {connection.lastUsed}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SettingsPanel>
+
+      <SettingsPanel title="Default model routing" sub="Execution and judging defaults used when a run does not override the provider.">
+        <FormRow label="Execution default" sub="Primary model used to run baseline and candidate skill invocations.">
+          <div className="col" style={{ gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>
+              {defaultExecution ? `${defaultExecution.label} · ${defaultExecution.defaultModel}` : "No default execution provider"}
+            </span>
+            {defaultExecution ? (
+              <span className="muted" style={{ fontSize: 11.5 }}>
+                {defaultExecution.purpose}
+              </span>
+            ) : null}
+          </div>
+        </FormRow>
+        <FormRow label="Judge default" sub="Model used for rubric scoring and grounded recommendation generation.">
+          <div className="col" style={{ gap: 4 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>
+              {defaultJudge ? `${defaultJudge.label} · ${defaultJudge.defaultModel}` : "No default judge provider"}
+            </span>
+            {defaultJudge ? (
+              <span className="muted" style={{ fontSize: 11.5 }}>
+                {defaultJudge.purpose}
+              </span>
+            ) : null}
+          </div>
+        </FormRow>
+      </SettingsPanel>
+    </>
+  );
+}
+
+function MembersSection({ members }: { members: WorkspaceSettingsPayload["members"] }) {
   return (
     <SettingsPanel
       title="Members"
-      sub={`${MEMBERS.filter((m) => m.status === "active").length} active members, ${MEMBERS.filter((m) => m.status === "off-boarded").length} off-boarded.`}
+      sub={`${members.filter((m) => m.status === "active").length} active members, ${members.filter((m) => m.status === "off-boarded").length} off-boarded.`}
       actions={
         <>
           <button type="button" className="btn btn-sm">
@@ -444,7 +699,7 @@ function MembersSection() {
             </tr>
           </thead>
           <tbody>
-            {MEMBERS.map((m) => (
+            {members.map((m) => (
               <tr key={m.email}>
                 <td>
                   <div className="tbl-name">
@@ -510,17 +765,17 @@ function MembersSection() {
   );
 }
 
-function SecuritySection() {
+function SecuritySection({ settings }: { settings: WorkspaceSecuritySettings }) {
   return (
     <>
       <SettingsPanel title="Encryption keys" sub="Skill bundles are signed before distribution.">
         <FormRow label="Bundle signing key" sub="Ed25519 keypair. Rotate every 90 days.">
           <div className="row" style={{ gap: 8 }}>
             <span className="mono" style={{ fontSize: 12, color: "var(--ink-3)" }}>
-              ed25519-44a0…1cf2
+              {settings.bundleSigningKeyRef}
             </span>
             <span className="subtle" style={{ fontSize: 11 }}>
-              rotated 31d ago
+              rotated {settings.bundleSigningKeyLastRotated}
             </span>
             <button type="button" className="btn btn-sm">
               Rotate
@@ -531,14 +786,14 @@ function SecuritySection() {
           label="Customer-managed key"
           sub="Encrypt skill metadata and audit log with your own KMS key."
         >
-          <Toggle on={false} />
+          <Toggle on={settings.customerManagedKey} />
         </FormRow>
         <FormRow label="Key vault" sub="External secret store for connector credentials.">
-          <select defaultValue="vault" style={{ ...selectStyle, minWidth: 220 }}>
-            <option value="vault">HashiCorp Vault</option>
-            <option value="aws">AWS KMS</option>
-            <option value="azure">Azure Key Vault</option>
-            <option value="gcp">GCP KMS</option>
+          <select defaultValue={settings.keyVaultProvider} style={{ ...selectStyle, minWidth: 220 }}>
+            <option value="HashiCorp Vault">HashiCorp Vault</option>
+            <option value="AWS KMS">AWS KMS</option>
+            <option value="Azure Key Vault">Azure Key Vault</option>
+            <option value="GCP KMS">GCP KMS</option>
           </select>
         </FormRow>
       </SettingsPanel>
@@ -546,7 +801,7 @@ function SecuritySection() {
       <SettingsPanel title="Audit & retention" sub="How long governance events are kept.">
         <FormRow label="Audit log retention">
           <div className="row" style={{ gap: 8 }}>
-            <TextInput defaultValue="7" mono style={{ width: 64 }} />
+            <TextInput defaultValue={String(settings.auditRetentionYears)} mono style={{ width: 64 }} />
             <span className="muted" style={{ fontSize: 12 }}>
               years (minimum)
             </span>
@@ -554,21 +809,21 @@ function SecuritySection() {
         </FormRow>
         <FormRow label="Eval result retention">
           <div className="row" style={{ gap: 8 }}>
-            <TextInput defaultValue="365" mono style={{ width: 64 }} />
+            <TextInput defaultValue={String(settings.evalRetentionDays)} mono style={{ width: 64 }} />
             <span className="muted" style={{ fontSize: 12 }}>
               days
             </span>
           </div>
         </FormRow>
         <FormRow label="Stream to SIEM" sub="Forward audit events to your security information system.">
-          <Toggle on={true} />
+          <Toggle on={settings.streamToSiem} />
         </FormRow>
       </SettingsPanel>
     </>
   );
 }
 
-function NotificationsSection() {
+function NotificationsSection({ settings }: { settings: WorkspaceNotificationSettings }) {
   return (
     <SettingsPanel title="Subscriptions" sub="Where governance events are surfaced.">
       <FormRow
@@ -576,9 +831,9 @@ function NotificationsSection() {
         sub="Notify the reviewer when a candidate is submitted for approval."
       >
         <div className="row" style={{ gap: 6 }}>
-          <Toggle on={true} />
+          <Toggle on={settings.approvalRequestedChannels.length > 0} />
           <span className="muted" style={{ fontSize: 11.5 }}>
-            Slack · Email
+            {formatList(settings.approvalRequestedChannels)}
           </span>
         </div>
       </FormRow>
@@ -587,9 +842,9 @@ function NotificationsSection() {
         sub="Notify the skill owner when an eval run flags a regression."
       >
         <div className="row" style={{ gap: 6 }}>
-          <Toggle on={true} />
+          <Toggle on={settings.regressionDetectedChannels.length > 0} />
           <span className="muted" style={{ fontSize: 11.5 }}>
-            Slack · Linear
+            {formatList(settings.regressionDetectedChannels)}
           </span>
         </div>
       </FormRow>
@@ -598,17 +853,17 @@ function NotificationsSection() {
         sub="Notify platform admins on any production rollback."
       >
         <div className="row" style={{ gap: 6 }}>
-          <Toggle on={true} />
+          <Toggle on={settings.rollbackExecutedChannels.length > 0} />
           <span className="muted" style={{ fontSize: 11.5 }}>
-            PagerDuty · Slack
+            {formatList(settings.rollbackExecutedChannels)}
           </span>
         </div>
       </FormRow>
       <FormRow label="Policy violation blocked" sub="Notify when a policy prevents an action.">
         <div className="row" style={{ gap: 6 }}>
-          <Toggle on={true} />
+          <Toggle on={settings.policyViolationChannels.length > 0} />
           <span className="muted" style={{ fontSize: 11.5 }}>
-            Slack
+            {formatList(settings.policyViolationChannels)}
           </span>
         </div>
       </FormRow>
@@ -617,9 +872,9 @@ function NotificationsSection() {
         sub="Friday summary of approvals, releases, and regressions."
       >
         <div className="row" style={{ gap: 6 }}>
-          <Toggle on={false} />
+          <Toggle on={settings.weeklySummaryEnabled} />
           <span className="muted" style={{ fontSize: 11.5 }}>
-            Email
+            {formatList(settings.weeklySummaryChannels)}
           </span>
         </div>
       </FormRow>
@@ -627,45 +882,45 @@ function NotificationsSection() {
   );
 }
 
-function BillingSection() {
+function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
   return (
     <>
-      <SettingsPanel title="Plan" sub="Enterprise · annual">
+      <SettingsPanel title="Plan" sub={`${settings.planName} · annual`}>
         <FormRow label="Current plan">
           <div className="row" style={{ gap: 10 }}>
-            <span className="chip chip-ink">Enterprise</span>
+            <span className="chip chip-ink">{settings.planName}</span>
             <span className="muted" style={{ fontSize: 12 }}>
-              Renews 14 Mar 2027
+              Renews {settings.renewalDate}
             </span>
           </div>
         </FormRow>
         <FormRow label="Skills included" sub="Annual contract.">
           <div className="row" style={{ gap: 8 }}>
             <span className="mono num" style={{ fontSize: 13 }}>
-              500
+              {settings.skillsIncluded}
             </span>
             <span className="muted" style={{ fontSize: 12 }}>
-              · 218 active · 282 remaining
+              · {settings.activeSkills} active · {settings.skillsIncluded - settings.activeSkills} remaining
             </span>
           </div>
         </FormRow>
         <FormRow label="Seats" sub="Members with edit / approve permissions.">
           <div className="row" style={{ gap: 8 }}>
             <span className="mono num" style={{ fontSize: 13 }}>
-              50
+              {settings.includedSeats}
             </span>
             <span className="muted" style={{ fontSize: 12 }}>
-              · 38 in use · 12 remaining
+              · {settings.usedSeats} in use · {settings.includedSeats - settings.usedSeats} remaining
             </span>
           </div>
         </FormRow>
         <FormRow label="Eval compute · monthly cap">
           <div className="row" style={{ gap: 8 }}>
             <span className="mono num" style={{ fontSize: 13 }}>
-              4,000
+              {settings.evalRunCapMonthly.toLocaleString()}
             </span>
             <span className="muted" style={{ fontSize: 12 }}>
-              runs · 2,841 used this month
+              runs · {settings.evalRunsUsedMonthly.toLocaleString()} used this month
             </span>
           </div>
         </FormRow>
@@ -676,30 +931,36 @@ function BillingSection() {
           <div className="kpi">
             <div className="kpi-label">Eval runs</div>
             <div className="kpi-value num">
-              2.84<span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+              {(settings.evalRunsUsedMonthly / 1000).toFixed(2)}
+              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
             </div>
-            <div className="kpi-trend">71% of cap</div>
+            <div className="kpi-trend">
+              {Math.round((settings.evalRunsUsedMonthly / settings.evalRunCapMonthly) * 100)}% of cap
+            </div>
           </div>
           <div className="kpi">
             <div className="kpi-label">Distributions</div>
             <div className="kpi-value num">
-              38<span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+              {(settings.distributionsMonthly / 1000).toFixed(0)}
+              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
             </div>
             <div className="kpi-trend">unlimited</div>
           </div>
           <div className="kpi">
             <div className="kpi-label">Storage</div>
             <div className="kpi-value num">
-              12<span style={{ fontSize: 16, color: "var(--muted)" }}>GB</span>
+              {settings.storageGbUsed}
+              <span style={{ fontSize: 16, color: "var(--muted)" }}>GB</span>
             </div>
-            <div className="kpi-trend">of 200 GB</div>
+            <div className="kpi-trend">of {settings.storageGbCap} GB</div>
           </div>
           <div className="kpi">
             <div className="kpi-label">API calls</div>
             <div className="kpi-value num">
-              412<span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+              {(settings.apiCallsMonthly / 1000).toFixed(0)}
+              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
             </div>
-            <div className="kpi-trend up">▲ 18%</div>
+            <div className="kpi-trend up">▲ {settings.apiCallsDeltaPct}%</div>
           </div>
         </div>
       </SettingsPanel>

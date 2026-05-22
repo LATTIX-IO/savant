@@ -18,8 +18,9 @@ import {
   REGRESSIONS,
   REPOS,
 } from "@/lib/savant-data";
+import type { AuthOverview } from "@/lib/auth0-session";
 
-export function OverviewScreen() {
+export function OverviewScreen({ auth }: { auth: AuthOverview }) {
   const { show } = useOnboarding();
 
   return (
@@ -47,6 +48,8 @@ export function OverviewScreen() {
           </button>
         </div>
       </div>
+
+      <AuthStatusPanel auth={auth} />
 
       <div className="kpi-strip" style={{ marginBottom: 24 }}>
         <div className="kpi">
@@ -351,6 +354,109 @@ export function OverviewScreen() {
                 />
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
+  if (!auth.viewer.isAuthenticated) {
+    return (
+      <div className="panel" style={{ marginBottom: 24 }}>
+        <div className="panel-hd">
+          <div>
+            <div className="panel-title">Authentication</div>
+            <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+              Auth0 is wired into this Next.js 16 app using the official server-side session SDK.
+            </div>
+          </div>
+          <span className="chip chip-paper">Auth0 · ready</span>
+        </div>
+        <div className="panel-bd">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "minmax(0, 1fr) auto",
+              gap: 16,
+              alignItems: "center",
+            }}
+          >
+            <div className="col" style={{ gap: 4 }}>
+              <div className="skill-name" style={{ fontSize: 13 }}>
+                You&apos;re browsing Savant as a guest.
+              </div>
+              <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
+                Use the hosted Auth0 routes below to test Universal Login, callback handling, and
+                logout from the dashboard.
+              </div>
+            </div>
+            <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <a href="/auth/login?screen_hint=signup" className="btn btn-sm">
+                Sign up
+              </a>
+              <a href="/auth/login" className="btn btn-sm">
+                Log in
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="panel" style={{ marginBottom: 24 }}>
+      <div className="panel-hd">
+        <div>
+          <div className="panel-title">Authentication</div>
+          <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>
+            Auth0 session active. The profile below is coming from the server-side session.
+          </div>
+        </div>
+        <span className="chip chip-moss">
+          <span className="dot" />
+          session active
+        </span>
+      </div>
+      <div className="panel-bd">
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "minmax(0, 1fr) auto",
+            gap: 16,
+            alignItems: "flex-start",
+          }}
+        >
+          <div className="col" style={{ gap: 12 }}>
+            <div className="row" style={{ gap: 10, alignItems: "center" }}>
+              <span className="avatar sm">{auth.viewer.initials}</span>
+              <div className="col" style={{ gap: 2 }}>
+                <div className="skill-name" style={{ fontSize: 13.5 }}>
+                  {auth.viewer.displayName}
+                </div>
+                <div className="muted" style={{ fontSize: 12.5 }}>
+                  {auth.viewer.subtitle}
+                </div>
+              </div>
+            </div>
+            <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+              {auth.fields.map((field) => (
+                <span key={field.label} className="ref">
+                  {field.label}: {field.value}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+            <a href="/auth/profile" className="btn btn-sm" target="_blank" rel="noreferrer">
+              Profile JSON
+            </a>
+            <a href="/auth/logout" className="btn btn-sm">
+              Log out
+            </a>
           </div>
         </div>
       </div>

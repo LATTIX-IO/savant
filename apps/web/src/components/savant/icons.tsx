@@ -85,6 +85,17 @@ export const Ic = {
       <path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" />
     </svg>
   ),
+  Sun: (p: IconProps) => (
+    <svg viewBox="0 0 16 16" {...base} {...p}>
+      <circle cx="8" cy="8" r="2.75" />
+      <path d="M8 1.5v1.75M8 12.75v1.75M1.5 8h1.75M12.75 8h1.75M3.4 3.4l1.2 1.2M11.4 11.4l1.2 1.2M12.6 3.4l-1.2 1.2M4.6 11.4l-1.2 1.2" />
+    </svg>
+  ),
+  Moon: (p: IconProps) => (
+    <svg viewBox="0 0 16 16" {...base} {...p}>
+      <path d="M10.9 1.9a5.8 5.8 0 1 0 3.2 10.2A6.3 6.3 0 0 1 10.9 1.9Z" />
+    </svg>
+  ),
   ChevR: (p: IconProps) => (
     <svg viewBox="0 0 16 16" {...base} {...p}>
       <path d="m6 3 5 5-5 5" />
@@ -239,7 +250,7 @@ export const Ic = {
   Bitbucket: (p: IconProps) => (
     <svg viewBox="0 0 16 16" fill="currentColor" {...p}>
       <path d="M2 2.5h12l-1.5 11h-9L2 2.5Z" opacity=".8" />
-      <path d="M6.4 6.5h3.2l-.5 3.3H6.9L6.4 6.5Z" fill="var(--linen)" />
+      <path d="M6.4 6.5h3.2l-.5 3.3H6.9L6.4 6.5Z" fill="var(--on-accent)" />
     </svg>
   ),
   Server: (p: IconProps) => (

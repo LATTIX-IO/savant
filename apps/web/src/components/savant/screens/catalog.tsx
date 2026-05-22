@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+
+import type { SkillListItem } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
 import { SkillCreateModal } from "@/components/savant/skill-create-modal";
+import { fetchSkillList } from "@/lib/control-plane-client";
 import {
   BranchRef,
   CommitRef,
@@ -14,7 +17,6 @@ import {
   Sparkline,
   Tier,
 } from "@/components/savant/primitives";
-import { SKILLS, type Skill } from "@/lib/savant-data";
 
 type TierFilter = "all" | "1" | "2" | "3";
 type StatusFilter = "all" | "production" | "staging" | "draft" | "candidate";
@@ -23,11 +25,50 @@ export function CatalogScreen() {
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
-  const [focusId, setFocusId] = useState<string>(SKILLS[0]!.id);
+  const [focusId, setFocusId] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [skills, setSkills] = useState<SkillListItem[]>([]);
+  const [skillsStatus, setSkillsStatus] = useState<"loading" | "error" | "success">("loading");
+  const [skillsError, setSkillsError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadSkills() {
+      setSkillsStatus("loading");
+      setSkillsError(null);
+
+      try {
+        const response = await fetchSkillList(undefined, { signal: controller.signal });
+
+        if (active) {
+          setSkills(response.data);
+          setSkillsStatus("success");
+        }
+      } catch (error) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setSkillsStatus("error");
+        setSkillsError(
+          error instanceof Error ? error.message : "Could not load the skill catalog.",
+        );
+      }
+    }
+
+    void loadSkills();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [reloadToken]);
 
   const filtered = useMemo(() => {
-    let list: Skill[] = SKILLS;
+    let list = skills;
     if (tierFilter !== "all") list = list.filter((s) => s.tier === Number(tierFilter));
     if (statusFilter === "production") list = list.filter((s) => s.channel === "production");
     if (statusFilter === "staging") list = list.filter((s) => s.channel === "staging");
@@ -43,18 +84,23 @@ export function CatalogScreen() {
       );
     }
     return list;
-  }, [tierFilter, statusFilter, query]);
+  }, [query, skills, statusFilter, tierFilter]);
 
-  const selected = SKILLS.find((s) => s.id === focusId) || filtered[0] || SKILLS[0];
+  const activeFocusId = filtered.some((skill) => skill.id === focusId)
+    ? focusId
+    : filtered[0]?.id ?? "";
+  const selected = filtered.find((s) => s.id === activeFocusId) || filtered[0] || null;
 
-  const tierCount = (t: 1 | 2 | 3) => SKILLS.filter((s) => s.tier === t).length;
+  const tierCount = (t: 1 | 2 | 3) => skills.filter((s) => s.tier === t).length;
   const statusCount = (k: StatusFilter) => {
-    if (k === "production") return SKILLS.filter((s) => s.channel === "production").length;
-    if (k === "staging") return SKILLS.filter((s) => s.channel === "staging").length;
-    if (k === "draft") return SKILLS.filter((s) => s.channel === "draft").length;
-    if (k === "candidate") return SKILLS.filter((s) => s.status.startsWith("candidate")).length;
-    return SKILLS.length;
+    if (k === "production") return skills.filter((s) => s.channel === "production").length;
+    if (k === "staging") return skills.filter((s) => s.channel === "staging").length;
+    if (k === "draft") return skills.filter((s) => s.channel === "draft").length;
+    if (k === "candidate") return skills.filter((s) => s.status.startsWith("candidate")).length;
+    return skills.length;
   };
+
+  const retry = () => setReloadToken((value) => value + 1);
 
   return (
     <div className="page-inner">
@@ -88,7 +134,7 @@ export function CatalogScreen() {
           <div className="filterbar">
             <div className="row" style={{ gap: 6 }}>
               <Facet active={tierFilter === "all"} onClick={() => setTierFilter("all")}>
-                All <span className="f-count">{SKILLS.length}</span>
+                All <span className="f-count">{skills.length}</span>
               </Facet>
               <Facet active={tierFilter === "1"} onClick={() => setTierFilter("1")}>
                 Tier 1 <span className="f-count">{tierCount(1)}</span>
@@ -151,65 +197,93 @@ export function CatalogScreen() {
 
           <div className="panel" style={{ borderRadius: "0 0 6px 6px", borderTop: 0 }}>
             <div className="panel-bd tight">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th style={{ width: "30%" }}>Skill</th>
-                    <th>Tier</th>
-                    <th>Source</th>
-                    <th>Version</th>
-                    <th>Channel</th>
-                    <th>Owner</th>
-                    <th style={{ textAlign: "right" }}>Score</th>
-                    <th style={{ textAlign: "right" }}>Trend</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={s.id === selected?.id ? "selected" : ""}
-                      onClick={() => setFocusId(s.id)}
-                    >
-                      <td>
-                        <div className="tbl-name">
-                          <div className="tbl-name-text">
-                            <span className="pri">{s.name}</span>
-                            <span className="sec">{s.team}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <Tier n={s.tier} />
-                      </td>
-                      <td>
-                        <RepoChip provider={s.repoProvider} name={s.repo} />
-                      </td>
-                      <td>
-                        {s.ref !== "—" ? (
-                          <span className="mono num" style={{ color: "var(--ink-3)" }}>
-                            {s.ref}
-                          </span>
-                        ) : (
-                          <span className="subtle mono">—</span>
-                        )}
-                      </td>
-                      <td>
-                        <EnvPill env={s.channel} />
-                      </td>
-                      <td className="muted" style={{ fontSize: 12.5 }}>
-                        {s.owner}
-                      </td>
-                      <td className="mono num" style={{ textAlign: "right", color: "var(--ink)" }}>
-                        {s.score == null ? <span className="subtle">—</span> : s.score.toFixed(1)}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Sparkline data={s.trend} />
-                      </td>
+              {skillsStatus === "loading" && skills.length === 0 ? (
+                <div className="panel-bd">
+                  <div className="note">
+                    <Ic.Spinner className="n-icon" />
+                    <span>Loading governed skills from the control-plane API…</span>
+                  </div>
+                </div>
+              ) : skillsStatus === "error" && skills.length === 0 ? (
+                <div className="panel-bd">
+                  <div className="note blood" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="row" style={{ alignItems: "flex-start" }}>
+                      <Ic.XCircle className="n-icon" />
+                      <span>{skillsError ?? "Could not load the skill catalog."}</span>
+                    </div>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={retry}>
+                      Retry
+                    </button>
+                  </div>
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="panel-bd">
+                  <div className="note brass">
+                    <Ic.Warn className="n-icon" />
+                    <span>No skills match the current filters.</span>
+                  </div>
+                </div>
+              ) : (
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th style={{ width: "30%" }}>Skill</th>
+                      <th>Tier</th>
+                      <th>Source</th>
+                      <th>Version</th>
+                      <th>Channel</th>
+                      <th>Owner</th>
+                      <th style={{ textAlign: "right" }}>Score</th>
+                      <th style={{ textAlign: "right" }}>Trend</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtered.map((s) => (
+                      <tr
+                        key={s.id}
+                        className={s.id === activeFocusId ? "selected" : ""}
+                        onClick={() => setFocusId(s.id)}
+                      >
+                        <td>
+                          <div className="tbl-name">
+                            <div className="tbl-name-text">
+                              <span className="pri">{s.name}</span>
+                              <span className="sec">{s.team}</span>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <Tier n={s.tier} />
+                        </td>
+                        <td>
+                          <RepoChip provider={s.repoProvider} name={s.repo} />
+                        </td>
+                        <td>
+                          {s.ref !== "—" ? (
+                            <span className="mono num" style={{ color: "var(--ink-3)" }}>
+                              {s.ref}
+                            </span>
+                          ) : (
+                            <span className="subtle mono">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <EnvPill env={s.channel} />
+                        </td>
+                        <td className="muted" style={{ fontSize: 12.5 }}>
+                          {s.owner}
+                        </td>
+                        <td className="mono num" style={{ textAlign: "right", color: "var(--ink)" }}>
+                          {s.score == null ? <span className="subtle">—</span> : s.score.toFixed(1)}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <Sparkline data={s.trend} />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
         </div>
@@ -222,7 +296,7 @@ export function CatalogScreen() {
   );
 }
 
-function CatalogPreview({ skill }: { skill: Skill }) {
+function CatalogPreview({ skill }: { skill: SkillListItem }) {
   return (
     <div className="panel" style={{ position: "sticky", top: 0 }}>
       <div className="panel-hd">

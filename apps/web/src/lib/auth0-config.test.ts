@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildAuthStatusHref,
   getDashboardAuthAction,
   getAuthReturnTo,
   getLegacyAuthRedirectPath,
@@ -156,6 +157,24 @@ test("getAuthReturnTo preserves the relative dashboard path and query string", (
   assert.equal(
     getAuthReturnTo("https://savantrepo.com/repositories?tab=all&sort=recent"),
     "/repositories?tab=all&sort=recent",
+  );
+});
+
+test("buildAuthStatusHref preserves the requested source and safe return target", () => {
+  assert.equal(
+    buildAuthStatusHref({
+      source: "signup",
+      returnTo: "/onboarding?cycle=annual&seats=5",
+    }),
+    "/auth-status?source=signup&returnTo=%2Fonboarding%3Fcycle%3Dannual%26seats%3D5",
+  );
+
+  assert.equal(
+    buildAuthStatusHref({
+      source: "signin",
+      returnTo: "https://evil.example/phish",
+    }),
+    "/auth-status?source=signin&returnTo=%2Fdashboard",
   );
 });
 

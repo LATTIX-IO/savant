@@ -2,7 +2,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 
 import { auth0, isAuth0Configured } from "@/lib/auth0";
-import { normalizeReturnToPath } from "@/lib/auth0-config";
+import { buildAuthStatusHref, normalizeReturnToPath } from "@/lib/auth0-config";
 import {
   buildOnboardingReturnToPath,
   isOnboardingSandboxEnabled,
@@ -58,6 +58,5 @@ export default async function SignupPage({
     redirect(loginHref as Route);
   }
 
-  // Local-dev fallback when Auth0 isn't configured: hop straight into onboarding.
-  redirect(target as Route);
+  redirect(buildAuthStatusHref({ source: "signup", returnTo: target }) as Route);
 }

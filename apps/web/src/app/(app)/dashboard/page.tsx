@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthOverview } from "@/lib/auth0-session";
 import { getOverviewResponse } from "@/server/control-plane/read-model";
+import { buildPublicAuthSettings } from "@/server/control-plane/workspace-settings";
 import { OverviewScreen } from "@/components/savant/screens/overview";
 import { resolvePreferredTenantAppPath } from "@/server/control-plane/tenant-context";
 
@@ -18,7 +19,8 @@ export default async function DashboardPage() {
   }
 
   const auth = buildAuthOverview(session?.user);
+  const authStatus = buildPublicAuthSettings().status;
   const overview = await getOverviewResponse();
 
-  return <OverviewScreen auth={auth} overview={overview.data} />;
+  return <OverviewScreen auth={auth} authStatus={authStatus} overview={overview.data} />;
 }

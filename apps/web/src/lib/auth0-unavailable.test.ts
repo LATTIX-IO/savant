@@ -30,6 +30,7 @@ test("renderAuthServiceUnavailableHtml contains a generic message without leakin
   const html = renderAuthServiceUnavailableHtml();
 
   assert.match(html, /Authentication is required before this deployment can serve Savant\./);
+  assert.match(html, /href="\/auth-status"/);
   assert.match(html, /auth_service_unavailable/);
   assert.doesNotMatch(html, /APP_BASE_URL|AUTH0_CLIENT_SECRET|AUTH0_SECRET/);
 });

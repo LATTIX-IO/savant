@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 import type {
   OverviewKpi,
   OverviewPayload,
+  PublicAuthProviderSettings,
   ReleaseQueueItem as ReleaseQueueRecord,
 } from "@savant/types";
 
@@ -41,7 +42,15 @@ function renderInlineEmptyState(message: string) {
   );
 }
 
-export function OverviewScreen({ auth, overview }: { auth: AuthOverview; overview: OverviewPayload }) {
+export function OverviewScreen({
+  auth,
+  authStatus,
+  overview,
+}: {
+  auth: AuthOverview;
+  authStatus: PublicAuthProviderSettings["status"];
+  overview: OverviewPayload;
+}) {
   const { show } = useOnboarding();
   const pathname = usePathname() || "/";
   const skillsHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
@@ -78,7 +87,7 @@ export function OverviewScreen({ auth, overview }: { auth: AuthOverview; overvie
         </div>
       </div>
 
-      <AuthStatusPanel auth={auth} />
+      <AuthStatusPanel auth={auth} authStatus={authStatus} />
 
       <div className="kpi-strip" style={{ marginBottom: 24 }}>
         <div className="kpi">
@@ -394,8 +403,29 @@ export function OverviewScreen({ auth, overview }: { auth: AuthOverview; overvie
   );
 }
 
-function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
+function AuthStatusPanel({
+  auth,
+  authStatus,
+}: {
+  auth: AuthOverview;
+  authStatus: PublicAuthProviderSettings["status"];
+}) {
   if (!auth.viewer.isAuthenticated) {
+    const authStatusChip = authStatus === "configured"
+      ? (
+          <span className="chip chip-moss">
+            <span className="dot" />
+            Auth0 · configured
+          </span>
+        )
+      : authStatus === "development-bypass"
+        ? <span className="chip chip-brass">Auth0 · development bypass</span>
+        : <span className="chip chip-paper">Auth0 · unavailable</span>;
+
+    const guestMessage = authStatus === "configured"
+      ? "Use the sign-in and sign-up entry pages below to test Universal Login, callback handling, and logout from the dashboard."
+      : "Review the public Auth status page before testing sign-in or onboarding. It shows whether this deployment has the Auth0 secrets, callback URL, and Stripe/onboarding prerequisites it needs.";
+
     return (
       <div className="panel" style={{ marginBottom: 24 }}>
         <div className="panel-hd">
@@ -405,7 +435,7 @@ function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
               Auth0 is wired into this Next.js 16 app using the official server-side session SDK.
             </div>
           </div>
-          <span className="chip chip-paper">Auth0 · ready</span>
+          {authStatusChip}
         </div>
         <div className="panel-bd">
           <div
@@ -421,11 +451,13 @@ function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
                 You&apos;re browsing Savant as a guest.
               </div>
               <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                Use the sign-in and sign-up entry pages below to test Universal Login,
-                callback handling, and logout from the dashboard.
+                {guestMessage}
               </div>
             </div>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <a href="/auth-status" className="btn btn-sm">
+                Auth status
+              </a>
               <a href="/signup" className="btn btn-sm">
                 Sign up
               </a>

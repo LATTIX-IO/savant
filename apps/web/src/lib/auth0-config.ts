@@ -31,6 +31,7 @@ const AUTH0_DOMAIN_FALLBACK_KEYS = [
 export type Auth0EnvKey = (typeof AUTH0_ENV_KEYS)[number];
 export type Auth0Env = Record<string, string | undefined>;
 export type DashboardAuthAction = "allow" | "redirect-to-login" | "require-auth0-config";
+export type AuthStatusSource = "signin" | "signup" | "onboarding" | "unavailable";
 
 const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 const RETURN_TO_SANITIZE_BASE = "https://savant.local";
@@ -186,6 +187,23 @@ export function getAuthReturnTo(url: string | URL): string {
   const returnTo = `${resolvedUrl.pathname}${resolvedUrl.search}`;
 
   return returnTo || "/";
+}
+
+export function buildAuthStatusHref({
+  source,
+  returnTo,
+}: {
+  source: AuthStatusSource;
+  returnTo?: string | undefined;
+}): string {
+  const search = new URLSearchParams({ source });
+  const normalizedReturnTo = normalizeReturnToPath(returnTo, "/dashboard");
+
+  if (normalizedReturnTo) {
+    search.set("returnTo", normalizedReturnTo);
+  }
+
+  return `/auth-status?${search.toString()}`;
 }
 
 export function isProtectedDashboardPath(pathname: string): boolean {

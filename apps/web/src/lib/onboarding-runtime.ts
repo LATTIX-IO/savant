@@ -141,3 +141,11 @@ export function shouldRedirectOnboardingToSignup(input: {
 }): boolean {
   return !input.hasIdentity && !input.isSandbox && input.isAuth0Configured;
 }
+
+export function shouldRedirectOnboardingToAuthStatus(input: {
+  hasIdentity: boolean;
+  isSandbox: boolean;
+  isAuth0Configured: boolean;
+}): boolean {
+  return !input.hasIdentity && !input.isSandbox && !input.isAuth0Configured;
+}

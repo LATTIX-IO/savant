@@ -2,9 +2,12 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 
 import { auth0, isAuth0Configured } from "@/lib/auth0";
+import { buildAuthStatusHref } from "@/lib/auth0-config";
 import {
   buildSignupHrefForOnboarding,
+  buildOnboardingReturnToPath,
   resolveOnboardingRuntimeAccess,
+  shouldRedirectOnboardingToAuthStatus,
   shouldRedirectOnboardingToSignup,
 } from "@/lib/onboarding-runtime";
 import { normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
@@ -44,6 +47,19 @@ export default async function OnboardingPage({
     isAuth0Configured,
   })) {
     redirect(buildSignupHrefForOnboarding(params) as Route);
+  }
+
+  if (shouldRedirectOnboardingToAuthStatus({
+    hasIdentity: Boolean(identity),
+    isSandbox: runtimeAccess.isSandbox,
+    isAuth0Configured,
+  })) {
+    redirect(
+      buildAuthStatusHref({
+        source: "onboarding",
+        returnTo: buildOnboardingReturnToPath(params),
+      }) as Route,
+    );
   }
 
   let restoredDraft = null;

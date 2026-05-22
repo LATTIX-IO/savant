@@ -2,7 +2,7 @@ import type { Route } from "next";
 import { redirect } from "next/navigation";
 
 import { auth0, isAuth0Configured } from "@/lib/auth0";
-import { normalizeReturnToPath } from "@/lib/auth0-config";
+import { buildAuthStatusHref, normalizeReturnToPath } from "@/lib/auth0-config";
 import { isOnboardingSandboxEnabled } from "@/lib/onboarding-runtime";
 
 export const dynamic = "force-dynamic";
@@ -42,5 +42,5 @@ export default async function SigninPage({
     redirect(loginHref as Route);
   }
 
-  redirect(target as Route);
+  redirect(buildAuthStatusHref({ source: "signin", returnTo: target }) as Route);
 }

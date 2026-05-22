@@ -79,6 +79,16 @@ export function renderAuthServiceUnavailableHtml(): string {
         line-height: 1.55;
       }
 
+      a {
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
       code {
         display: inline-block;
         margin-top: 8px;
@@ -99,6 +109,10 @@ export function renderAuthServiceUnavailableHtml(): string {
       <p>
         Configure the deployment's identity provider settings, then retry the request.
         Local loopback development continues to bypass auth when running in development mode.
+      </p>
+      <p>
+        Review the public <a href="/auth-status">Auth status</a> page to verify the deployment's
+        Auth0 domain, callback URL, hosted Universal Login routes, and onboarding prerequisites.
       </p>
       <code>${AUTH_SERVICE_UNAVAILABLE_CODE}</code>
     </main>

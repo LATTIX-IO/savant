@@ -9,6 +9,7 @@ import {
   isOnboardingSandboxEnabled,
   resolveOnboardingRuntimeAccess,
   sandboxCheckoutOutcome,
+  shouldRedirectOnboardingToAuthStatus,
   shouldRedirectOnboardingToSignup,
 } from "./onboarding-runtime.ts";
 
@@ -110,6 +111,25 @@ test("shouldRedirectOnboardingToSignup only gates real unauthenticated onboardin
   );
   assert.equal(
     shouldRedirectOnboardingToSignup({ hasIdentity: false, isSandbox: false, isAuth0Configured: false }),
+    false,
+  );
+});
+
+test("shouldRedirectOnboardingToAuthStatus blocks anonymous onboarding when Auth0 is unavailable", () => {
+  assert.equal(
+    shouldRedirectOnboardingToAuthStatus({ hasIdentity: false, isSandbox: false, isAuth0Configured: false }),
+    true,
+  );
+  assert.equal(
+    shouldRedirectOnboardingToAuthStatus({ hasIdentity: false, isSandbox: false, isAuth0Configured: true }),
+    false,
+  );
+  assert.equal(
+    shouldRedirectOnboardingToAuthStatus({ hasIdentity: true, isSandbox: false, isAuth0Configured: false }),
+    false,
+  );
+  assert.equal(
+    shouldRedirectOnboardingToAuthStatus({ hasIdentity: false, isSandbox: true, isAuth0Configured: false }),
     false,
   );
 });

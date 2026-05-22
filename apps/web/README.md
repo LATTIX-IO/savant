@@ -37,6 +37,8 @@ On Vercel, Savant will fall back to `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODU
 
 If Auth0 is still incomplete in a non-local deployment, Savant now fails closed with a `503` unavailable response instead of a generic internal server error.
 
+You can also visit `/auth-status` on any deployment to inspect a public, non-secret readiness report for Auth0: resolved tenant domain, callback/logout URLs, hosted Universal Login routes, discovery reachability, and the onboarding prerequisites that still block Stripe provisioning.
+
 The currently configured Auth0 application expects:
 
 - Callback URL: `https://savantrepo.com/auth/callback`

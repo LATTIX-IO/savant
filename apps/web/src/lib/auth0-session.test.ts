@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildAuthOverview, buildAuthViewer, getInitials } from "./auth0-session.ts";
+import {
+  buildAuthenticatedIdentity,
+  buildAuthOverview,
+  buildAuthViewer,
+  getInitials,
+} from "./auth0-session.ts";
 
 test("getInitials derives a compact avatar label from names and email-like identifiers", () => {
   assert.equal(getInitials("Priya Aronson"), "PA");
@@ -40,5 +45,27 @@ test("buildAuthOverview trims profile fields and omits duplicate nicknames", () 
         { label: "Subject", value: "auth0|user_123" },
       ],
     },
+  );
+});
+
+test("buildAuthenticatedIdentity requires both Auth0 subject and email", () => {
+  assert.deepEqual(
+    buildAuthenticatedIdentity({
+      email: "  priya@wh.com ",
+      name: " Priya Aronson ",
+      sub: " auth0|user_123 ",
+    }),
+    {
+      subject: "auth0|user_123",
+      email: "priya@wh.com",
+      displayName: "Priya Aronson",
+    },
+  );
+
+  assert.equal(
+    buildAuthenticatedIdentity({
+      email: "priya@wh.com",
+    }),
+    null,
   );
 });

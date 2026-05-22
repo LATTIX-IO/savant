@@ -1,13 +1,24 @@
+import type { Route } from "next";
 import { redirect } from "next/navigation";
 
+import { OnboardingSuccessState } from "@/components/marketing/onboarding-success-state";
 import { Ic } from "@/components/savant/icons";
+import { auth0 } from "@/lib/auth0";
+import { buildOnboardingStatusView } from "@/lib/onboarding";
+import { resolveOnboardingRuntimeAccess } from "@/lib/onboarding-runtime";
 import { isStripeConfigured, stripe } from "@/lib/stripe";
+import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
+import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
+import { getOnboardingSessionForSubjectByCheckoutSessionId } from "@/server/control-plane/onboarding-store";
 
 export const metadata = { title: "Welcome to Savant" };
 export const dynamic = "force-dynamic";
 
 type SuccessSearchParams = {
   session_id?: string;
+  sandbox?: string;
+  workspace_name?: string;
+  workspace_slug?: string;
 };
 
 export default async function OnboardingSuccessPage({
@@ -15,18 +26,51 @@ export default async function OnboardingSuccessPage({
 }: {
   searchParams: Promise<SuccessSearchParams>;
 }) {
-  const { session_id } = await searchParams;
+  const { session_id, sandbox, workspace_name, workspace_slug } = await searchParams;
 
   if (!session_id) {
-    redirect("/onboarding");
+    redirect("/onboarding" as Route);
   }
+
+  if (isControlPlaneDatabaseConfigured) {
+    const session = auth0 ? await auth0.getSession() : null;
+    const runtimeAccess = resolveOnboardingRuntimeAccess(session?.user);
+    const identity = runtimeAccess.identity;
+
+    if (!identity) {
+      const params = new URLSearchParams({
+        returnTo: `/onboarding/success?session_id=${encodeURIComponent(session_id)}`,
+      });
+      redirect(`/signin?${params.toString()}` as Route);
+    }
+
+    const onboardingSession = await getOnboardingSessionForSubjectByCheckoutSessionId(
+      identity.subject,
+      session_id,
+    );
+
+    if (!onboardingSession) {
+      redirect("/onboarding" as Route);
+    }
+
+    return (
+      <OnboardingSuccessState
+        initialStatus={buildOnboardingStatusView(onboardingSession)}
+        isSandbox={runtimeAccess.isSandbox}
+        sessionId={session_id}
+      />
+    );
+  }
+
+  const runtimeAccess = resolveOnboardingRuntimeAccess(null);
 
   // Best-effort: confirm the Stripe session is paid (or in trial). If the
   // webhook hasn't fired yet we still let the user through — the webhook is
   // the source of truth for tenant provisioning.
-  let workspaceName: string | null = null;
-  let workspaceSlug: string | null = null;
-  if (isStripeConfigured && stripe) {
+  const sandboxMode = runtimeAccess.isSandbox || sandbox === "1";
+  let workspaceName: string | null = sandboxMode ? workspace_name?.trim() ?? null : null;
+  let workspaceSlug: string | null = sandboxMode ? workspace_slug?.trim() ?? null : null;
+  if (!sandboxMode && isStripeConfigured && stripe) {
     try {
       const session = await stripe.checkout.sessions.retrieve(session_id);
       workspaceName = (session.metadata?.workspaceName as string | undefined) ?? null;
@@ -36,6 +80,8 @@ export default async function OnboardingSuccessPage({
       console.error("[onboarding/success] retrieve session failed:", error);
     }
   }
+
+  const workspaceUrl = workspaceSlug ? formatWorkspaceUrlForDisplay(workspaceSlug) : null;
 
   return (
     <div className="signup-redirect">
@@ -68,13 +114,21 @@ export default async function OnboardingSuccessPage({
             </>
           )}
         </p>
-        {workspaceSlug ? (
+        {workspaceUrl ? (
           <code
             className="ref"
             style={{ background: "var(--linen)", padding: "4px 10px", fontSize: 12 }}
           >
-            {workspaceSlug}.savant.app
+            {workspaceUrl}
           </code>
+        ) : null}
+        {runtimeAccess.isSandbox ? (
+          <div className="note" style={{ maxWidth: 460 }}>
+            <Ic.Clock className="n-icon" />
+            <span>
+              Local sandbox mode simulated Auth0 and Stripe for this run. No external billing call was created.
+            </span>
+          </div>
         ) : null}
         <a href="/dashboard" className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
           Open dashboard

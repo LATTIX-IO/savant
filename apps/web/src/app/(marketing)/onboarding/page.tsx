@@ -1,6 +1,19 @@
-import { auth0 } from "@/lib/auth0";
-import { buildAuthViewer } from "@/lib/auth0-session";
+import type { Route } from "next";
+import { redirect } from "next/navigation";
+
+import { auth0, isAuth0Configured } from "@/lib/auth0";
+import {
+  buildSignupHrefForOnboarding,
+  resolveOnboardingRuntimeAccess,
+  shouldRedirectOnboardingToSignup,
+} from "@/lib/onboarding-runtime";
+import { normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
 import { OnboardingWizard } from "@/components/marketing/onboarding-wizard";
+import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
+import {
+  getOnboardingStateForSubject,
+  markOnboardingCanceled,
+} from "@/server/control-plane/onboarding-store";
 
 export const metadata = {
   title: "Set up your workspace",
@@ -19,20 +32,75 @@ export default async function OnboardingPage({
 }) {
   const params = await searchParams;
   const session = auth0 ? await auth0.getSession() : null;
-  const viewer = buildAuthViewer(session?.user);
+  const runtimeAccess = resolveOnboardingRuntimeAccess(session?.user);
+  const viewer = runtimeAccess.viewer;
+  const identity = runtimeAccess.identity;
+  const wasCancelled = params.cancelled === "1";
 
-  const initialCycle = params.cycle === "monthly" ? "monthly" : "annual";
+  if (shouldRedirectOnboardingToSignup({
+    hasIdentity: Boolean(identity),
+    isSandbox: runtimeAccess.isSandbox,
+    isAuth0Configured,
+  })) {
+    redirect(buildSignupHrefForOnboarding(params) as Route);
+  }
+
+  let restoredDraft = null;
+  if (identity && isControlPlaneDatabaseConfigured) {
+    const onboardingState = await getOnboardingStateForSubject(identity.subject);
+
+    if (wasCancelled && onboardingState.currentSession?.status === "checkout_pending") {
+      onboardingState.currentSession = await markOnboardingCanceled(onboardingState.currentSession.id);
+    }
+
+    if (onboardingState.provisionedTenant) {
+      redirect("/dashboard" as Route);
+    }
+
+    if (
+      !wasCancelled
+      && onboardingState.currentSession
+      && shouldResumeOnboardingCheckout(onboardingState.currentSession.status)
+      && onboardingState.currentSession.stripeCheckoutSessionId
+    ) {
+      redirect(
+        `/onboarding/success?session_id=${encodeURIComponent(onboardingState.currentSession.stripeCheckoutSessionId)}` as Route,
+      );
+    }
+
+    restoredDraft = onboardingState.currentSession;
+  }
+
+  const initialCycle = params.cycle === "monthly"
+    ? "monthly"
+    : restoredDraft?.cycle ?? "annual";
   const initialSeats = (() => {
     const n = Number(params.seats);
-    return Number.isFinite(n) && n > 0 ? Math.min(500, Math.floor(n)) : 5;
+    if (Number.isFinite(n) && n > 0) {
+      return Math.min(500, Math.floor(n));
+    }
+
+    return restoredDraft?.seats ?? 5;
   })();
+  const initialWorkspaceName = restoredDraft?.workspaceName
+    ?? (viewer.isAuthenticated
+      ? `${viewer.displayName.replace(/\s+/g, " ").trim()}'s workspace`
+      : "");
+  const initialWorkspaceSlug = restoredDraft?.workspaceSlug
+    ?? (viewer.isAuthenticated
+      ? normalizeWorkspaceSlug(viewer.displayName) ?? "workspace"
+      : "");
 
   return (
     <OnboardingWizard
-      viewer={viewer}
       initialCycle={initialCycle}
       initialSeats={initialSeats}
-      wasCancelled={params.cancelled === "1"}
+      initialWorkspaceName={initialWorkspaceName}
+      initialWorkspaceSlug={initialWorkspaceSlug}
+      canPersistDraft={Boolean(identity && isControlPlaneDatabaseConfigured)}
+      hasPersistedDraft={Boolean(restoredDraft)}
+      isSandbox={runtimeAccess.isSandbox}
+      wasCancelled={wasCancelled}
     />
   );
 }

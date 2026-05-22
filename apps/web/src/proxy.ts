@@ -1,15 +1,51 @@
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server.js";
 
-import { auth0, isAuth0Configured } from "./lib/auth0";
+import { auth0, isAuth0Configured } from "./lib/auth0.ts";
+import {
+  AUTH_SERVICE_UNAVAILABLE_CODE,
+  AUTH_SERVICE_UNAVAILABLE_STATUS,
+  createAuthServiceUnavailableApiBody,
+  isApiRequestPath,
+  renderAuthServiceUnavailableHtml,
+} from "./lib/auth0-unavailable.ts";
 import {
   getDashboardAuthAction,
   getAuthReturnTo,
+  getLegacyAuthRedirectPath,
   isLocalDevAuthBypass,
-} from "./lib/auth0-config";
+} from "./lib/auth0-config.ts";
+
+function createAuthUnavailableResponse(requestUrl: URL) {
+  if (isApiRequestPath(requestUrl.pathname)) {
+    return NextResponse.json(createAuthServiceUnavailableApiBody(), {
+      status: AUTH_SERVICE_UNAVAILABLE_STATUS,
+      headers: {
+        "Cache-Control": "no-store, max-age=0",
+        "X-Savant-Error-Code": AUTH_SERVICE_UNAVAILABLE_CODE,
+      },
+    });
+  }
+
+  return new NextResponse(renderAuthServiceUnavailableHtml(), {
+    status: AUTH_SERVICE_UNAVAILABLE_STATUS,
+    headers: {
+      "Cache-Control": "no-store, max-age=0",
+      "Content-Type": "text/html; charset=utf-8",
+      "X-Robots-Tag": "noindex",
+      "X-Savant-Error-Code": AUTH_SERVICE_UNAVAILABLE_CODE,
+    },
+  });
+}
 
 export async function proxy(request: Request) {
   const client = auth0;
   const requestUrl = new URL(request.url);
+  const legacyAuthRedirectPath = getLegacyAuthRedirectPath(requestUrl);
+
+  if (legacyAuthRedirectPath) {
+    return NextResponse.redirect(new URL(legacyAuthRedirectPath, requestUrl.origin), 307);
+  }
+
   const isLocalDevBypass = isLocalDevAuthBypass(requestUrl);
   const isConfigured = isAuth0Configured && client !== null;
 
@@ -25,9 +61,7 @@ export async function proxy(request: Request) {
       return NextResponse.next();
     }
 
-    throw new Error(
-      "Auth0 is not configured. Set APP_BASE_URL, AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, and AUTH0_SECRET.",
-    );
+    return createAuthUnavailableResponse(requestUrl);
   }
 
   const configuredClient = client;
@@ -51,7 +85,7 @@ export async function proxy(request: Request) {
     return authResponse;
   }
 
-  const loginUrl = new URL("/auth/login", requestUrl.origin);
+  const loginUrl = new URL("/signin", requestUrl.origin);
   loginUrl.searchParams.set("returnTo", getAuthReturnTo(requestUrl));
 
   return NextResponse.redirect(loginUrl);

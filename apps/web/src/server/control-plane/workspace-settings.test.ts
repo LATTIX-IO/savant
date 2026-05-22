@@ -37,5 +37,21 @@ test("buildWorkspaceSettingsPayload returns stable AI connection summaries and c
   assert.equal(result.aiConnections[0]?.isDefaultExecution, true);
   assert.equal(result.aiConnections[1]?.isDefaultJudge, true);
   assert.equal(result.general.workspaceSlug, "wexler-hahn");
+  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/wexler-hahn");
   assert.equal(result.members[0]?.groups === result.members[1]?.groups, false);
+});
+
+test("buildPublicAuthSettings derives the base URL from Vercel production metadata when APP_BASE_URL is absent", () => {
+  const result = buildPublicAuthSettings({
+    VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+    AUTH0_DOMAIN: "dev-uzaxp03ophsygo6g.us.auth0.com",
+    AUTH0_CLIENT_ID: "client-id",
+    AUTH0_CLIENT_SECRET: "<AUTH0_CLIENT_SECRET>",
+    AUTH0_SECRET: "<AUTH0_SECRET>",
+  });
+
+  assert.equal(result.appBaseUrl, "https://savantrepo.com");
+  assert.equal(result.callbackUrl, "https://savantrepo.com/auth/callback");
+  assert.equal(result.logoutUrl, "https://savantrepo.com/");
+  assert.equal(result.status, "development-bypass");
 });

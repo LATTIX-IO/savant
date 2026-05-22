@@ -9,8 +9,10 @@ import type {
 import {
   hasAuth0EnvConfig,
   isConfiguredAuth0Value,
+  resolveAuth0AppBaseUrl,
   type Auth0Env,
 } from "../../lib/auth0-config.ts";
+import { buildWorkspaceUrl } from "../../lib/workspace-url.ts";
 import { MEMBERS, ORG } from "../../lib/savant-data.ts";
 
 function slugifyWorkspaceName(name: string): string {
@@ -35,7 +37,7 @@ function readConfiguredEnvValue(env: Auth0Env, key: string): string | null {
 }
 
 export function buildPublicAuthSettings(env: Auth0Env = process.env): PublicAuthProviderSettings {
-  const appBaseUrl = readConfiguredEnvValue(env, "APP_BASE_URL");
+  const appBaseUrl = resolveAuth0AppBaseUrl(env);
   const tenantDomain = readConfiguredEnvValue(env, "AUTH0_DOMAIN");
   const clientId = readConfiguredEnvValue(env, "AUTH0_CLIENT_ID");
 
@@ -122,11 +124,13 @@ function buildMembers(): MemberRecord[] {
 
 export function buildWorkspaceSettingsPayload(env: Auth0Env = process.env): WorkspaceSettingsPayload {
   const workspaceSlug = slugifyWorkspaceName(ORG.name);
+  const workspaceUrl = buildWorkspaceUrl(workspaceSlug, env);
 
   return {
     general: {
       workspaceName: ORG.name,
       workspaceSlug,
+      workspaceUrl,
       subdomain: workspaceSlug,
       defaultTier: 2,
       timeZone: "America / New York",
@@ -155,7 +159,7 @@ export function buildWorkspaceSettingsPayload(env: Auth0Env = process.env): Work
       weeklySummaryChannels: ["Email"],
     },
     billing: {
-      planName: "Enterprise",
+      planName: "Savant Seat",
       renewalDate: "14 Mar 2027",
       skillsIncluded: 500,
       activeSkills: 218,

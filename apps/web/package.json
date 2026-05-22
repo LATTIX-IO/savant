@@ -7,13 +7,14 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
     "@auth0/nextjs-auth0": "^4.20.0",
     "@savant/schemas": "workspace:*",
     "@savant/types": "workspace:*",
     "next": "16.2.6",
+    "postgres": "^3.4.9",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "0.0.1",

@@ -13,6 +13,12 @@ export type AuthViewer = {
   email: string | null;
 };
 
+export type AuthenticatedIdentity = {
+  subject: string;
+  email: string;
+  displayName: string;
+};
+
 export type AuthOverviewField = {
   label: string;
   value: string;
@@ -74,6 +80,23 @@ export function buildAuthViewer(user?: AuthSessionUser | null): AuthViewer {
     subtitle: email ?? "Authenticated via Auth0",
     initials: getInitials(displayName),
     email: email ?? null,
+  };
+}
+
+export function buildAuthenticatedIdentity(
+  user?: AuthSessionUser | null,
+): AuthenticatedIdentity | null {
+  const email = firstDefined(user?.email);
+  const subject = firstDefined(user?.sub);
+
+  if (!email || !subject) {
+    return null;
+  }
+
+  return {
+    subject,
+    email,
+    displayName: firstDefined(user?.name, user?.nickname, email) ?? email,
   };
 }
 

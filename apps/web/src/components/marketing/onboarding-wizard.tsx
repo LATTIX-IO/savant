@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
-import type { AuthViewer } from "@/lib/auth0-session";
+import { validateOnboardingDraftInput, type BillingCycle } from "@/lib/onboarding";
+import {
+  formatWorkspaceUrlForDisplay,
+  formatWorkspaceUrlPrefixForDisplay,
+} from "@/lib/workspace-url";
 
-type Cycle = "monthly" | "annual";
-type Step = 0 | 1 | 2;
+type StepId = "workspace" | "billing";
 
-const STEPS: Array<{ title: string; sub: string }> = [
-  { title: "Identity", sub: "Confirm who you are" },
-  { title: "Workspace", sub: "Name and URL slug" },
-  { title: "Billing", sub: "Seats and cycle" },
+const STEPS: Array<{ id: StepId; title: string; sub: string }> = [
+  { id: "workspace", title: "Workspace", sub: "Name and URL path" },
+  { id: "billing", title: "Billing", sub: "Seats and cycle" },
 ];
 
 const slugify = (s: string) =>
@@ -24,31 +26,55 @@ const slugify = (s: string) =>
     .slice(0, 48);
 
 export function OnboardingWizard({
-  viewer,
   initialCycle,
   initialSeats,
+  initialWorkspaceName,
+  initialWorkspaceSlug,
+  canPersistDraft,
+  hasPersistedDraft,
+  isSandbox,
   wasCancelled,
 }: {
-  viewer: AuthViewer;
-  initialCycle: Cycle;
+  initialCycle: BillingCycle;
   initialSeats: number;
+  initialWorkspaceName: string;
+  initialWorkspaceSlug: string;
+  canPersistDraft: boolean;
+  hasPersistedDraft: boolean;
+  isSandbox: boolean;
   wasCancelled: boolean;
 }) {
-  const [step, setStep] = useState<Step>(viewer.isAuthenticated ? 1 : 0);
-  const [workspaceName, setWorkspaceName] = useState(
-    viewer.isAuthenticated
-      ? viewer.displayName.replace(/\s+/g, " ").trim() + "'s workspace"
-      : "",
-  );
-  const [workspaceSlug, setWorkspaceSlug] = useState(
-    viewer.isAuthenticated ? slugify(viewer.displayName) : "",
-  );
+  const [step, setStep] = useState(0);
+  const [workspaceName, setWorkspaceName] = useState(initialWorkspaceName);
+  const [workspaceSlug, setWorkspaceSlug] = useState(initialWorkspaceSlug);
   const [seats, setSeats] = useState<number>(initialSeats);
-  const [cycle, setCycle] = useState<Cycle>(initialCycle);
+  const [cycle, setCycle] = useState<BillingCycle>(initialCycle);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">(
+    hasPersistedDraft ? "saved" : "idle",
+  );
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const lastSavedPayloadRef = useRef<string | null>(
+    hasPersistedDraft
+      ? JSON.stringify({
+          workspaceName: initialWorkspaceName,
+          workspaceSlug: initialWorkspaceSlug,
+          cycle: initialCycle,
+          seats: initialSeats,
+        })
+      : null,
+  );
 
   const slugTouched = useMemo(() => workspaceSlug !== slugify(workspaceName), [workspaceName, workspaceSlug]);
+  const validatedDraft = useMemo(
+    () => validateOnboardingDraftInput({ workspaceName, workspaceSlug, cycle, seats }),
+    [cycle, seats, workspaceName, workspaceSlug],
+  );
+  const currentStep = STEPS[step] ?? STEPS[0]!;
+  const currentStepId = currentStep.id;
+  const workspaceUrlPrefix = formatWorkspaceUrlPrefixForDisplay();
+  const workspaceUrlPreview = formatWorkspaceUrlForDisplay(workspaceSlug.trim() || "workspace");
 
   const onNameChange = (next: string) => {
     setWorkspaceName(next);
@@ -61,26 +87,90 @@ export function OnboardingWizard({
   const subtotal = unitPrice * seats;
   const cycleLabel = cycle === "annual" ? "year" : "month";
 
-  const next = () => setStep((s) => (Math.min(2, s + 1) as Step));
-  const back = () => setStep((s) => (Math.max(0, s - 1) as Step));
+  const next = () => setStep((s) => Math.min(STEPS.length - 1, s + 1));
+  const back = () => setStep((s) => Math.max(0, s - 1));
+
+  useEffect(() => {
+    if (!canPersistDraft || !validatedDraft.ok) {
+      return undefined;
+    }
+
+    const payload = JSON.stringify(validatedDraft.value);
+    if (lastSavedPayloadRef.current === payload) {
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setSaveState("saving");
+    setSaveError(null);
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        const response = await fetch("/api/onboarding/draft", {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: payload,
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          const data = (await response.json().catch(() => ({}))) as {
+            error?: { message?: string };
+          };
+          throw new Error(data.error?.message || `Unable to save onboarding progress (${response.status}).`);
+        }
+
+        if (!controller.signal.aborted) {
+          lastSavedPayloadRef.current = payload;
+          setSaveState("saved");
+        }
+      } catch (saveFailure) {
+        if (!controller.signal.aborted) {
+          setSaveState("error");
+          setSaveError(
+            saveFailure instanceof Error
+              ? saveFailure.message
+              : "Unable to save onboarding progress.",
+          );
+        }
+      }
+    }, 500);
+
+    return () => {
+      controller.abort();
+      window.clearTimeout(timeoutId);
+    };
+  }, [canPersistDraft, validatedDraft]);
+
+  const saveMessage = canPersistDraft
+    ? saveState === "saving"
+      ? "Saving workspace details…"
+      : saveState === "saved"
+        ? "Workspace details saved."
+        : saveError
+    : null;
 
   const submit = async () => {
     setError(null);
     setSubmitting(true);
+
+    if (!validatedDraft.ok) {
+      setError(validatedDraft.message);
+      setSubmitting(false);
+      return;
+    }
+
     try {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          cycle,
-          seats,
-          workspaceName: workspaceName.trim(),
-          workspaceSlug: workspaceSlug.trim() || slugify(workspaceName),
-        }),
+        body: JSON.stringify(validatedDraft.value),
       });
       if (!res.ok) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        throw new Error(data.error || `Checkout failed (${res.status})`);
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: { message?: string };
+        };
+        throw new Error(data.error?.message || `Checkout failed (${res.status})`);
       }
       const data = (await res.json()) as { url?: string };
       if (!data.url) {
@@ -127,16 +217,34 @@ export function OnboardingWizard({
           ))}
         </ol>
 
-        <div className="note" style={{ marginTop: "auto" }}>
-          <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
-          <span style={{ fontSize: 11.5 }}>
-            Payment handled by Stripe. Cancel anytime during the 14-day trial and you
-            won&apos;t be charged.
-          </span>
-        </div>
+        {isSandbox ? (
+          <div className="note" style={{ marginTop: "auto" }}>
+            <Ic.Clock className="n-icon" style={{ color: "var(--moss)" }} />
+            <span style={{ fontSize: 11.5 }}>
+              Local sandbox mode is on. Auth0 and Stripe are simulated so you can click through onboarding without external calls.
+            </span>
+          </div>
+        ) : (
+          <div className="note" style={{ marginTop: "auto" }}>
+            <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
+            <span style={{ fontSize: 11.5 }}>
+              Payment handled by Stripe. Cancel anytime during the 14-day trial and you
+              won&apos;t be charged.
+            </span>
+          </div>
+        )}
       </aside>
 
       <main className="wizard-main">
+        {isSandbox ? (
+          <div className="note">
+            <Ic.Clock className="n-icon" />
+            <span>
+              Local sandbox mode is active. We&apos;ll simulate Auth0 identity and hosted checkout so you can test the full onboarding flow in local development.
+            </span>
+          </div>
+        ) : null}
+
         {wasCancelled ? (
           <div className="note brass">
             <Ic.Warn className="n-icon" />
@@ -146,57 +254,14 @@ export function OnboardingWizard({
           </div>
         ) : null}
 
-        {step === 0 && (
+        {currentStepId === "workspace" && (
           <>
             <div>
-              <div className="marketing-eyebrow">Step 1 of 3</div>
-              <h1>Confirm your identity.</h1>
-              <p style={{ color: "var(--ink-3)", fontSize: 14, lineHeight: 1.65, maxWidth: 540, marginTop: 10 }}>
-                Savant uses Auth0 for sign-in. After signup, your workspace is tied to
-                this account.
-              </p>
-            </div>
-
-            <div className="wizard-billing">
-              <div className="wizard-billing-row">
-                <span>Email</span>
-                <span className="num">{viewer.email ?? "—"}</span>
-              </div>
-              <div className="wizard-billing-row">
-                <span>Display name</span>
-                <span>{viewer.displayName}</span>
-              </div>
-            </div>
-
-            <div className="wizard-foot">
-              <Link href="/" className="btn btn-ghost">
-                Cancel
-              </Link>
-              <div className="row" style={{ gap: 8 }}>
-                {!viewer.isAuthenticated ? (
-                  <a href="/api/auth/login?screen_hint=signup&returnTo=/onboarding" className="btn btn-primary">
-                    Sign in with Auth0
-                    <Ic.ChevR className="b-icon" />
-                  </a>
-                ) : (
-                  <button type="button" className="btn btn-primary" onClick={next}>
-                    Continue
-                    <Ic.ChevR className="b-icon" />
-                  </button>
-                )}
-              </div>
-            </div>
-          </>
-        )}
-
-        {step === 1 && (
-          <>
-            <div>
-              <div className="marketing-eyebrow">Step 2 of 3</div>
+              <div className="marketing-eyebrow">Step {step + 1} of {STEPS.length}</div>
               <h1>Name your workspace.</h1>
               <p style={{ color: "var(--ink-3)", fontSize: 14, lineHeight: 1.65, maxWidth: 540, marginTop: 10 }}>
-                The name shows in the top bar and on release bundles. The slug is your
-                subdomain — you can change it later from Settings.
+                The name shows in the top bar and on release bundles. The slug becomes the
+                path segment in your Savant workspace URL, and you can change it later from Settings.
               </p>
             </div>
 
@@ -213,28 +278,34 @@ export function OnboardingWizard({
               </div>
               <div className="field">
                 <label className="field-label" htmlFor="ws-slug">Workspace URL</label>
-                <div className="row" style={{ gap: 8 }}>
+                <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                  <span className="mono muted" style={{ fontSize: 13 }}>
+                    {workspaceUrlPrefix}
+                  </span>
                   <input
                     id="ws-slug"
                     value={workspaceSlug}
                     onChange={(e) => setWorkspaceSlug(slugify(e.target.value))}
                     placeholder="wexler-hahn"
-                    style={{ maxWidth: 280, fontFamily: "var(--mono)" }}
+                    style={{ maxWidth: 220, fontFamily: "var(--mono)" }}
                   />
-                  <span className="mono muted" style={{ fontSize: 13 }}>
-                    .savant.app
-                  </span>
                 </div>
                 <div className="field-help">
-                  Lowercase letters, numbers, and hyphens. Must be unique.
+                  Lowercase letters, numbers, and hyphens. We&apos;ll reserve {workspaceUrlPreview} for this workspace.
                 </div>
               </div>
+
+              {saveMessage ? (
+                <div className="field-help" style={{ color: saveState === "error" ? "var(--oxblood)" : "var(--subtle)" }}>
+                  {saveMessage}
+                </div>
+              ) : null}
             </div>
 
             <div className="wizard-foot">
-              <button type="button" className="btn btn-ghost" onClick={back}>
-                Back
-              </button>
+              <Link href="/" className="btn btn-ghost">
+                Cancel
+              </Link>
               <button
                 type="button"
                 className="btn btn-primary"
@@ -248,10 +319,10 @@ export function OnboardingWizard({
           </>
         )}
 
-        {step === 2 && (
+        {currentStepId === "billing" && (
           <>
             <div>
-              <div className="marketing-eyebrow">Step 3 of 3</div>
+              <div className="marketing-eyebrow">Step {step + 1} of {STEPS.length}</div>
               <h1>Billing.</h1>
               <p style={{ color: "var(--ink-3)", fontSize: 14, lineHeight: 1.65, maxWidth: 540, marginTop: 10 }}>
                 14-day trial — you won&apos;t be charged until {trialEndsAt()}.
@@ -322,6 +393,12 @@ export function OnboardingWizard({
                   <span>{error}</span>
                 </div>
               ) : null}
+
+              {saveMessage ? (
+                <div className="field-help" style={{ color: saveState === "error" ? "var(--oxblood)" : "var(--subtle)" }}>
+                  {saveMessage}
+                </div>
+              ) : null}
             </div>
 
             <div className="wizard-foot">
@@ -332,11 +409,11 @@ export function OnboardingWizard({
                 {submitting ? (
                   <>
                     <Ic.Spinner className="b-icon" style={{ animation: "spin 0.9s linear infinite" }} />
-                    Redirecting…
+                    {isSandbox ? "Finalizing sandbox checkout…" : "Redirecting…"}
                   </>
                 ) : (
                   <>
-                    Continue to Stripe
+                    {isSandbox ? "Complete sandbox checkout" : "Continue to Stripe"}
                     <Ic.ChevR className="b-icon" />
                   </>
                 )}

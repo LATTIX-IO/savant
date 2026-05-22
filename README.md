@@ -49,9 +49,19 @@ Useful validation commands:
 
 ```bash
 pnpm lint
+pnpm lint:fix
+pnpm test
+pnpm security:scan
 pnpm typecheck
 pnpm build
 pnpm check
+```
+
+For a full local pre-commit sweep that installs dependencies, runs the security checks, fixes lint issues, runs tests, and finishes with the production validation gate:
+
+```bash
+bash ./precommit.sh
+pwsh -NoProfile -ExecutionPolicy Bypass -File ./precommit.ps1
 ```
 
 ## Product references

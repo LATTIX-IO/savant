@@ -422,6 +422,7 @@ export interface AIConnectionSummary {
 export interface WorkspaceGeneralSettings {
   workspaceName: string;
   workspaceSlug: string;
+  workspaceUrl: string;
   subdomain: string;
   defaultTier: SkillTier;
   timeZone: string;

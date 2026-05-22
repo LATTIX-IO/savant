@@ -388,15 +388,15 @@ function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
                 You&apos;re browsing Savant as a guest.
               </div>
               <div className="muted" style={{ fontSize: 12.5, lineHeight: 1.5 }}>
-                Use the hosted Auth0 routes below to test Universal Login, callback handling, and
-                logout from the dashboard.
+                Use the sign-in and sign-up entry pages below to test Universal Login,
+                callback handling, and logout from the dashboard.
               </div>
             </div>
             <div className="row" style={{ gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <a href="/auth/login?screen_hint=signup" className="btn btn-sm">
+              <a href="/signup" className="btn btn-sm">
                 Sign up
               </a>
-              <a href="/auth/login" className="btn btn-sm">
+              <a href="/signin" className="btn btn-sm">
                 Log in
               </a>
             </div>

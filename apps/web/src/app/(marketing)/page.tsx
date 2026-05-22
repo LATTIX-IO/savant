@@ -1,16 +1,21 @@
 import Link from "next/link";
 
+import { CapabilitySurface } from "@/components/marketing/capability-surface";
+import { DistributionScene } from "@/components/marketing/distribution-scene";
+import { HowItWorksRail } from "@/components/marketing/how-it-works-rail";
+import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { PricingCard } from "@/components/marketing/pricing-card";
 import { Ic } from "@/components/savant/icons";
-import { ProvenanceRail } from "@/components/savant/primitives";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
-import { PricingCard } from "@/components/marketing/pricing-card";
-import { MarketingNav } from "@/components/marketing/marketing-nav";
+
+const HERO_VIDEO_SRC =
+  "https://cdn.coverr.co/videos/coverr-old-bible-covered-in-dust-9476/1080p.mp4";
 
 export const metadata = {
-  title: "Savant — Skills, governed",
+  title: "Savant — The system of record for enterprise skills",
   description:
-    "The control plane for skill platforms. Codify expertise as governed, measurable, reusable skills with auditable provenance from repo to release.",
+    "Turn expert knowledge into governed, shippable capability. From commit to release, every skill governed, evaluated, and traceable.",
 };
 
 export default async function LandingPage() {
@@ -21,22 +26,43 @@ export default async function LandingPage() {
     <>
       <MarketingNav signedIn={viewer.isAuthenticated} />
 
-      <section className="marketing-section hero">
-        <div className="marketing-inner">
-          <div className="hero-grid">
-            <div>
-              <div className="marketing-eyebrow">/00 — Savant Platform</div>
-              <h1>
-                Skills, <em>governed.</em>
+      {/* ───── Hero ───── */}
+      <section className="marketing-section hero no-border">
+        <div className="hero-media" aria-hidden="true">
+          <video
+            className="hero-video"
+            autoPlay
+            loop
+            muted
+            playsInline
+            preload="metadata"
+          >
+            <source
+              media="(prefers-reduced-motion: no-preference)"
+              src={HERO_VIDEO_SRC}
+              type="video/mp4"
+            />
+          </video>
+        </div>
+
+        <div className="marketing-inner hero-shell">
+          <div className="hero-copy">
+            <div className="hero-copy-block">
+              <div className="marketing-eyebrow hero-anim hero-anim-1">
+                The Enterprise System of Record for Skills
+              </div>
+              <h1 className="hero-anim hero-anim-2">
+                Skills, <span className="accent">governed.</span>
                 <br />
                 From repo to release.
               </h1>
-              <p className="hero-sub">
-                Savant is the control plane for skill platforms. Codify expertise as
-                governed, measurable, reusable skills — with auditable provenance from
-                the commit that wrote them to the moment they ship.
+              <p className="hero-sub hero-anim hero-anim-3">
+                Savant is the control plane for skill platforms. Codify
+                expertise as governed, measurable, reusable skills — with
+                auditable provenance from the commit that wrote them to the
+                moment they ship.
               </p>
-              <div className="hero-ctas">
+              <div className="hero-ctas hero-anim hero-anim-4">
                 {viewer.isAuthenticated ? (
                   <Link href="/dashboard" className="btn btn-primary btn-lg">
                     <span>Go to dashboard</span>
@@ -44,222 +70,214 @@ export default async function LandingPage() {
                   </Link>
                 ) : (
                   <Link href="/signup" className="btn btn-primary btn-lg">
-                    <span>Start free</span>
+                    <span>Start 14-day free trial</span>
                     <Ic.ChevR className="b-icon" />
                   </Link>
                 )}
-                <Link href="#how-it-works" className="btn btn-ghost btn-lg">
+                <a href="#how-it-works" className="btn btn-ghost btn-lg">
                   See how it works
-                </Link>
+                </a>
               </div>
-            </div>
-
-            <div className="hero-side">
-              <div className="marketing-eyebrow" style={{ marginBottom: 12 }}>
-                Provenance rail
-              </div>
-              <ProvenanceRail
-                steps={[
-                  {
-                    label: "Repository",
-                    value: "wh/legal-skills",
-                    meta: <span className="mono subtle">github · main</span>,
-                    state: "ok",
-                  },
-                  {
-                    label: "Reference",
-                    value: "v2.4.0-rc.2",
-                    meta: <span className="mono subtle">8a31cf2</span>,
-                    state: "ok",
-                  },
-                  {
-                    label: "Evaluation",
-                    value: "248 cases · 6 flagged",
-                    meta: <span className="muted">94% pass</span>,
-                    state: "warn",
-                  },
-                  {
-                    label: "Approval",
-                    value: "2 of 3 approved",
-                    meta: <span className="muted">awaiting compliance</span>,
-                    state: "now",
-                  },
-                  {
-                    label: "Release",
-                    value: "Staged · v2.3.7",
-                    meta: <span className="muted">pinned 2d</span>,
-                    state: "ok",
-                  },
-                ]}
-              />
-              <div className="hero-side-cap">
-                <span>commit → release</span>
-                <span>fully auditable</span>
+              <div className="hero-microproof hero-anim hero-anim-5">
+                <span>Git-backed</span>
+                <span>Eval-driven</span>
+                <span>Policy-controlled</span>
+                <span>Audit-ready</span>
               </div>
             </div>
           </div>
         </div>
       </section>
 
+      {/* ───── /01 Stats ───── */}
       <section className="stats-strip">
         <div className="stat">
-          <div className="stat-value">218</div>
-          <div className="stat-label">Skills under governance</div>
+          <span className="stat-label">Skills under governance</span>
+          <span className="stat-value num">
+            218<span className="unit">+</span>
+          </span>
+          <span className="stat-meta">across customer workspaces</span>
         </div>
         <div className="stat">
-          <div className="stat-value">94%</div>
-          <div className="stat-label">Eval coverage</div>
+          <span className="stat-label">Eval coverage</span>
+          <span className="stat-value num">
+            94<span className="unit">%</span>
+          </span>
+          <span className="stat-meta">▲ 2.1 pts in the last 30 days</span>
         </div>
         <div className="stat">
-          <div className="stat-value">2.4d</div>
-          <div className="stat-label">Release turnaround</div>
+          <span className="stat-label">Release turnaround</span>
+          <span className="stat-value num">
+            2.4<span className="unit">d</span>
+          </span>
+          <span className="stat-meta">▼ 0.6d vs prior month</span>
         </div>
         <div className="stat">
-          <div className="stat-value">7yr</div>
-          <div className="stat-label">Audit retention</div>
+          <span className="stat-label">Audit retention</span>
+          <span className="stat-value num">
+            7<span className="unit">yr</span>
+          </span>
+          <span className="stat-meta">immutable, SIEM-streamable</span>
         </div>
       </section>
 
+      {/* ───── /02 Why — broken vs governed ───── */}
       <section className="marketing-section">
+        <div className="section-index">/01 — Why Savant</div>
         <div className="marketing-inner">
-          <div className="marketing-eyebrow">/01 — Why Savant</div>
-          <div className="problem-solution">
-            <div className="panel-narrative">
-              <h2>Skills are scattered, evaluated by hand, and shipped on trust.</h2>
-              <p>
-                Teams hand-roll prompts, runbooks, and agent workflows across repos,
-                Notion docs, and Slack threads. Nothing is versioned. Nothing is measured.
-                When something regresses in production, there&apos;s no breadcrumb back to
-                the change that caused it.
-              </p>
-              <ul>
-                <li>No standard place for skill content to live</li>
-                <li>Approvals happen over chat, not in a system of record</li>
-                <li>Regressions surface as customer complaints, not eval flags</li>
-                <li>No clean rollback path when a release goes sideways</li>
-              </ul>
-            </div>
-            <div className="panel-narrative solution">
-              <h2>Savant is the system of record for governed skills.</h2>
-              <p>
-                Your Git repository is the source of truth. Savant ingests skill content,
-                runs evaluation suites against every candidate, routes approvals to the
-                right reviewers, and ships signed bundles to the agents and IDEs that
-                consume them — with provenance from commit to release.
-              </p>
-              <ul>
-                <li>Every skill versioned, tiered, and traceable to a commit</li>
-                <li>Approvals codified as policy, enforced at release time</li>
-                <li>Evaluations on every candidate; regressions surface immediately</li>
-                <li>One-click rollback; full audit trail kept for 7 years</li>
-              </ul>
-            </div>
+          <div className="marketing-eyebrow" data-reveal>
+            From scattered to governed
           </div>
-        </div>
-      </section>
-
-      <section className="marketing-section">
-        <div className="marketing-inner">
-          <div className="marketing-eyebrow">/02 — The Platform</div>
-          <div className="features-head">
-            <h2>Everything a governed skill platform needs, in one calm surface.</h2>
+          <div className="cap-head" data-reveal data-reveal-delay="1">
+            <h2 style={{ fontFamily: "var(--serif)", fontStyle: "italic", fontSize: "clamp(38px, 4.4vw, 64px)", margin: 0, fontWeight: 400, lineHeight: 1.02, letterSpacing: "-0.025em" }}>
+              Most teams ship skills on trust. Savant ships them on evidence.
+            </h2>
             <p>
-              Six primitives working together: repositories as the source of truth,
-              evaluations as the truth-keeper, approvals as the gate, releases as the
-              moment of commitment, audit as the receipt, connectors as the reach.
+              Ad-hoc prompts and runbooks scattered across docs and chat. No
+              versioning, no measurement, no breadcrumb when something regresses.
+              Savant replaces the trust with a system of record.
             </p>
           </div>
 
-          <div className="feature-grid">
-            <Feature
-              icon={<Ic.Repo style={{ width: 16, height: 16 }} />}
-              title="Source repositories"
-              body="Connect GitHub, GitLab, Azure DevOps, or Bitbucket. Savant treats your repo as the source of truth — never copies skill content, only references it."
-            />
-            <Feature
-              icon={<Ic.Eval style={{ width: 16, height: 16 }} />}
-              title="Evaluations"
-              body="Every candidate runs against a rubric the moment it lands. Regressions are flagged before the approval round even starts."
-            />
-            <Feature
-              icon={<Ic.Policy style={{ width: 16, height: 16 }} />}
-              title="Approvals & policy"
-              body="Tier-based policies decide who approves what. Owner, security, compliance — codified once, enforced everywhere."
-            />
-            <Feature
-              icon={<Ic.Release style={{ width: 16, height: 16 }} />}
-              title="Releases"
-              body="Promote candidates through draft, staging, and production with a single, observable lifecycle rail. Rollback is one click."
-            />
-            <Feature
-              icon={<Ic.Audit style={{ width: 16, height: 16 }} />}
-              title="Audit"
-              body="Immutable record of every governance event — approvals, releases, access changes, policy edits — exportable for compliance review."
-            />
-            <Feature
-              icon={<Ic.Connectors style={{ width: 16, height: 16 }} />}
-              title="Distribution"
-              body="Approved skills flow to local sync agents, native integrations, notifications, and signed bundles for air-gapped environments."
-            />
+          <div className="contrast-grid">
+            <article className="contrast-card broken" data-reveal>
+              <span className="stamp">Today — ad-hoc</span>
+              <h2>Skill content lives wherever someone put it last.</h2>
+              <ul>
+                <li>
+                  <Ic.XCircle />
+                  <span>Prompts in Notion. Runbooks in Slack. Agents in someone&apos;s repo.</span>
+                </li>
+                <li>
+                  <Ic.XCircle />
+                  <span>Approvals happen over chat. There&apos;s no system of record.</span>
+                </li>
+                <li>
+                  <Ic.XCircle />
+                  <span>Regressions surface as customer complaints, not eval flags.</span>
+                </li>
+                <li>
+                  <Ic.XCircle />
+                  <span>Rollback means digging through git history under pressure.</span>
+                </li>
+              </ul>
+            </article>
+
+            <article className="contrast-card solution" data-reveal data-reveal-delay="1">
+              <span className="stamp">With Savant — governed</span>
+              <h2>Skills live in Git, evaluated on every change, shipped through policy.</h2>
+              <ul>
+                <li>
+                  <Ic.CheckCircle />
+                  <span>One repository per team is the source of truth. Webhook-synced.</span>
+                </li>
+                <li>
+                  <Ic.CheckCircle />
+                  <span>Approvals routed by tier and codified in policy.yaml, not chat.</span>
+                </li>
+                <li>
+                  <Ic.CheckCircle />
+                  <span>Every candidate runs against rubric evals before approval opens.</span>
+                </li>
+                <li>
+                  <Ic.CheckCircle />
+                  <span>Auto-pin on regression. One-click rollback. Full audit trail kept 7 years.</span>
+                </li>
+              </ul>
+            </article>
           </div>
         </div>
       </section>
 
-      <section className="marketing-section" id="how-it-works">
+      {/* ───── /03 Capability surface ───── */}
+      <section className="marketing-section band-paper">
+        <div className="section-index">/02 — Platform</div>
         <div className="marketing-inner">
-          <div className="marketing-eyebrow">/03 — How it works</div>
-          <div className="steps-head">
-            <h2>The provenance rail you saw above? That&apos;s the whole product.</h2>
+          <div className="marketing-eyebrow" data-reveal>
+            The platform
           </div>
-          <div className="steps">
-            <Step
-              n="01"
-              title="Connect"
-              body="Point Savant at your skill repository. Webhook sync keeps everything live."
-            />
-            <Step
-              n="02"
-              title="Evaluate"
-              body="Candidates run against rubric-based evals. Regressions surface immediately."
-            />
-            <Step
-              n="03"
-              title="Approve"
-              body="Owners, reviewers, and compliance act in a single approval timeline."
-            />
-            <Step
-              n="04"
-              title="Release"
-              body="Promote through draft → staging → production. Signed bundles built automatically."
-            />
-            <Step
-              n="05"
-              title="Audit"
-              body="Every event recorded immutably. Stream to SIEM. Retained for seven years."
-            />
-          </div>
-        </div>
-      </section>
-
-      <section className="marketing-section pricing">
-        <div className="marketing-inner">
-          <div className="marketing-eyebrow">/04 — Pricing</div>
-          <div className="features-head" style={{ marginBottom: 32 }}>
-            <h2>One tier. Per seat. Annual saves you 17%.</h2>
+          <div className="cap-head" data-reveal data-reveal-delay="1">
+            <h2>
+              Six primitives. One coherent surface.
+            </h2>
             <p>
-              No platform fee, no per-skill metering, no enterprise upcharge for SSO.
-              Pay for the people who use the system; everything else is included.
+              Repositories as the source of truth. Evaluations as the truth-keeper.
+              Approvals as the gate. Releases as the moment of commitment. Audit as
+              the receipt. Distribution as the reach.
             </p>
           </div>
+
+          <CapabilitySurface />
+        </div>
+      </section>
+
+      {/* ───── /04 How it works ───── */}
+      <section className="marketing-section how-section" id="how-it-works">
+        <div className="section-index">/03 — How it works</div>
+        <div className="marketing-inner">
+          <div className="marketing-eyebrow" data-reveal>
+            From commit to release, every state stays observable
+          </div>
+          <div className="how-head" data-reveal data-reveal-delay="1">
+            <h2>
+              Five steps. Every event recorded. Every state observable.
+            </h2>
+          </div>
+          <HowItWorksRail />
+        </div>
+      </section>
+
+      {/* ───── /05 Distribution + policy (dark band) ───── */}
+      <section className="marketing-section band-ink">
+        <div className="section-index">/04 — Distribution</div>
+        <div className="marketing-inner">
+          <div className="marketing-eyebrow" data-reveal>
+            Distribution + policy
+          </div>
+          <div className="dist-head" data-reveal data-reveal-delay="1">
+            <h2>
+              Approved skills flow safely to the agents that consume them.
+            </h2>
+            <p>
+              One approved release. One policy decision. Every tool gets the
+              right version, the right guardrails, and a clean rollback path.
+            </p>
+          </div>
+
+          <DistributionScene />
+        </div>
+      </section>
+
+      {/* ───── /06 Pricing ───── */}
+      <section className="marketing-section pricing-section" id="pricing">
+        <div className="section-index">/05 — Pricing</div>
+        <div className="marketing-inner">
+          <div className="marketing-eyebrow" data-reveal>
+            Honest pricing
+          </div>
+          <div className="pricing-head" data-reveal data-reveal-delay="1">
+            <h2>
+              One tier, priced per seat.
+            </h2>
+            <p>
+              Savant ships as one seat-based plan right now — every core
+              workflow included. Choose monthly or annual, invite the team, and
+              run repositories, evaluations, approvals, releases, audit, and
+              distribution without a feature-gated matrix.
+            </p>
+          </div>
+
           <PricingCard signedIn={viewer.isAuthenticated} />
         </div>
       </section>
 
-      <section className="marketing-section">
+      {/* ───── /07 FAQ ───── */}
+      <section className="marketing-section faq-section">
+        <div className="section-index">/06 — FAQ</div>
         <div className="marketing-inner">
-          <div className="marketing-eyebrow">/05 — FAQ</div>
           <div className="faq">
-            <div className="faq-side">
+            <div className="faq-side" data-reveal>
+              <div className="marketing-eyebrow">Frequently asked</div>
               <h2>Questions that come up a lot.</h2>
               <p>
                 Still curious about something? Email{" "}
@@ -269,29 +287,32 @@ export default async function LandingPage() {
                 — we read every note and reply within a day.
               </p>
             </div>
-            <div className="faq-list">
+            <div className="faq-list" data-reveal data-reveal-delay="1">
               <FaqItem q="Does Savant store our skill content?">
-                No. Your Git repository is the source of truth. Savant references commits
-                and runs evaluations against them, but the prompts, runbooks, and agent
-                workflows themselves never leave your environment.
+                No. Your Git repository is the source of truth. Savant references
+                commits and runs evaluations against them, but the prompts, runbooks,
+                and agent workflows themselves never leave your environment.
               </FaqItem>
               <FaqItem q="Which Git providers do you support?">
-                GitHub Cloud and Enterprise, GitLab Cloud and self-managed, Azure DevOps,
-                Bitbucket Cloud and Data Center, and any self-hosted Git over SSH or HTTPS.
+                GitHub Cloud and Enterprise, GitLab Cloud and self-managed, Azure
+                DevOps, Bitbucket Cloud and Data Center, and other Git deployments
+                over SSH or HTTPS.
               </FaqItem>
               <FaqItem q="What does an eval suite look like?">
-                A rubric and a case set, both checked into the repo. Savant runs the rubric
-                against each candidate using whichever model you point it at, surfaces
-                regressions against the baseline, and stores results alongside the
-                candidate for the life of the release.
+                A rubric and a case set, both checked into the repo. Savant runs the
+                rubric against each candidate using whichever model you point it at,
+                surfaces regressions against the baseline, and stores results for the
+                life of the release.
               </FaqItem>
               <FaqItem q="How does authentication work?">
-                Auth0 by default; bring your own IdP via SAML or OIDC. Group membership
-                drives RBAC, and SCIM keeps things in lockstep with your directory.
+                Auth0 by default; bring your own IdP via SAML or OIDC. Group
+                membership drives RBAC, and SCIM keeps things in lockstep with your
+                directory.
               </FaqItem>
-              <FaqItem q="Can we self-host?">
-                Yes. The Enterprise plan ships a self-hosted control plane with the same
-                feature set. Talk to us if you need on-prem or air-gapped.
+              <FaqItem q="Do you have multiple plans?">
+                Not right now. Savant ships as one seat-based plan with the full
+                core workflow included — repositories, evaluations, approvals,
+                releases, audit, and distribution.
               </FaqItem>
               <FaqItem q="What happens if a release regresses?">
                 Auto-pin on regression is a default policy. The prior version pins
@@ -299,43 +320,64 @@ export default async function LandingPage() {
                 rollback is one click in the release dashboard.
               </FaqItem>
               <FaqItem q="Do you offer a free trial?">
-                Every paid plan starts with a 14-day trial. Cancel any time during the
-                trial and you&apos;re not charged. After the trial, billing is per seat per
-                month or per year — you pick the cycle at signup.
+                Every plan starts with a 14-day trial. Cancel any time during the
+                trial and you&apos;re not charged. After the trial, billing is per seat
+                per month or per year — you pick the cycle at signup.
               </FaqItem>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="cta-banner">
-        <div className="cta-banner-inner">
-          <div>
-            <h2>Bring your skill platform under governance today.</h2>
+      {/* ───── /08 Final CTA — climactic ───── */}
+      <section className="cta-final">
+        <div className="cta-final-grid">
+          <div className="cta-final-body" data-reveal>
+            <h2>
+              Stop shipping skills on trust.
+              <span className="accent">Ship them on evidence.</span>
+            </h2>
             <p>
-              Connect a repo, watch the first evaluation run, and ship a release with
-              full audit trail — all in under fifteen minutes.
+              Bring your skill platform under governance today. Connect a repo,
+              watch the first evaluation run, and ship a release with full audit
+              trail — all in under fifteen minutes.
             </p>
+            <div className="cta-final-actions">
+              {viewer.isAuthenticated ? (
+                <Link href="/dashboard" className="btn btn-primary btn-lg">
+                  Open dashboard
+                  <Ic.ChevR className="b-icon" />
+                </Link>
+              ) : (
+                <Link href="/signup" className="btn btn-primary btn-lg">
+                  Start 14-day free trial
+                  <Ic.ChevR className="b-icon" />
+                </Link>
+              )}
+              <a href="mailto:sales@savant.app" className="btn btn-ghost btn-lg">
+                Talk to sales
+              </a>
+            </div>
           </div>
-          <div className="cta-banner-actions">
-            {viewer.isAuthenticated ? (
-              <Link href="/dashboard" className="btn btn-primary btn-lg">
-                Open dashboard
-                <Ic.ChevR className="b-icon" />
-              </Link>
-            ) : (
-              <Link href="/signup" className="btn btn-primary btn-lg">
-                Start free
-                <Ic.ChevR className="b-icon" />
-              </Link>
-            )}
-            <a href="mailto:hello@savant.app" className="btn btn-ghost btn-lg">
-              Talk to sales
-            </a>
+
+          <div className="cta-final-stamps" data-reveal data-reveal-delay="1">
+            <div className="stamp">
+              <span className="v">14</span>
+              <span className="l">days free</span>
+            </div>
+            <div className="stamp">
+              <span className="v">$1</span>
+              <span className="l">per seat / month</span>
+            </div>
+            <div className="stamp">
+              <span className="v">15m</span>
+              <span className="l">to first release</span>
+            </div>
           </div>
         </div>
       </section>
 
+      {/* ───── Footer ───── */}
       <footer className="marketing-footer">
         <div className="marketing-footer-inner">
           <div className="brand-block">
@@ -349,8 +391,8 @@ export default async function LandingPage() {
               Savant
             </span>
             <p>
-              The control plane for skill platforms. Built for teams who ship governed
-              expertise — not just code.
+              The control plane for skill platforms. Built for teams who ship
+              governed expertise — not just code.
             </p>
           </div>
           <div>
@@ -384,34 +426,6 @@ export default async function LandingPage() {
         </div>
       </footer>
     </>
-  );
-}
-
-function Feature({
-  icon,
-  title,
-  body,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  body: string;
-}) {
-  return (
-    <div className="feature">
-      <span className="feature-icon">{icon}</span>
-      <h3>{title}</h3>
-      <p>{body}</p>
-    </div>
-  );
-}
-
-function Step({ n, title, body }: { n: string; title: string; body: string }) {
-  return (
-    <div className="step">
-      <span className="step-num">/{n}</span>
-      <h4>{title}</h4>
-      <p>{body}</p>
-    </div>
   );
 }
 

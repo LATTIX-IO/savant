@@ -4,11 +4,16 @@ import test from "node:test";
 import {
   getDashboardAuthAction,
   getAuthReturnTo,
+  getLegacyAuthRedirectPath,
   hasAuth0EnvConfig,
   isAuthRoute,
   isConfiguredAuth0Value,
+  isLegacyAuthApiRoute,
   isLocalDevAuthBypass,
   isLocalDevHostname,
+  isProtectedDashboardPath,
+  normalizeReturnToPath,
+  resolveAuth0AppBaseUrl,
 } from "./auth0-config.ts";
 
 test("isConfiguredAuth0Value rejects empty and placeholder values", () => {
@@ -45,6 +50,27 @@ test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
   );
 });
 
+test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_BASE_URL is missing", () => {
+  assert.equal(
+    resolveAuth0AppBaseUrl({
+      APP_BASE_URL: "<APP_BASE_URL>",
+      VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+    }),
+    "https://savantrepo.com",
+  );
+
+  assert.equal(
+    hasAuth0EnvConfig({
+      VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+      AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
+      AUTH0_CLIENT_ID: "client-id",
+      AUTH0_CLIENT_SECRET: "client-secret",
+      AUTH0_SECRET: "session-secret",
+    }),
+    true,
+  );
+});
+
 test("isLocalDevHostname only allows loopback-style hosts", () => {
   assert.equal(isLocalDevHostname("localhost"), true);
   assert.equal(isLocalDevHostname("app.localhost"), true);
@@ -67,10 +93,45 @@ test("isAuthRoute only bypasses the Auth0 SDK route namespace", () => {
   assert.equal(isAuthRoute("/api/overview"), false);
 });
 
+test("isLegacyAuthApiRoute only matches the old Auth0 API namespace", () => {
+  assert.equal(isLegacyAuthApiRoute("/api/auth/login"), true);
+  assert.equal(isLegacyAuthApiRoute("/api/auth/logout"), true);
+  assert.equal(isLegacyAuthApiRoute("/auth/login"), false);
+});
+
+test("normalizeReturnToPath keeps safe relative paths and rejects external targets", () => {
+  assert.equal(normalizeReturnToPath("/dashboard?tab=overview", "/"), "/dashboard?tab=overview");
+  assert.equal(normalizeReturnToPath("https://evil.example/phish", "/dashboard"), "/dashboard");
+  assert.equal(normalizeReturnToPath(undefined, "/dashboard"), "/dashboard");
+});
+
 test("getAuthReturnTo preserves the relative dashboard path and query string", () => {
   assert.equal(
     getAuthReturnTo("https://savantrepo.com/repositories?tab=all&sort=recent"),
     "/repositories?tab=all&sort=recent",
+  );
+});
+
+test("isProtectedDashboardPath only gates dashboard and API routes", () => {
+  assert.equal(isProtectedDashboardPath("/"), false);
+  assert.equal(isProtectedDashboardPath("/signup"), false);
+  assert.equal(isProtectedDashboardPath("/signin"), false);
+  assert.equal(isProtectedDashboardPath("/onboarding"), false);
+  assert.equal(isProtectedDashboardPath("/dashboard"), true);
+  assert.equal(isProtectedDashboardPath("/settings"), true);
+  assert.equal(isProtectedDashboardPath("/api/settings/workspace"), true);
+  assert.equal(isProtectedDashboardPath("/api/auth/login"), false);
+});
+
+test("getLegacyAuthRedirectPath upgrades legacy login URLs to the current sign-in and sign-up pages", () => {
+  assert.equal(getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/login"), "/signin");
+  assert.equal(
+    getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/login?screen_hint=signup&returnTo=%2Fonboarding"),
+    "/signup?returnTo=%2Fonboarding",
+  );
+  assert.equal(
+    getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/logout?returnTo=%2F"),
+    "/auth/logout?returnTo=%2F",
   );
 });
 
@@ -83,6 +144,16 @@ test("getDashboardAuthAction redirects unauthenticated non-local dashboard reque
       hasSession: false,
     }),
     "redirect-to-login",
+  );
+
+  assert.equal(
+    getDashboardAuthAction({
+      isConfigured: true,
+      isLocalDevBypass: false,
+      pathname: "/signup",
+      hasSession: false,
+    }),
+    "allow",
   );
 
   assert.equal(

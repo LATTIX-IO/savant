@@ -12,6 +12,11 @@
     "dev": "pnpm --filter @savant/web dev",
     "dev:web": "pnpm --filter @savant/web dev",
     "lint": "turbo run lint",
+    "lint:fix": "pnpm --filter @savant/web exec eslint . --fix",
+    "security:deps": "pnpm audit --prod --audit-level high",
+    "security:secrets": "node ./scripts/security-scan.mjs",
+    "security:scan": "pnpm run security:deps && pnpm run security:secrets",
+    "test": "node ./scripts/run-node-tests.mjs",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {

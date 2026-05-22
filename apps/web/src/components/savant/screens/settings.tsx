@@ -358,20 +358,11 @@ function GeneralSection({ settings }: { settings: WorkspaceGeneralSettings }) {
         <FormRow label="Workspace name" sub="Shown in the top bar and on release bundles.">
           <TextInput defaultValue={settings.workspaceName} />
         </FormRow>
-        <FormRow label="Workspace slug" sub="Stable identifier used across control-plane records.">
+        <FormRow label="Workspace slug" sub="Stable identifier used across control-plane records and tenant routing.">
           <TextInput defaultValue={settings.workspaceSlug} mono readOnly />
         </FormRow>
-        <FormRow label="Subdomain" sub="The Savant-managed workspace hostname prefix.">
-          <div className="row" style={{ gap: 6 }}>
-            <TextInput
-              defaultValue={settings.subdomain}
-              mono
-              style={{ width: 200, height: 32, padding: "0 10px", borderRadius: 4 }}
-            />
-            <span className="mono" style={{ color: "var(--muted)", fontSize: 13 }}>
-              .savant.app
-            </span>
-          </div>
+        <FormRow label="Workspace URL" sub="Canonical path-based tenant URL reserved on Savant.">
+          <TextInput defaultValue={settings.workspaceUrl} mono readOnly />
         </FormRow>
         <FormRow
           label="Default tier"
@@ -452,10 +443,10 @@ function AuthSection({
             <span className="chip chip-paper" style={{ height: 26, padding: "0 10px", fontSize: 11 }}>
               Auth0 · Regular Web Application
             </span>
-            <a href="/auth/login" className="btn btn-sm">
+            <a href="/signin" className="btn btn-sm">
               Test login
             </a>
-            <a href="/auth/login?screen_hint=signup" className="btn btn-sm">
+            <a href="/signup" className="btn btn-sm">
               Test signup
             </a>
             <a href="/auth/logout" className="btn btn-sm">

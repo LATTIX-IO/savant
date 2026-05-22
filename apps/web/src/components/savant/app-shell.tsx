@@ -228,7 +228,7 @@ function TopBar({ viewer }: { viewer: AuthViewer }) {
       </button>
 
       <a
-        href={viewer.isAuthenticated ? "/auth/logout" : "/auth/login"}
+        href={viewer.isAuthenticated ? "/auth/logout" : "/signin"}
         className="btn btn-sm"
         style={{ whiteSpace: "nowrap" }}
       >

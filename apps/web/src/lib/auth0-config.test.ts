@@ -29,7 +29,6 @@ test("isConfiguredAuth0Value rejects empty and placeholder values", () => {
 test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
   assert.equal(
     hasAuth0EnvConfig({
-      APP_BASE_URL: "http://localhost:3000",
       AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
       AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",
@@ -40,7 +39,6 @@ test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
 
   assert.equal(
     hasAuth0EnvConfig({
-      APP_BASE_URL: "http://localhost:3000",
       AUTH0_DOMAIN: "<AUTH0_DOMAIN>",
       AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",
@@ -53,6 +51,13 @@ test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
 test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_BASE_URL is missing", () => {
   assert.equal(
     resolveAuth0AppBaseUrl({
+      NEXT_PUBLIC_APP_URL: "https://preview.savantrepo.com/",
+    }),
+    "https://preview.savantrepo.com",
+  );
+
+  assert.equal(
+    resolveAuth0AppBaseUrl({
       APP_BASE_URL: "<APP_BASE_URL>",
       VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
     }),
@@ -62,6 +67,16 @@ test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_B
   assert.equal(
     hasAuth0EnvConfig({
       VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+      AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
+      AUTH0_CLIENT_ID: "client-id",
+      AUTH0_CLIENT_SECRET: "client-secret",
+      AUTH0_SECRET: "session-secret",
+    }),
+    true,
+  );
+
+  assert.equal(
+    hasAuth0EnvConfig({
       AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
       AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",

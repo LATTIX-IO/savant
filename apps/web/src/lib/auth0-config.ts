@@ -15,6 +15,7 @@ const AUTH0_REQUIRED_DIRECT_KEYS = [
 
 const AUTH0_APP_BASE_URL_FALLBACK_KEYS = [
   "APP_BASE_URL",
+  "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_SITE_URL",
   "VERCEL_PROJECT_PRODUCTION_URL",
   "VERCEL_URL",
@@ -57,8 +58,7 @@ export function isConfiguredAuth0Value(value: string | undefined): boolean {
 }
 
 export function hasAuth0EnvConfig(env: Auth0Env): boolean {
-  return Boolean(resolveAuth0AppBaseUrl(env))
-    && AUTH0_REQUIRED_DIRECT_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
+  return AUTH0_REQUIRED_DIRECT_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
 }
 
 function normalizeAuth0AppBaseUrlCandidate(value: string): string {

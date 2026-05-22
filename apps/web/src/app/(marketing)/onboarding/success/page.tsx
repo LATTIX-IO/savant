@@ -7,6 +7,7 @@ import { auth0 } from "@/lib/auth0";
 import { buildOnboardingStatusView } from "@/lib/onboarding";
 import { resolveOnboardingRuntimeAccess } from "@/lib/onboarding-runtime";
 import { isStripeConfigured, stripe } from "@/lib/stripe";
+import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
 import { getOnboardingSessionForSubjectByCheckoutSessionId } from "@/server/control-plane/onboarding-store";
@@ -82,6 +83,7 @@ export default async function OnboardingSuccessPage({
   }
 
   const workspaceUrl = workspaceSlug ? formatWorkspaceUrlForDisplay(workspaceSlug) : null;
+  const dashboardHref = workspaceSlug ? buildTenantAppPath(workspaceSlug, "/dashboard") : "/dashboard";
 
   return (
     <div className="signup-redirect">
@@ -130,7 +132,7 @@ export default async function OnboardingSuccessPage({
             </span>
           </div>
         ) : null}
-        <a href="/dashboard" className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
+        <a href={dashboardHref} className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
           Open dashboard
           <Ic.ChevR className="b-icon" />
         </a>

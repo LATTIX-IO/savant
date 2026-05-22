@@ -1,6 +1,8 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import type { SkillListItem } from "@savant/types";
@@ -8,6 +10,7 @@ import type { SkillListItem } from "@savant/types";
 import { Ic } from "@/components/savant/icons";
 import { SkillCreateModal } from "@/components/savant/skill-create-modal";
 import { fetchSkillList } from "@/lib/control-plane-client";
+import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
   BranchRef,
   CommitRef,
@@ -22,6 +25,7 @@ type TierFilter = "all" | "1" | "2" | "3";
 type StatusFilter = "all" | "production" | "staging" | "draft" | "candidate";
 
 export function CatalogScreen() {
+  const pathname = usePathname() || "/";
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
@@ -288,7 +292,7 @@ export function CatalogScreen() {
           </div>
         </div>
 
-        {selected ? <CatalogPreview skill={selected} /> : null}
+        {selected ? <CatalogPreview skill={selected} pathname={pathname} /> : null}
       </div>
 
       <SkillCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />
@@ -296,7 +300,9 @@ export function CatalogScreen() {
   );
 }
 
-function CatalogPreview({ skill }: { skill: SkillListItem }) {
+function CatalogPreview({ skill, pathname }: { skill: SkillListItem; pathname: string }) {
+  const skillHref = buildTenantAwareAppPath(pathname, `/skills/${skill.id}`) as Route;
+
   return (
     <div className="panel" style={{ position: "sticky", top: 0 }}>
       <div className="panel-hd">
@@ -342,7 +348,6 @@ function CatalogPreview({ skill }: { skill: SkillListItem }) {
           )}
           <PreviewRow label="Owner">
             <div className="row" style={{ gap: 6 }}>
-              <span className="avatar sm">{skill.owner.slice(0, 2).toUpperCase()}</span>
               <span style={{ fontSize: 12.5 }}>{skill.owner}</span>
               <span className="muted" style={{ fontSize: 11.5 }}>
                 · {skill.team}
@@ -386,7 +391,7 @@ function CatalogPreview({ skill }: { skill: SkillListItem }) {
         )}
 
         <div className="row" style={{ gap: 8 }}>
-          <Link href={`/skills/${skill.id}`} className="btn btn-primary grow">
+          <Link href={skillHref} className="btn btn-primary grow">
             <span>Open skill</span>
             <Ic.ChevR className="b-icon" />
           </Link>

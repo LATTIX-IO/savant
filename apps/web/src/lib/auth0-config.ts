@@ -27,6 +27,7 @@ export type DashboardAuthAction = "allow" | "redirect-to-login" | "require-auth0
 const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 const RETURN_TO_SANITIZE_BASE = "https://savant.local";
 const PROTECTED_DASHBOARD_PREFIXES = [
+  "/o",
   "/dashboard",
   "/skills",
   "/repositories",

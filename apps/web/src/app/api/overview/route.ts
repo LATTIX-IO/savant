@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 
+import { createApiErrorResponse } from "@/server/control-plane/control-plane-response";
 import { getOverviewResponse } from "@/server/control-plane/read-model";
+import { authorizeTenantRequest, TenantContextError } from "@/server/control-plane/tenant-context";
 
-export function GET() {
-  return NextResponse.json(getOverviewResponse());
+export async function GET(request: Request) {
+  try {
+    const tenantContext = await authorizeTenantRequest(request);
+    return NextResponse.json(await getOverviewResponse(tenantContext));
+  } catch (error) {
+    if (error instanceof TenantContextError) {
+      return NextResponse.json(createApiErrorResponse(error.code, error.message), {
+        status: error.status,
+      });
+    }
+
+    throw error;
+  }
 }

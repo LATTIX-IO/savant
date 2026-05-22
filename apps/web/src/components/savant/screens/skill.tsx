@@ -1,6 +1,8 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
@@ -20,6 +22,7 @@ import {
   SKILLS,
   type Skill,
 } from "@/lib/savant-data";
+import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 
 type TabKey = "evaluation" | "versions" | "access" | "activity";
 
@@ -27,6 +30,8 @@ export function SkillScreen({ skillId }: { skillId: string }) {
   const skill = SKILLS.find((s) => s.id === skillId) ?? SKILLS[0]!;
   const [tab, setTab] = useState<TabKey>("evaluation");
   const baselineScore = skill.score ?? 0;
+  const pathname = usePathname() || "/";
+  const catalogHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
 
   const railSteps: ProvenanceStep[] = [
     {
@@ -85,7 +90,7 @@ export function SkillScreen({ skillId }: { skillId: string }) {
       <div className="page-head">
         <div style={{ minWidth: 0 }}>
           <div className="page-head-meta">
-            <Link href="/skills" className="link">
+            <Link href={catalogHref} className="link">
               Catalog
             </Link>
             <span className="sep">/</span>

@@ -54,6 +54,7 @@ For production-ready onboarding, configure a PostgreSQL database first. Apply:
 
 - `db/schema/0001_control_plane.sql`
 - `db/schema/0002_onboarding.sql`
+- `db/schema/0003_multitenancy.sql`
 
 Then set `DATABASE_URL` for `apps/web`.
 
@@ -65,6 +66,8 @@ Then set `DATABASE_URL` for `apps/web`.
 6. Set `STRIPE_PRICE_ID_MONTHLY` and `STRIPE_PRICE_ID_YEARLY` to the recurring prices for the single `Savant Seat` product (`$1 / seat / month`, `$10 / seat / year`). If they are omitted, Savant falls back to the same inline recurring pricing.
 
 The hardened onboarding flow now persists drafts, requires Auth0 identity correlation at checkout, provisions the tenant from Stripe webhooks, and syncs the internal tenant id back into Stripe customer/subscription metadata.
+
+For the first production multi-tenant rollout, protected product routes resolve under `https://savantrepo.com/o/{workspaceSlug}`. Root product URLs such as `/dashboard` and `/settings` now act as authenticated entry points that redirect into the user\'s preferred workspace when a tenant membership is available.
 
 Moving from test to live does not require a code change: swap the Stripe keys, the webhook secret, and (if you use Stripe-managed catalog prices) the live monthly/yearly price ids, then redeploy.
 
@@ -86,6 +89,8 @@ Optional overrides:
 - `ONBOARDING_SANDBOX_NAME`
 
 When the sandbox is enabled in `NODE_ENV=development`, onboarding uses a synthetic identity and a simulated hosted checkout redirect so you can click through the full flow locally without external provider callbacks. The real Auth0 + Stripe production path remains unchanged.
+
+The local sandbox can also exercise the new tenant route shell directly after onboarding because tenant pages fall back to a development-only synthetic workspace when `DATABASE_URL` is not configured.
 
 If you want to exercise cancel or error handling locally, set:
 

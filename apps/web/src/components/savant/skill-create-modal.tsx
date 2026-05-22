@@ -10,6 +10,7 @@ import type {
 } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
+import { buildTenantScopedControlPlanePath } from "@/lib/control-plane-client";
 import { REPOS } from "@/lib/savant-data";
 
 type SkillCreateModalProps = {
@@ -77,7 +78,7 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
       setPreview({ status: "loading" });
 
       try {
-        const response = await fetch("/api/skills/scaffold", {
+        const response = await fetch(buildTenantScopedControlPlanePath("/api/skills/scaffold"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

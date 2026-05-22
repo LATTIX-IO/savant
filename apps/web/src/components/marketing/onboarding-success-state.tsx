@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 import type { OnboardingStatusView } from "@/lib/onboarding";
 import { Ic } from "@/components/savant/icons";
+import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
 
 export function OnboardingSuccessState({
@@ -74,6 +75,7 @@ export function OnboardingSuccessState({
       ? "var(--oxblood)"
       : "var(--ink-2)";
   const workspaceUrl = formatWorkspaceUrlForDisplay(status.workspaceSlug);
+  const dashboardHref = buildTenantAppPath(status.workspaceSlug, "/dashboard");
 
   return (
     <div className="signup-redirect">
@@ -120,7 +122,7 @@ export function OnboardingSuccessState({
         ) : null}
 
         {status.canEnterDashboard ? (
-          <a href="/dashboard" className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
+          <a href={dashboardHref} className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
             Open dashboard
             <Ic.ChevR className="b-icon" />
           </a>

@@ -8,6 +8,7 @@ import {
   shouldRedirectOnboardingToSignup,
 } from "@/lib/onboarding-runtime";
 import { normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
+import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { OnboardingWizard } from "@/components/marketing/onboarding-wizard";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
 import {
@@ -54,7 +55,7 @@ export default async function OnboardingPage({
     }
 
     if (onboardingState.provisionedTenant) {
-      redirect("/dashboard" as Route);
+      redirect(buildTenantAppPath(onboardingState.provisionedTenant.workspaceSlug, "/dashboard") as Route);
     }
 
     if (

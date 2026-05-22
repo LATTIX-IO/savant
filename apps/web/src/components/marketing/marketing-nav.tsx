@@ -1,13 +1,41 @@
+/* eslint-disable @next/next/no-img-element */
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
-import { SavantLogo } from "@/components/savant/savant-logo";
+import { isMarketingNavSolid } from "@/lib/marketing-nav-state";
 
 export function MarketingNav({ signedIn }: { signedIn: boolean }) {
+  const [solid, setSolid] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    const sync = () => setSolid(isMarketingNavSolid(window.scrollY));
+    sync();
+
+    window.addEventListener("scroll", sync, { passive: true });
+    return () => window.removeEventListener("scroll", sync);
+  }, []);
+
   return (
-    <nav className="marketing-nav" aria-label="Primary">
+    <nav className="marketing-nav" data-contrast={solid ? "solid" : "hero"} aria-label="Primary">
       <Link href="/" className="marketing-brand" aria-label="Savant home">
-        <SavantLogo className="marketing-brand-logo" />
+        <span className="savant-logo marketing-brand-logo" aria-hidden="true">
+          <img
+            className={`savant-logo-image ${solid ? "savant-logo-image-light-surface" : "savant-logo-image-dark-surface"}`}
+            src={solid ? "/brand/savant-light.png" : "/brand/savant-dark.png"}
+            alt=""
+            width={solid ? 612 : 1536}
+            height={solid ? 408 : 1024}
+            draggable={false}
+            decoding="async"
+          />
+        </span>
       </Link>
 
       <div className="marketing-nav-links">

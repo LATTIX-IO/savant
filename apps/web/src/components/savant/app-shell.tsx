@@ -13,6 +13,12 @@ import { TweaksProvider, useTweaks } from "@/components/savant/tweaks-context";
 import { TweaksPanel } from "@/components/savant/tweaks-panel";
 import type { AuthViewer } from "@/lib/auth0-session";
 import {
+  buildTenantAppPath,
+  extractWorkspaceSlugFromPathname,
+  stripTenantPathPrefix,
+} from "@/lib/tenant-paths";
+import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
+import {
   ORG,
   SKILLS,
   REPOS,
@@ -34,19 +40,35 @@ const TITLE_BY_PATH: Record<string, { group: string; title: string }> = {
   "/settings": { group: "System", title: "Settings" },
 };
 
+type WorkspaceSummary = {
+  name: string;
+  short: string;
+  env: string;
+  slug: string;
+};
+
+type WorkspaceMembershipSummary = WorkspaceSummary & {
+  isDefault: boolean;
+  isLastUsed: boolean;
+};
+
 export function SavantShell({
   children,
   viewer,
+  workspace,
+  memberships,
 }: {
   children: ReactNode;
   viewer: AuthViewer;
+  workspace?: WorkspaceSummary;
+  memberships?: WorkspaceMembershipSummary[];
 }) {
   return (
     <TweaksProvider>
       <OnboardingProvider>
         <div className="app">
           <Sidebar viewer={viewer} />
-          <TopBar viewer={viewer} />
+          <TopBar viewer={viewer} {...(workspace ? { workspace } : {})} {...(memberships ? { memberships } : {})} />
           <div className="page">{children}</div>
           <OnboardingModal />
           <TweaksPanel />
@@ -58,6 +80,8 @@ export function SavantShell({
 
 function Sidebar({ viewer }: { viewer: AuthViewer }) {
   const pathname = usePathname() || "/";
+  const workspaceSlug = extractWorkspaceSlugFromPathname(pathname);
+  const appPath = stripTenantPathPrefix(pathname);
 
   type Item = {
     href: Route;
@@ -68,21 +92,21 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
   };
 
   const workspaceItems: Item[] = [
-    { href: "/dashboard", label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/dashboard" },
-    { href: "/skills", label: "Skills", icon: Ic.Skills, count: SKILLS.length, match: (p) => p.startsWith("/skills") },
-    { href: "/repositories", label: "Repositories", icon: Ic.Repo, count: REPOS.length, match: (p) => p.startsWith("/repositories") },
-    { href: "/evaluations", label: "Evaluations", icon: Ic.Eval, count: EVAL_RUNS.filter((r) => r.status === "running").length || EVAL_RUNS.length, match: (p) => p.startsWith("/evaluations") },
-    { href: "/releases", label: "Releases", icon: Ic.Release, count: RELEASES.length, match: (p) => p.startsWith("/releases") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/dashboard") : "/dashboard") as Route, label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/dashboard" },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/skills") : "/skills") as Route, label: "Skills", icon: Ic.Skills, count: SKILLS.length, match: (p) => p.startsWith("/skills") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/repositories") : "/repositories") as Route, label: "Repositories", icon: Ic.Repo, count: REPOS.length, match: (p) => p.startsWith("/repositories") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/evaluations") : "/evaluations") as Route, label: "Evaluations", icon: Ic.Eval, count: EVAL_RUNS.filter((r) => r.status === "running").length || EVAL_RUNS.length, match: (p) => p.startsWith("/evaluations") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/releases") : "/releases") as Route, label: "Releases", icon: Ic.Release, count: RELEASES.length, match: (p) => p.startsWith("/releases") },
   ];
   const govItems: Item[] = [
-    { href: "/policies", label: "Policies", icon: Ic.Policy, count: POLICIES.filter((p) => p.state === "active").length, match: (p) => p.startsWith("/policies") },
-    { href: "/audit", label: "Audit", icon: Ic.Audit, count: null, match: (p) => p.startsWith("/audit") },
-    { href: "/connectors", label: "Connectors", icon: Ic.Connectors, count: CONNECTORS.length, match: (p) => p.startsWith("/connectors") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/policies") : "/policies") as Route, label: "Policies", icon: Ic.Policy, count: POLICIES.filter((p) => p.state === "active").length, match: (p) => p.startsWith("/policies") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/audit") : "/audit") as Route, label: "Audit", icon: Ic.Audit, count: null, match: (p) => p.startsWith("/audit") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/connectors") : "/connectors") as Route, label: "Connectors", icon: Ic.Connectors, count: CONNECTORS.length, match: (p) => p.startsWith("/connectors") },
   ];
 
   const renderItem = (it: Item) => {
     const Icon = it.icon;
-    const active = it.match(pathname);
+    const active = it.match(appPath);
     return (
       <Link key={it.href} href={it.href} className={`nav-item ${active ? "active" : ""}`}>
         <Icon className="nav-icon" />
@@ -92,11 +116,13 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
     );
   };
 
-  const settingsActive = pathname.startsWith("/settings");
+  const settingsActive = appPath.startsWith("/settings");
+  const dashboardHref = (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/dashboard") : "/dashboard") as Route;
+  const settingsHref = (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/settings") : "/settings") as Route;
 
   return (
     <aside className="sidebar">
-      <Link href="/dashboard" className="brand" aria-label="Savant dashboard">
+      <Link href={dashboardHref} className="brand" aria-label="Savant dashboard">
         <SavantLogo className="brand-logo" />
       </Link>
 
@@ -112,7 +138,7 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
       </nav>
 
       <div className="nav-pinned">
-        <Link href="/settings" className={`nav-item ${settingsActive ? "active" : ""}`}>
+        <Link href={settingsHref} className={`nav-item ${settingsActive ? "active" : ""}`}>
           <Ic.Settings className="nav-icon" />
           <span>Settings</span>
         </Link>
@@ -132,15 +158,33 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
   );
 }
 
-function TopBar({ viewer }: { viewer: AuthViewer }) {
+function TopBar({
+  viewer,
+  workspace,
+  memberships,
+}: {
+  viewer: AuthViewer;
+  workspace?: WorkspaceSummary;
+  memberships?: WorkspaceMembershipSummary[];
+}) {
   const pathname = usePathname() || "/";
+  const appPath = stripTenantPathPrefix(pathname);
   const { resolvedTheme, set } = useTweaks();
+  const themeToggle = buildBinaryThemeToggleState(resolvedTheme);
+  const currentWorkspace = workspace ?? {
+    name: ORG.name,
+    short: ORG.short,
+    env: ORG.env,
+    slug: "default",
+  };
+  const currentAppPath = appPath === "/" ? "/dashboard" : appPath;
+  const workspaceOptions = memberships ?? [];
 
   type Crumb = readonly [label: string, target: Route | null | "current"];
   let crumbs: Crumb[];
 
-  if (pathname.startsWith("/skills/") && pathname !== "/skills") {
-    const slug = pathname.split("/")[2] ?? "";
+  if (appPath.startsWith("/skills/") && appPath !== "/skills") {
+    const slug = appPath.split("/")[2] ?? "";
     const skill = SKILLS.find((s) => s.id === slug);
     crumbs = [
       ["Workspace", null],
@@ -148,38 +192,143 @@ function TopBar({ viewer }: { viewer: AuthViewer }) {
       [skill?.name || "Skill", "current"],
     ];
   } else {
-    const info = TITLE_BY_PATH[pathname] ?? { group: "Workspace", title: "Overview" };
+    const info = TITLE_BY_PATH[appPath] ?? { group: "Workspace", title: "Overview" };
     crumbs = [[info.group, null], [info.title, "current"]];
   }
 
-  const nextTheme = resolvedTheme === "dark" ? "light" : "dark";
-  const themeToggleTitle = resolvedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode";
-
   return (
     <header className="topbar">
-      <button
-        type="button"
-        className="btn btn-sm"
-        style={{ background: "var(--ivory)", border: "1px solid var(--rule-2)" }}
-      >
-        <span
-          style={{
-            width: 16,
-            height: 16,
-            background: "var(--solid)",
-            color: "var(--on-solid)",
-            display: "grid",
-            placeItems: "center",
-            borderRadius: 3,
-            fontSize: 9,
-            fontWeight: 600,
-          }}
+      {workspaceOptions.length > 1 ? (
+        <details style={{ position: "relative" }}>
+          <summary
+            className="btn btn-sm"
+            style={{
+              background: "var(--ivory)",
+              border: "1px solid var(--rule-2)",
+              listStyle: "none",
+              cursor: "pointer",
+            }}
+          >
+            <span
+              style={{
+                width: 16,
+                height: 16,
+                background: "var(--solid)",
+                color: "var(--on-solid)",
+                display: "grid",
+                placeItems: "center",
+                borderRadius: 3,
+                fontSize: 9,
+                fontWeight: 600,
+              }}
+            >
+              {currentWorkspace.short}
+            </span>
+            <span>{currentWorkspace.name}</span>
+            <Ic.ChevD className="b-icon" />
+          </summary>
+          <div
+            className="panel"
+            style={{
+              position: "absolute",
+              top: "calc(100% + 8px)",
+              left: 0,
+              minWidth: 260,
+              padding: 8,
+              zIndex: 20,
+            }}
+          >
+            <div className="eyebrow" style={{ marginBottom: 8, fontSize: 10 }}>
+              Switch workspace
+            </div>
+            <div className="col" style={{ gap: 4 }}>
+              {workspaceOptions.map((membership) => {
+                const href = buildTenantAppPath(membership.slug, currentAppPath) as Route;
+                const isCurrent = membership.slug === currentWorkspace.slug;
+
+                return (
+                  <Link
+                    key={membership.slug}
+                    href={href}
+                    className="row between"
+                    style={{
+                      padding: "8px 10px",
+                      borderRadius: 5,
+                      border: `1px solid ${isCurrent ? "var(--moss-soft)" : "var(--rule)"}`,
+                      background: isCurrent ? "var(--moss-soft)" : "var(--panel)",
+                      color: "inherit",
+                      textDecoration: "none",
+                    }}
+                  >
+                    <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                      <span
+                        style={{
+                          width: 18,
+                          height: 18,
+                          background: "var(--solid)",
+                          color: "var(--on-solid)",
+                          display: "grid",
+                          placeItems: "center",
+                          borderRadius: 4,
+                          fontSize: 9,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {membership.short}
+                      </span>
+                      <div className="col" style={{ gap: 2 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--ink)" }}>
+                          {membership.name}
+                        </span>
+                        <span className="muted" style={{ fontSize: 11.5 }}>
+                          /o/{membership.slug}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      {membership.isDefault ? (
+                        <span className="chip chip-paper" style={{ fontSize: 10 }}>default</span>
+                      ) : null}
+                      {membership.isLastUsed && !isCurrent ? (
+                        <span className="chip chip-paper" style={{ fontSize: 10 }}>recent</span>
+                      ) : null}
+                      {isCurrent ? (
+                        <span className="chip chip-moss" style={{ fontSize: 10 }}>
+                          <span className="dot" />current
+                        </span>
+                      ) : null}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        </details>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-sm"
+          style={{ background: "var(--ivory)", border: "1px solid var(--rule-2)" }}
         >
-          {ORG.short}
-        </span>
-        <span>{ORG.name}</span>
-        <Ic.ChevD className="b-icon" />
-      </button>
+          <span
+            style={{
+              width: 16,
+              height: 16,
+              background: "var(--solid)",
+              color: "var(--on-solid)",
+              display: "grid",
+              placeItems: "center",
+              borderRadius: 3,
+              fontSize: 9,
+              fontWeight: 600,
+            }}
+          >
+            {currentWorkspace.short}
+          </span>
+          <span>{currentWorkspace.name}</span>
+          <Ic.ChevD className="b-icon" />
+        </button>
+      )}
 
       <div className="crumbs">
         {crumbs.map(([label, target], i) => (
@@ -198,7 +347,7 @@ function TopBar({ viewer }: { viewer: AuthViewer }) {
 
       <div className="env-pill" title="Environment">
         <span className="dot" />
-        <span>{ORG.env}</span>
+        <span>{currentWorkspace.env}</span>
       </div>
 
       <div className="topbar-search">
@@ -210,12 +359,12 @@ function TopBar({ viewer }: { viewer: AuthViewer }) {
       <button
         type="button"
         className="icon-btn"
-        aria-label={themeToggleTitle}
-        aria-pressed={resolvedTheme === "dark"}
-        title={themeToggleTitle}
-        onClick={() => set("theme", nextTheme)}
+        aria-label={themeToggle.title}
+        aria-pressed={themeToggle.isDark}
+        title={themeToggle.title}
+        onClick={() => set("theme", themeToggle.nextTheme)}
       >
-        {resolvedTheme === "dark" ? (
+        {themeToggle.isDark ? (
           <Ic.Sun style={{ width: 14, height: 14 }} />
         ) : (
           <Ic.Moon style={{ width: 14, height: 14 }} />

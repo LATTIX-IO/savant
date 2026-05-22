@@ -19,6 +19,7 @@ import {
   markWebhookEventProcessed,
   syncBillingSubscriptionState,
 } from "@/server/control-plane/onboarding-store";
+import { upsertUserTenantPreference } from "@/server/control-plane/tenant-context";
 
 export const runtime = "nodejs";
 // Stripe needs the raw body for signature verification — disable Next's static
@@ -210,6 +211,10 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
         : provisionTenant.value.seats,
     });
   }
+
+  await upsertUserTenantPreference(provisionedTenant.auth0Subject, provisionedTenant.organizationId, {
+    setDefault: true,
+  });
 
   await markOnboardingReady(provisionedTenant.onboardingSession.id);
 }

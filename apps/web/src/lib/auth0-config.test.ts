@@ -117,6 +117,7 @@ test("isProtectedDashboardPath only gates dashboard and API routes", () => {
   assert.equal(isProtectedDashboardPath("/signup"), false);
   assert.equal(isProtectedDashboardPath("/signin"), false);
   assert.equal(isProtectedDashboardPath("/onboarding"), false);
+  assert.equal(isProtectedDashboardPath("/o/acme/dashboard"), true);
   assert.equal(isProtectedDashboardPath("/dashboard"), true);
   assert.equal(isProtectedDashboardPath("/settings"), true);
   assert.equal(isProtectedDashboardPath("/api/settings/workspace"), true);

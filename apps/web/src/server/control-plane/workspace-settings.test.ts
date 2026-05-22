@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   buildPublicAuthSettings,
   buildWorkspaceSettingsPayload,
+  mergeTenantWorkspaceSettings,
 } from "./workspace-settings.ts";
 
 test("buildPublicAuthSettings marks partial local Auth0 setup as development bypass without exposing secrets", () => {
@@ -41,6 +42,17 @@ test("buildWorkspaceSettingsPayload returns stable AI connection summaries and c
   assert.equal(result.members[0]?.groups === result.members[1]?.groups, false);
 });
 
+test("buildWorkspaceSettingsPayload accepts tenant overrides for the current workspace", () => {
+  const result = buildWorkspaceSettingsPayload({}, {
+    workspaceName: "Finance Ops",
+    workspaceSlug: "finance-ops",
+  });
+
+  assert.equal(result.general.workspaceName, "Finance Ops");
+  assert.equal(result.general.workspaceSlug, "finance-ops");
+  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/finance-ops");
+});
+
 test("buildPublicAuthSettings derives the base URL from Vercel production metadata when APP_BASE_URL is absent", () => {
   const result = buildPublicAuthSettings({
     VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
@@ -54,4 +66,43 @@ test("buildPublicAuthSettings derives the base URL from Vercel production metada
   assert.equal(result.callbackUrl, "https://savantrepo.com/auth/callback");
   assert.equal(result.logoutUrl, "https://savantrepo.com/");
   assert.equal(result.status, "development-bypass");
+});
+
+test("mergeTenantWorkspaceSettings applies tenant-specific general, member, and billing overrides", () => {
+  const base = buildWorkspaceSettingsPayload({}, {
+    workspaceName: "Finance Ops",
+    workspaceSlug: "finance-ops",
+  });
+
+  const result = mergeTenantWorkspaceSettings(base, {
+    general: {
+      timeZone: "UTC",
+      approvalRequirement: 3,
+    },
+    members: [
+      {
+        name: "Ari Chen",
+        email: "ari@example.com",
+        role: "Owner",
+        groups: ["platform-admins"],
+        status: "active",
+        last: "just now",
+      },
+    ],
+    billing: {
+      activeSkills: 7,
+      includedSeats: 5,
+      usedSeats: 2,
+      renewalDate: "Awaiting Stripe sync",
+    },
+  });
+
+  assert.equal(result.general.timeZone, "UTC");
+  assert.equal(result.general.approvalRequirement, 3);
+  assert.equal(result.members.length, 1);
+  assert.equal(result.members[0]?.role, "Owner");
+  assert.equal(result.billing.activeSkills, 7);
+  assert.equal(result.billing.includedSeats, 5);
+  assert.equal(result.billing.usedSeats, 2);
+  assert.equal(result.billing.renewalDate, "Awaiting Stripe sync");
 });

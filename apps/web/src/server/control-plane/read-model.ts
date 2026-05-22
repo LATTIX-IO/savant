@@ -39,6 +39,16 @@ import {
   SKILLS,
 } from "@/lib/savant-data";
 
+import { isControlPlaneDatabaseConfigured } from "./database.ts";
+import {
+  readOverviewFromDatabase,
+  readRepositoryDetailFromDatabase,
+  readRepositoriesFromDatabase,
+  readSkillDetailFromDatabase,
+  readSkillsFromDatabase,
+} from "./read-model-db.ts";
+import type { ResolvedTenantContext } from "./tenant-context.ts";
+
 type RepositoryFilters = {
   provider?: string | undefined;
   status?: string | undefined;
@@ -302,7 +312,7 @@ function fallbackRepositoryDetails(skillCount: number, branch: string): Reposito
   };
 }
 
-export function getOverviewResponse(): OverviewResponse {
+function getFallbackOverviewResponse(): OverviewResponse {
   return {
     data: {
       organization: ORG,
@@ -324,7 +334,7 @@ export function getOverviewResponse(): OverviewResponse {
   };
 }
 
-export function listRepositoriesResponse(filters: RepositoryFilters = {}): RepositoryListResponse {
+function getFallbackRepositoriesResponse(filters: RepositoryFilters = {}): RepositoryListResponse {
   const repositories = REPOS.filter((repository) => {
     if (filters.provider && normalizeText(repository.provider) !== normalizeText(filters.provider)) {
       return false;
@@ -346,7 +356,7 @@ export function listRepositoriesResponse(filters: RepositoryFilters = {}): Repos
   };
 }
 
-export function getRepositoryDetailResponse(id: string): RepositoryDetailResponse | null {
+function getFallbackRepositoryDetailResponse(id: string): RepositoryDetailResponse | null {
   const repository = REPOS.find((entry) => entry.id === id);
 
   if (!repository) {
@@ -364,7 +374,7 @@ export function getRepositoryDetailResponse(id: string): RepositoryDetailRespons
   };
 }
 
-export function listSkillsResponse(filters: SkillFilters = {}): SkillListResponse {
+function getFallbackSkillsResponse(filters: SkillFilters = {}): SkillListResponse {
   const skills = SKILLS.filter((skill) => {
     if (filters.query) {
       const query = normalizeText(filters.query);
@@ -402,7 +412,7 @@ export function listSkillsResponse(filters: SkillFilters = {}): SkillListRespons
   };
 }
 
-export function getSkillDetailResponse(id: string): SkillDetailResponse | null {
+function getFallbackSkillDetailResponse(id: string): SkillDetailResponse | null {
   const skill = SKILLS.find((entry) => entry.id === id);
 
   if (!skill) {
@@ -434,4 +444,66 @@ export function getTenantSkillRepoContractResponse(): TenantSkillRepoContractRes
     data: tenantSkillRepoContract,
     meta: createMeta("git"),
   };
+}
+
+function canUseDatabase(context?: ResolvedTenantContext): context is ResolvedTenantContext {
+  return Boolean(
+    context &&
+    isControlPlaneDatabaseConfigured &&
+    !context.isDevelopmentFallback,
+  );
+}
+
+export async function getOverviewResponse(
+  context?: ResolvedTenantContext,
+): Promise<OverviewResponse> {
+  if (!canUseDatabase(context)) {
+    return getFallbackOverviewResponse();
+  }
+
+  return readOverviewFromDatabase(context);
+}
+
+export async function listRepositoriesResponse(
+  filters: RepositoryFilters = {},
+  context?: ResolvedTenantContext,
+): Promise<RepositoryListResponse> {
+  if (!canUseDatabase(context)) {
+    return getFallbackRepositoriesResponse(filters);
+  }
+
+  return readRepositoriesFromDatabase(context, filters);
+}
+
+export async function getRepositoryDetailResponse(
+  id: string,
+  context?: ResolvedTenantContext,
+): Promise<RepositoryDetailResponse | null> {
+  if (!canUseDatabase(context)) {
+    return getFallbackRepositoryDetailResponse(id);
+  }
+
+  return readRepositoryDetailFromDatabase(context, id);
+}
+
+export async function listSkillsResponse(
+  filters: SkillFilters = {},
+  context?: ResolvedTenantContext,
+): Promise<SkillListResponse> {
+  if (!canUseDatabase(context)) {
+    return getFallbackSkillsResponse(filters);
+  }
+
+  return readSkillsFromDatabase(context, filters);
+}
+
+export async function getSkillDetailResponse(
+  id: string,
+  context?: ResolvedTenantContext,
+): Promise<SkillDetailResponse | null> {
+  if (!canUseDatabase(context)) {
+    return getFallbackSkillDetailResponse(id);
+  }
+
+  return readSkillDetailFromDatabase(context, id);
 }

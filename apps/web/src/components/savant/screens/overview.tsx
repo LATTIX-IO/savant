@@ -1,7 +1,15 @@
 "use client";
 
+import type { Route } from "next";
 import { Fragment } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+import type {
+  OverviewKpi,
+  OverviewPayload,
+  ReleaseQueueItem as ReleaseQueueRecord,
+} from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
 import {
@@ -11,17 +19,38 @@ import {
   Tier,
 } from "@/components/savant/primitives";
 import { useOnboarding } from "@/components/savant/onboarding-context";
-import {
-  APPROVALS,
-  AUDIT,
-  RECENT_CHANGES,
-  REGRESSIONS,
-  REPOS,
-} from "@/lib/savant-data";
+import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import type { AuthOverview } from "@/lib/auth0-session";
 
-export function OverviewScreen({ auth }: { auth: AuthOverview }) {
+function kpiByKey(overview: OverviewPayload, key: OverviewKpi["key"]): OverviewKpi {
+  return overview.kpis.find((item) => item.key === key) ?? {
+    key,
+    label: key,
+    value: 0,
+    deltaLabel: "No data yet",
+    trend: "flat",
+  };
+}
+
+function renderInlineEmptyState(message: string) {
+  return (
+    <div className="note brass">
+      <Ic.Warn className="n-icon" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+export function OverviewScreen({ auth, overview }: { auth: AuthOverview; overview: OverviewPayload }) {
   const { show } = useOnboarding();
+  const pathname = usePathname() || "/";
+  const skillsHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
+  const evaluationsHref = buildTenantAwareAppPath(pathname, "/evaluations") as Route;
+  const auditHref = buildTenantAwareAppPath(pathname, "/audit") as Route;
+  const skillsInProduction = kpiByKey(overview, "skills-in-production");
+  const evalCoverage = kpiByKey(overview, "eval-coverage");
+  const firstPassAcceptance = kpiByKey(overview, "first-pass-acceptance");
+  const releaseTurnaround = kpiByKey(overview, "release-turnaround");
 
   return (
     <div className="page-inner">
@@ -34,7 +63,7 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
           </div>
           <h1 className="h-display">The state of every governed skill, in one place.</h1>
           <div className="page-head-sub">
-            218 skills under governance. 4 candidates awaiting approval. 1 regression flagged in the last hour.
+            {overview.counts.skillsUnderGovernance} skills under governance. {overview.counts.pendingApprovals} candidates awaiting approval. {overview.counts.activeRegressionAlerts} regression alerts currently require attention.
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -53,30 +82,30 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
 
       <div className="kpi-strip" style={{ marginBottom: 24 }}>
         <div className="kpi">
-          <div className="kpi-label">Skills in production</div>
-          <div className="kpi-value num">147</div>
-          <div className="kpi-trend up">▲ 6 this week</div>
+          <div className="kpi-label">{skillsInProduction.label}</div>
+          <div className="kpi-value num">{skillsInProduction.value}</div>
+          <div className={`kpi-trend ${skillsInProduction.trend}`}>{skillsInProduction.deltaLabel}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Eval coverage</div>
+          <div className="kpi-label">{evalCoverage.label}</div>
           <div className="kpi-value num">
-            94<span style={{ fontSize: 16, color: "var(--muted)" }}>%</span>
+            {evalCoverage.value}<span style={{ fontSize: 16, color: "var(--muted)" }}>{evalCoverage.unit ?? ""}</span>
           </div>
-          <div className="kpi-trend up">▲ 2.1 pts</div>
+          <div className={`kpi-trend ${evalCoverage.trend}`}>{evalCoverage.deltaLabel}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">First-pass acceptance</div>
+          <div className="kpi-label">{firstPassAcceptance.label}</div>
           <div className="kpi-value num">
-            81<span style={{ fontSize: 16, color: "var(--muted)" }}>%</span>
+            {firstPassAcceptance.value}<span style={{ fontSize: 16, color: "var(--muted)" }}>{firstPassAcceptance.unit ?? ""}</span>
           </div>
-          <div className="kpi-trend up">▲ 0.4 pts</div>
+          <div className={`kpi-trend ${firstPassAcceptance.trend}`}>{firstPassAcceptance.deltaLabel}</div>
         </div>
         <div className="kpi">
-          <div className="kpi-label">Release turnaround</div>
+          <div className="kpi-label">{releaseTurnaround.label}</div>
           <div className="kpi-value num">
-            2.4<span style={{ fontSize: 16, color: "var(--muted)" }}>d</span>
+            {releaseTurnaround.value}<span style={{ fontSize: 16, color: "var(--muted)" }}>{releaseTurnaround.unit ?? ""}</span>
           </div>
-          <div className="kpi-trend down">▼ 0.6d</div>
+          <div className={`kpi-trend ${releaseTurnaround.trend}`}>{releaseTurnaround.deltaLabel}</div>
         </div>
       </div>
 
@@ -88,48 +117,54 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
                 <div className="panel-title">Awaiting approval</div>
                 <span className="chip chip-brass">
                   <span className="dot" />
-                  {APPROVALS.length} pending
+                  {overview.counts.pendingApprovals} pending
                 </span>
               </div>
               <div className="panel-actions">
-                <Link className="btn btn-sm" href="/skills">
+                <Link className="btn btn-sm" href={skillsHref}>
                   View all
                   <Ic.ChevR className="b-icon" />
                 </Link>
               </div>
             </div>
             <div className="panel-bd tight">
-              <table className="tbl">
-                <tbody>
-                  {APPROVALS.map((a) => (
-                    <tr key={a.id}>
-                      <td style={{ width: "42%" }}>
-                        <Link href="/skills/skl_ccr" className="tbl-name" style={{ color: "inherit" }}>
-                          <div className="tbl-name-text">
-                            <span className="pri">{a.skill}</span>
-                            <span className="sec">{a.change}</span>
-                          </div>
-                        </Link>
-                      </td>
-                      <td>
-                        <Tier n={parseInt(a.tier.slice(1), 10)} />
-                      </td>
-                      <td className="mono num" style={{ color: "var(--ink-3)" }}>
-                        v{a.version}
-                      </td>
-                      <td>
-                        <span className="chip chip-paper">
-                          <Ic.Lock style={{ width: 10, height: 10 }} />
-                          {a.blocking}
-                        </span>
-                      </td>
-                      <td className="subtle" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                        {a.when}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {overview.approvals.length === 0 ? renderInlineEmptyState("No approvals are pending for this workspace.") : (
+                <table className="tbl">
+                  <tbody>
+                    {overview.approvals.map((approval) => {
+                      const skillHref = buildTenantAwareAppPath(pathname, `/skills/${encodeURIComponent(approval.id)}`) as Route;
+
+                      return (
+                        <tr key={`${approval.id}-${approval.version}`}>
+                          <td style={{ width: "42%" }}>
+                            <Link href={skillHref} className="tbl-name" style={{ color: "inherit" }}>
+                              <div className="tbl-name-text">
+                                <span className="pri">{approval.skill}</span>
+                                <span className="sec">{approval.change}</span>
+                              </div>
+                            </Link>
+                          </td>
+                          <td>
+                            <Tier n={parseInt(approval.tier.slice(1), 10)} />
+                          </td>
+                          <td className="mono num" style={{ color: "var(--ink-3)" }}>
+                            {approval.version}
+                          </td>
+                          <td>
+                            <span className="chip chip-paper">
+                              <Ic.Lock style={{ width: 10, height: 10 }} />
+                              {approval.blocking}
+                            </span>
+                          </td>
+                          <td className="subtle" style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                            {approval.when}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
@@ -143,40 +178,42 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
               </div>
             </div>
             <div className="panel-bd tight">
-              <table className="tbl">
-                <thead>
-                  <tr>
-                    <th>Skill</th>
-                    <th>Commit</th>
-                    <th>Author</th>
-                    <th>Channel</th>
-                    <th style={{ textAlign: "right" }}>Δ score</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {RECENT_CHANGES.map((c, i) => (
-                    <tr key={i}>
-                      <td>
-                        <span className="skill-name">{c.skill}</span>
-                      </td>
-                      <td>
-                        <CommitRef commit={c.ref} />
-                      </td>
-                      <td className="muted">{c.who}</td>
-                      <td>
-                        <EnvPill env={c.env} />
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <Delta v={c.delta === "flat" ? "flat" : parseFloat(c.delta)} />
-                      </td>
-                      <td className="subtle" style={{ whiteSpace: "nowrap", textAlign: "right" }}>
-                        {c.when}
-                      </td>
+              {overview.recentChanges.length === 0 ? renderInlineEmptyState("No recent indexed changes have been recorded yet.") : (
+                <table className="tbl">
+                  <thead>
+                    <tr>
+                      <th>Skill</th>
+                      <th>Commit</th>
+                      <th>Author</th>
+                      <th>Channel</th>
+                      <th style={{ textAlign: "right" }}>Δ score</th>
+                      <th></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {overview.recentChanges.map((change, index) => (
+                      <tr key={`${change.skill}-${index}`}>
+                        <td>
+                          <span className="skill-name">{change.skill}</span>
+                        </td>
+                        <td>
+                          <CommitRef commit={change.ref} />
+                        </td>
+                        <td className="muted">{change.who}</td>
+                        <td>
+                          <EnvPill env={change.env} />
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <Delta v={change.delta === "flat" ? "flat" : parseFloat(change.delta)} />
+                        </td>
+                        <td className="subtle" style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                          {change.when}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
             </div>
           </div>
 
@@ -185,63 +222,65 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
               <div className="row" style={{ gap: 10 }}>
                 <div className="panel-title">Regression alerts</div>
                 <span className="chip chip-blood">
-                  <Ic.Warn style={{ width: 10, height: 10 }} />3 active
+                  <Ic.Warn style={{ width: 10, height: 10 }} />{overview.counts.activeRegressionAlerts} active
                 </span>
               </div>
               <div className="panel-actions">
-                <Link className="btn btn-sm" href="/evaluations">
+                <Link className="btn btn-sm" href={evaluationsHref}>
                   Open eval dashboard
                   <Ic.ChevR className="b-icon" />
                 </Link>
               </div>
             </div>
             <div className="panel-bd">
-              <div className="col" style={{ gap: 10 }}>
-                {REGRESSIONS.map((r, i) => (
-                  <div
-                    key={i}
-                    className="row between"
-                    style={{
-                      padding: "10px 12px",
-                      border: "1px solid var(--rule)",
-                      borderRadius: 5,
-                      background: "var(--linen)",
-                    }}
-                  >
-                    <div className="col" style={{ gap: 2 }}>
-                      <div className="row" style={{ gap: 8 }}>
-                        <span className="skill-name">{r.skill}</span>
-                        <span className="dot-sep">·</span>
-                        <span className="muted" style={{ fontSize: 12.5 }}>
-                          {r.metric}
-                        </span>
-                      </div>
-                      <div className="row" style={{ gap: 10, fontSize: 11.5 }}>
-                        <span className="mono subtle">
-                          {r.from}
-                          {r.unit || ""}
-                        </span>
-                        <Ic.Arrow style={{ width: 10, height: 10, color: "var(--faint)" }} />
-                        <span className="mono" style={{ color: "var(--oxblood)" }}>
-                          {r.to}
-                          {r.unit || ""}
-                        </span>
-                      </div>
-                    </div>
-                    <span
-                      className={`chip ${
-                        r.severity === "critical"
-                          ? "chip-blood"
-                          : r.severity === "moderate"
-                            ? "chip-brass"
-                            : "chip-paper"
-                      }`}
+              {overview.regressions.length === 0 ? renderInlineEmptyState("No active regression alerts are open for this workspace.") : (
+                <div className="col" style={{ gap: 10 }}>
+                  {overview.regressions.map((regression, index) => (
+                    <div
+                      key={`${regression.skill}-${index}`}
+                      className="row between"
+                      style={{
+                        padding: "10px 12px",
+                        border: "1px solid var(--rule)",
+                        borderRadius: 5,
+                        background: "var(--linen)",
+                      }}
                     >
-                      {r.severity}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                      <div className="col" style={{ gap: 2 }}>
+                        <div className="row" style={{ gap: 8 }}>
+                          <span className="skill-name">{regression.skill}</span>
+                          <span className="dot-sep">·</span>
+                          <span className="muted" style={{ fontSize: 12.5 }}>
+                            {regression.metric}
+                          </span>
+                        </div>
+                        <div className="row" style={{ gap: 10, fontSize: 11.5 }}>
+                          <span className="mono subtle">
+                            {regression.from}
+                            {regression.unit || ""}
+                          </span>
+                          <Ic.Arrow style={{ width: 10, height: 10, color: "var(--faint)" }} />
+                          <span className="mono" style={{ color: "var(--oxblood)" }}>
+                            {regression.to}
+                            {regression.unit || ""}
+                          </span>
+                        </div>
+                      </div>
+                      <span
+                        className={`chip ${
+                          regression.severity === "critical"
+                            ? "chip-blood"
+                            : regression.severity === "moderate"
+                              ? "chip-brass"
+                              : "chip-paper"
+                        }`}
+                      >
+                        {regression.severity}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -252,7 +291,7 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
               <div className="row" style={{ gap: 10 }}>
                 <div className="panel-title">Repositories</div>
                 <span className="subtle" style={{ fontSize: 11.5 }}>
-                  {REPOS.length} connected
+                  {overview.counts.connectedRepositories} connected
                 </span>
               </div>
               <div className="panel-actions">
@@ -263,68 +302,72 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
               </div>
             </div>
             <div className="panel-bd tight">
-              <div className="list">
-                {REPOS.map((r) => (
-                  <div className="list-item" key={r.id}>
-                    <ProviderIcon p={r.provider} size={14} />
-                    <div className="col" style={{ gap: 2, minWidth: 0 }}>
-                      <div
-                        className="li-pri mono"
-                        style={{
-                          fontSize: 12.5,
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
-                        }}
-                      >
-                        {r.name}
+              {overview.repositories.length === 0 ? renderInlineEmptyState("No repositories are connected to this workspace yet.") : (
+                <div className="list">
+                  {overview.repositories.map((repository) => (
+                    <div className="list-item" key={repository.id}>
+                      <ProviderIcon p={repository.provider} size={14} />
+                      <div className="col" style={{ gap: 2, minWidth: 0 }}>
+                        <div
+                          className="li-pri mono"
+                          style={{
+                            fontSize: 12.5,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {repository.name}
+                        </div>
+                        <div className="li-sec">
+                          <Ic.Branch
+                            style={{ width: 9, height: 9, display: "inline", verticalAlign: "-1px", marginRight: 3 }}
+                          />
+                          {repository.branch} · {repository.skills} skills
+                        </div>
                       </div>
-                      <div className="li-sec">
-                        <Ic.Branch
-                          style={{ width: 9, height: 9, display: "inline", verticalAlign: "-1px", marginRight: 3 }}
-                        />
-                        {r.branch} · {r.skills} skills
+                      <div className="row" style={{ marginLeft: "auto", gap: 8 }}>
+                        {repository.status === "warn" ? (
+                          <span className="chip chip-brass">attention</span>
+                        ) : repository.status === "stale" ? (
+                          <span className="chip chip-blood">offline</span>
+                        ) : null}
+                        <span className="subtle" style={{ fontSize: 11 }}>
+                          {repository.lastSync}
+                        </span>
                       </div>
                     </div>
-                    <div className="row" style={{ marginLeft: "auto", gap: 8 }}>
-                      {r.status === "warn" ? (
-                        <span className="chip chip-brass">stale</span>
-                      ) : r.status === "stale" ? (
-                        <span className="chip chip-blood">offline</span>
-                      ) : null}
-                      <span className="subtle" style={{ fontSize: 11 }}>
-                        {r.lastSync}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           <div className="panel">
             <div className="panel-hd">
               <div className="panel-title">Audit highlights</div>
-              <Link className="btn btn-sm" href="/audit">
+              <Link className="btn btn-sm" href={auditHref}>
                 Full log
                 <Ic.ExternalLink className="b-icon" />
               </Link>
             </div>
             <div className="panel-bd">
-              <div className="tl">
-                {AUDIT.map((e, i) => (
-                  <div className="tl-item" key={i}>
-                    <span className={`tl-node ${e.node}`} />
-                    <div>
-                      <div className="tl-pri">
-                        <b>{e.who}</b> <span className="muted">{e.action.toLowerCase()}</span>{" "}
-                        <span>{e.target}</span>
+              {overview.auditHighlights.length === 0 ? renderInlineEmptyState("No tenant audit events have been recorded yet.") : (
+                <div className="tl">
+                  {overview.auditHighlights.map((event, index) => (
+                    <div className="tl-item" key={`${event.target}-${index}`}>
+                      <span className={`tl-node ${event.node}`} />
+                      <div>
+                        <div className="tl-pri">
+                          <b>{event.who}</b> <span className="muted">{event.action.toLowerCase()}</span>{" "}
+                          <span>{event.target}</span>
+                        </div>
                       </div>
+                      <div className="tl-meta">{event.when}</div>
                     </div>
-                    <div className="tl-meta">{e.when}</div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -336,23 +379,13 @@ export function OverviewScreen({ auth }: { auth: AuthOverview }) {
               </span>
             </div>
             <div className="panel-bd">
-              <div className="col" style={{ gap: 12 }}>
-                <ReleaseQueueItem
-                  name="Engineering RFC Reviewer"
-                  versionRef="v2.0.0"
-                  state="staging-to-production"
-                />
-                <ReleaseQueueItem
-                  name="Quarterly Earnings Summary"
-                  versionRef="v0.5.3-rc.1"
-                  state="draft-to-staging"
-                />
-                <ReleaseQueueItem
-                  name="PR Summarizer"
-                  versionRef="v1.8.3-rc.1"
-                  state="staging-to-production"
-                />
-              </div>
+              {overview.releaseQueue.length === 0 ? renderInlineEmptyState("No releases are queued for this workspace right now.") : (
+                <div className="col" style={{ gap: 12 }}>
+                  {overview.releaseQueue.map((item) => (
+                    <ReleaseQueueCard key={item.id} item={item} />
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -464,17 +497,9 @@ function AuthStatusPanel({ auth }: { auth: AuthOverview }) {
   );
 }
 
-function ReleaseQueueItem({
-  name,
-  versionRef,
-  state,
-}: {
-  name: string;
-  versionRef: string;
-  state: "draft-to-staging" | "staging-to-production" | string;
-}) {
+function ReleaseQueueCard({ item }: { item: ReleaseQueueRecord }) {
   const stages = ["draft", "staging", "production"];
-  const targetIdx = state === "draft-to-staging" ? 1 : state === "staging-to-production" ? 2 : 0;
+  const targetIdx = item.toEnv === "staging" ? 1 : item.toEnv === "production" ? 2 : 0;
   const sourceIdx = targetIdx - 1;
 
   return (
@@ -482,10 +507,18 @@ function ReleaseQueueItem({
       <div className="row between">
         <div>
           <div className="skill-name" style={{ fontSize: 13 }}>
-            {name}
+            {item.skill}
           </div>
-          <CommitRef commit={versionRef} />
+          <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <CommitRef commit={item.candidateCommit.slice(0, 7)} label={item.candidateRef} />
+            <span className="muted" style={{ fontSize: 11.5 }}>
+              {item.requested} · {item.when}
+            </span>
+          </div>
         </div>
+        <span className="chip chip-paper" style={{ fontSize: 11 }}>
+          {item.approvalsDone}/{item.approvalsRequired || 0} approvals
+        </span>
       </div>
       <div className="row" style={{ gap: 0 }}>
         {stages.map((s, i) => (
@@ -537,6 +570,18 @@ function ReleaseQueueItem({
             )}
           </Fragment>
         ))}
+      </div>
+      <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+        {item.targets.map((target) => (
+          <span key={target} className="chip chip-paper" style={{ fontSize: 11 }}>
+            {target}
+          </span>
+        ))}
+        {item.approvalsBlocked ? (
+          <span className="chip chip-brass" style={{ fontSize: 11 }}>
+            blocked by {item.approvalsBlocked}
+          </span>
+        ) : null}
       </div>
     </div>
   );

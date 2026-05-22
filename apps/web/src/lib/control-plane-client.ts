@@ -5,7 +5,13 @@ import type {
   SkillListResponse,
 } from "@savant/types";
 
+import {
+  extractWorkspaceSlugFromPathname,
+  withWorkspaceSlugQuery,
+} from "./tenant-paths.ts";
+
 type QueryValue = string | number | undefined;
+export type TenantRequestOptions = { signal?: AbortSignal; workspaceSlug?: string };
 
 export class ControlPlaneClientError extends Error {
   code: string;
@@ -87,19 +93,39 @@ async function fetchControlPlaneJson<T>(
   return payload as T;
 }
 
-export function fetchRepositoryList(options?: { signal?: AbortSignal }): Promise<RepositoryListResponse> {
+function resolveWorkspaceSlug(options?: { workspaceSlug?: string }): string | undefined {
+  if (options?.workspaceSlug) {
+    return options.workspaceSlug;
+  }
+
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  return extractWorkspaceSlugFromPathname(window.location.pathname) ?? undefined;
+}
+
+export function buildTenantScopedControlPlanePath(
+  path: string,
+  options?: { workspaceSlug?: string },
+): string {
+  const workspaceSlug = resolveWorkspaceSlug(options);
+  return workspaceSlug ? withWorkspaceSlugQuery(path, workspaceSlug) : path;
+}
+
+export function fetchRepositoryList(options?: TenantRequestOptions): Promise<RepositoryListResponse> {
   return fetchControlPlaneJson<RepositoryListResponse>(
-    "/api/repositories",
+    buildTenantScopedControlPlanePath("/api/repositories", options),
     options?.signal ? { signal: options.signal } : undefined,
   );
 }
 
 export function fetchRepositoryDetail(
   id: string,
-  options?: { signal?: AbortSignal },
+  options?: TenantRequestOptions,
 ): Promise<RepositoryDetailResponse> {
   return fetchControlPlaneJson<RepositoryDetailResponse>(
-    `/api/repositories/${encodeURIComponent(id)}`,
+    buildTenantScopedControlPlanePath(`/api/repositories/${encodeURIComponent(id)}`, options),
     options?.signal ? { signal: options.signal } : undefined,
   );
 }
@@ -112,16 +138,16 @@ export function fetchSkillList(
     team?: string | undefined;
     tier?: number | undefined;
   },
-  options?: { signal?: AbortSignal },
+  options?: TenantRequestOptions,
 ): Promise<SkillListResponse> {
   return fetchControlPlaneJson<SkillListResponse>(
-    `/api/skills${buildControlPlaneQuery({
+    buildTenantScopedControlPlanePath(`/api/skills${buildControlPlaneQuery({
       channel: filters?.channel,
       query: filters?.query,
       status: filters?.status,
       team: filters?.team,
       tier: filters?.tier,
-    })}`,
+    })}`, options),
     options?.signal ? { signal: options.signal } : undefined,
   );
 }

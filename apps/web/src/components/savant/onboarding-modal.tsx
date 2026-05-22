@@ -12,6 +12,7 @@ import type {
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
 import { useOnboarding } from "@/components/savant/onboarding-context";
+import { buildTenantScopedControlPlanePath } from "@/lib/control-plane-client";
 
 type Path = "connect" | "provision";
 type ProviderId = "github" | "gitlab" | "azure" | "bitbucket" | "selfhosted" | "more";
@@ -115,7 +116,7 @@ export function OnboardingModal() {
       setProvisionPreview({ status: "loading" });
 
       try {
-        const response = await fetch("/api/repositories/bootstrap-template", {
+        const response = await fetch(buildTenantScopedControlPlanePath("/api/repositories/bootstrap-template"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -180,7 +181,7 @@ export function OnboardingModal() {
       setConnectValidation({ status: "loading" });
 
       try {
-        const response = await fetch("/api/repositories/validate-contract", {
+        const response = await fetch(buildTenantScopedControlPlanePath("/api/repositories/validate-contract"), {
           method: "POST",
           headers: {
             "Content-Type": "application/json",

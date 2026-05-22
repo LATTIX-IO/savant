@@ -113,11 +113,11 @@ export default async function LandingPage() {
           <span className="stat-meta">▼ 0.6d vs prior month</span>
         </div>
         <div className="stat">
-          <span className="stat-label">Audit retention</span>
+          <span className="stat-label">First-pass acceptance</span>
           <span className="stat-value num">
-            7<span className="unit">yr</span>
+            81<span className="unit">%</span>
           </span>
-          <span className="stat-meta">immutable, SIEM-streamable</span>
+          <span className="stat-meta">▲ 0.4 pts in the last 30 days</span>
         </div>
       </section>
 
@@ -198,12 +198,12 @@ export default async function LandingPage() {
           </div>
           <div className="cap-head" data-reveal data-reveal-delay="1">
             <h2>
-              Six primitives. One coherent surface.
+              See the control plane your team actually works in.
             </h2>
             <p>
-              Repositories as the source of truth. Evaluations as the truth-keeper.
-              Approvals as the gate. Releases as the moment of commitment. Audit as
-              the receipt. Distribution as the reach.
+              The live overview brings repository sync, rubric outcomes,
+              approval queues, release state, and audit evidence into one
+              governed workspace view.
             </p>
           </div>
 

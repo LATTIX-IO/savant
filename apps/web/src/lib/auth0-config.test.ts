@@ -14,6 +14,7 @@ import {
   isProtectedDashboardPath,
   normalizeReturnToPath,
   resolveAuth0AppBaseUrl,
+  resolveAuth0Domain,
 } from "./auth0-config.ts";
 
 test("isConfiguredAuth0Value rejects empty and placeholder values", () => {
@@ -51,6 +52,13 @@ test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
 test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_BASE_URL is missing", () => {
   assert.equal(
     resolveAuth0AppBaseUrl({
+      AUTH0_BASE_URL: "https://legacy.savantrepo.com/",
+    }),
+    "https://legacy.savantrepo.com",
+  );
+
+  assert.equal(
+    resolveAuth0AppBaseUrl({
       NEXT_PUBLIC_APP_URL: "https://preview.savantrepo.com/",
     }),
     "https://preview.savantrepo.com",
@@ -78,6 +86,30 @@ test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_B
   assert.equal(
     hasAuth0EnvConfig({
       AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
+      AUTH0_CLIENT_ID: "client-id",
+      AUTH0_CLIENT_SECRET: "client-secret",
+      AUTH0_SECRET: "session-secret",
+    }),
+    true,
+  );
+});
+
+test("resolveAuth0Domain accepts both AUTH0_DOMAIN and AUTH0_ISSUER_BASE_URL", () => {
+  assert.equal(
+    resolveAuth0Domain({ AUTH0_DOMAIN: "dev-tenant.us.auth0.com" }),
+    "dev-tenant.us.auth0.com",
+  );
+
+  assert.equal(
+    resolveAuth0Domain({ AUTH0_ISSUER_BASE_URL: "https://login.savantrepo.com/" }),
+    "login.savantrepo.com",
+  );
+});
+
+test("hasAuth0EnvConfig accepts legacy Auth0 issuer/base-url environment aliases", () => {
+  assert.equal(
+    hasAuth0EnvConfig({
+      AUTH0_ISSUER_BASE_URL: "https://dev-tenant.us.auth0.com/",
       AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",
       AUTH0_SECRET: "session-secret",

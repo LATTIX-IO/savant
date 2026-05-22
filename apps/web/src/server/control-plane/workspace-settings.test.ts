@@ -68,6 +68,21 @@ test("buildPublicAuthSettings derives the base URL from Vercel production metada
   assert.equal(result.status, "development-bypass");
 });
 
+test("buildPublicAuthSettings accepts legacy Auth0 issuer and base-url env names", () => {
+  const result = buildPublicAuthSettings({
+    AUTH0_BASE_URL: "https://legacy.savantrepo.com",
+    AUTH0_ISSUER_BASE_URL: "https://login.savantrepo.com/",
+    AUTH0_CLIENT_ID: "client-id",
+    AUTH0_CLIENT_SECRET: "client-secret",
+    AUTH0_SECRET: "session-secret",
+  });
+
+  assert.equal(result.status, "configured");
+  assert.equal(result.appBaseUrl, "https://legacy.savantrepo.com");
+  assert.equal(result.tenantDomain, "login.savantrepo.com");
+  assert.equal(result.callbackUrl, "https://legacy.savantrepo.com/auth/callback");
+});
+
 test("buildPublicAuthSettings marks Auth0 as configured when the required secrets are present without a static app base url", () => {
   const result = buildPublicAuthSettings({
     AUTH0_DOMAIN: "dev-uzaxp03ophsygo6g.us.auth0.com",

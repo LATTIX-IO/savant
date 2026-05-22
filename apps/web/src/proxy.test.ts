@@ -3,7 +3,9 @@ import test from "node:test";
 
 const AUTH0_ENV_KEYS = [
   "APP_BASE_URL",
+  "AUTH0_BASE_URL",
   "AUTH0_DOMAIN",
+  "AUTH0_ISSUER_BASE_URL",
   "AUTH0_CLIENT_ID",
   "AUTH0_CLIENT_SECRET",
   "AUTH0_SECRET",
@@ -25,7 +27,9 @@ function snapshotEnv(): Record<ManagedEnvKey, string | undefined> {
   return {
     NODE_ENV: env.NODE_ENV,
     APP_BASE_URL: env.APP_BASE_URL,
+    AUTH0_BASE_URL: env.AUTH0_BASE_URL,
     AUTH0_DOMAIN: env.AUTH0_DOMAIN,
+    AUTH0_ISSUER_BASE_URL: env.AUTH0_ISSUER_BASE_URL,
     AUTH0_CLIENT_ID: env.AUTH0_CLIENT_ID,
     AUTH0_CLIENT_SECRET: env.AUTH0_CLIENT_SECRET,
     AUTH0_SECRET: env.AUTH0_SECRET,

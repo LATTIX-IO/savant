@@ -1,13 +1,14 @@
 export const AUTH0_ENV_KEYS = [
   "APP_BASE_URL",
+  "AUTH0_BASE_URL",
   "AUTH0_DOMAIN",
+  "AUTH0_ISSUER_BASE_URL",
   "AUTH0_CLIENT_ID",
   "AUTH0_CLIENT_SECRET",
   "AUTH0_SECRET",
 ] as const;
 
 const AUTH0_REQUIRED_DIRECT_KEYS = [
-  "AUTH0_DOMAIN",
   "AUTH0_CLIENT_ID",
   "AUTH0_CLIENT_SECRET",
   "AUTH0_SECRET",
@@ -15,10 +16,16 @@ const AUTH0_REQUIRED_DIRECT_KEYS = [
 
 const AUTH0_APP_BASE_URL_FALLBACK_KEYS = [
   "APP_BASE_URL",
+  "AUTH0_BASE_URL",
   "NEXT_PUBLIC_APP_URL",
   "NEXT_PUBLIC_SITE_URL",
   "VERCEL_PROJECT_PRODUCTION_URL",
   "VERCEL_URL",
+] as const;
+
+const AUTH0_DOMAIN_FALLBACK_KEYS = [
+  "AUTH0_DOMAIN",
+  "AUTH0_ISSUER_BASE_URL",
 ] as const;
 
 export type Auth0EnvKey = (typeof AUTH0_ENV_KEYS)[number];
@@ -58,7 +65,8 @@ export function isConfiguredAuth0Value(value: string | undefined): boolean {
 }
 
 export function hasAuth0EnvConfig(env: Auth0Env): boolean {
-  return AUTH0_REQUIRED_DIRECT_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
+  return Boolean(resolveAuth0Domain(env))
+    && AUTH0_REQUIRED_DIRECT_KEYS.every((key) => isConfiguredAuth0Value(env[key]));
 }
 
 function normalizeAuth0AppBaseUrlCandidate(value: string): string {
@@ -69,6 +77,23 @@ function normalizeAuth0AppBaseUrlCandidate(value: string): string {
   }
 
   return `https://${trimmed}`;
+}
+
+function normalizeAuth0DomainCandidate(value: string): string | null {
+  const trimmed = value.trim().replace(/\/+$/, "");
+
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    const parsed = new URL(withScheme);
+
+    return parsed.hostname || null;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveAuth0AppBaseUrl(env: Auth0Env): string | null {
@@ -84,6 +109,27 @@ export function resolveAuth0AppBaseUrl(env: Auth0Env): string | null {
     }
 
     return normalizeAuth0AppBaseUrlCandidate(value);
+  }
+
+  return null;
+}
+
+export function resolveAuth0Domain(env: Auth0Env): string | null {
+  for (const key of AUTH0_DOMAIN_FALLBACK_KEYS) {
+    const value = env[key];
+
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    if (!isConfiguredAuth0Value(value)) {
+      continue;
+    }
+
+    const normalized = normalizeAuth0DomainCandidate(value);
+    if (normalized) {
+      return normalized;
+    }
   }
 
   return null;

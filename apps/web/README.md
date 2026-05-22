@@ -31,7 +31,7 @@ All dashboard routes are protected by default and redirect to `/auth/login` when
 
 1. Copy `../../.env.example` into your local `.env.local` (or update the existing one without exposing secrets).
 2. Fill in the real `AUTH0_CLIENT_SECRET` and a 64-character hex `AUTH0_SECRET`.
-3. Set `APP_BASE_URL=https://savantrepo.com` when you have a single stable production origin. For preview or host-inferred deployments, the app can also derive the public origin from `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_URL`, or the incoming request host at runtime.
+3. Set `APP_BASE_URL=https://savantrepo.com` when you have a single stable production origin. If your deployment still uses older Auth0 variable names, Savant also accepts `AUTH0_BASE_URL` and `AUTH0_ISSUER_BASE_URL` and normalizes them to the current SDK format at startup. For preview or host-inferred deployments, the app can also derive the public origin from `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_URL`, or the incoming request host at runtime.
 
 On Vercel, Savant will fall back to `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, and then `VERCEL_URL` when `APP_BASE_URL` is missing. The underlying Auth0 SDK can also infer the base URL from the current request host, but setting `APP_BASE_URL` explicitly is still the safest production configuration for a single stable domain.
 

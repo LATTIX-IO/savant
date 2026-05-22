@@ -10,6 +10,7 @@ import {
   hasAuth0EnvConfig,
   isConfiguredAuth0Value,
   resolveAuth0AppBaseUrl,
+  resolveAuth0Domain,
   type Auth0Env,
 } from "../../lib/auth0-config.ts";
 import { buildWorkspaceUrl } from "../../lib/workspace-url.ts";
@@ -210,7 +211,7 @@ export function mergeTenantWorkspaceSettings(
 
 export function buildPublicAuthSettings(env: Auth0Env = process.env): PublicAuthProviderSettings {
   const appBaseUrl = resolveAuth0AppBaseUrl(env);
-  const tenantDomain = readConfiguredEnvValue(env, "AUTH0_DOMAIN");
+  const tenantDomain = resolveAuth0Domain(env);
   const clientId = readConfiguredEnvValue(env, "AUTH0_CLIENT_ID");
 
   const hasPublicConfig = Boolean(appBaseUrl || tenantDomain || clientId);

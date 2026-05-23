@@ -210,16 +210,16 @@ export function buildOnboardingStatusView(
         ...session,
         heading: "Finalizing your workspace.",
         body:
-          "Stripe confirmed your checkout. We're now provisioning your tenant and syncing billing identifiers.",
+          "Checkout is confirmed. We're now provisioning your tenant and syncing billing details.",
         canEnterDashboard: false,
         isTerminal: false,
       };
     case "checkout_pending":
       return {
         ...session,
-        heading: "Waiting for Stripe confirmation.",
+        heading: "Waiting for checkout confirmation.",
         body:
-          "We're waiting for Stripe to confirm your checkout before provisioning the workspace.",
+          "We're waiting for checkout confirmation before provisioning the workspace.",
         canEnterDashboard: false,
         isTerminal: false,
       };

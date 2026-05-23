@@ -6,6 +6,7 @@ import {
   checkoutLineItemFor,
   isConfiguredStripeValue,
   priceIdFor,
+  resolveCheckoutBaseUrl,
   stripeMode,
   stripePublishableKey,
   stripeWebhookSecret,
@@ -85,4 +86,37 @@ test("appUrl prefers explicit Stripe return URLs and falls back to the app base 
     "https://savantrepo.com",
   );
   assert.equal(appUrl({}), "http://localhost:3000");
+});
+
+test("resolveCheckoutBaseUrl prefers the live forwarded request origin over static env values", () => {
+  const request = {
+    url: "https://internal-vercel-host.example/api/billing/checkout",
+    headers: new Headers({
+      "x-forwarded-proto": "https",
+      "x-forwarded-host": "app.savantrepo.com",
+      host: "internal-vercel-host.example",
+    }),
+  };
+
+  assert.equal(
+    resolveCheckoutBaseUrl(request, {
+      APP_BASE_URL: "https://stale-config.savantrepo.com",
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000",
+    }),
+    "https://app.savantrepo.com",
+  );
+});
+
+test("resolveCheckoutBaseUrl falls back to appUrl when request origin cannot be derived", () => {
+  assert.equal(
+    resolveCheckoutBaseUrl(
+      {
+        url: "not-a-valid-url",
+      },
+      {
+        APP_BASE_URL: "https://savantrepo.com",
+      },
+    ),
+    "https://savantrepo.com",
+  );
 });

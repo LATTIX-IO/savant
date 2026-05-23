@@ -128,7 +128,7 @@ export default async function OnboardingSuccessPage({
           <div className="note" style={{ maxWidth: 460 }}>
             <Ic.Clock className="n-icon" />
             <span>
-              Local sandbox mode simulated Auth0 and Stripe for this run. No external billing call was created.
+              Local sandbox mode simulated login and checkout for this run. No external billing call was created.
             </span>
           </div>
         ) : null}

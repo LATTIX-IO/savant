@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 
+import { resolveRequestOrigin } from "./auth0-diagnostics.ts";
 import { readConfiguredEnvValue, type Auth0Env } from "./auth0-config.ts";
 
 /**
@@ -215,4 +216,33 @@ export function appUrl(env: StripeEnv = process.env): string {
   }
 
   return "http://localhost:3000";
+}
+
+export function resolveCheckoutBaseUrl(
+  input: {
+    url: string;
+    headers?: Headers | undefined;
+  },
+  env: StripeEnv = process.env,
+): string {
+  const requestOrigin = resolveRequestOrigin({
+    ...(input.headers?.has("x-forwarded-proto")
+      ? { forwardedProto: input.headers.get("x-forwarded-proto") }
+      : {}),
+    ...(input.headers?.has("x-forwarded-host")
+      ? { forwardedHost: input.headers.get("x-forwarded-host") }
+      : {}),
+    ...(input.headers?.has("host") ? { host: input.headers.get("host") } : {}),
+    ...(env.NODE_ENV ? { nodeEnv: env.NODE_ENV } : {}),
+  });
+
+  if (requestOrigin) {
+    return requestOrigin;
+  }
+
+  try {
+    return new URL(input.url).origin;
+  } catch {
+    return appUrl(env);
+  }
 }

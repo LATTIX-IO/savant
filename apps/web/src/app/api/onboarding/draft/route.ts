@@ -47,7 +47,7 @@ export async function PUT(request: Request) {
 
   if (!identity) {
     return NextResponse.json(
-      createApiErrorResponse("auth_required", "Sign in with Auth0 before saving onboarding progress."),
+      createApiErrorResponse("auth_required", "Login before saving onboarding progress."),
       { status: 401 },
     );
   }

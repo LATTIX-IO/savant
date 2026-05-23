@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Create your Savant workspace",
   description:
-    "Start a 14-day Savant trial. Sign in with Auth0 and configure your workspace in under a minute.",
+    "Start a 14-day Savant trial. Sign up and configure your workspace in under a minute.",
 };
 
 type SignupSearchParams = {

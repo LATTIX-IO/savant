@@ -228,7 +228,7 @@ export function OnboardingWizard({
           <div className="note" style={{ marginTop: "auto" }}>
             <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
             <span style={{ fontSize: 11.5 }}>
-              Payment handled by Stripe. Cancel anytime during the 14-day trial and you
+              Secure payment is handled during checkout. Cancel anytime during the 14-day trial and you
               won&apos;t be charged.
             </span>
           </div>
@@ -240,7 +240,7 @@ export function OnboardingWizard({
           <div className="note">
             <Ic.Clock className="n-icon" />
             <span>
-              Local sandbox mode is active. We&apos;ll simulate Auth0 identity and hosted checkout so you can test the full onboarding flow in local development.
+              Local sandbox mode is active. We&apos;ll simulate login and hosted checkout so you can test the full onboarding flow in local development.
             </span>
           </div>
         ) : null}
@@ -249,7 +249,7 @@ export function OnboardingWizard({
           <div className="note brass">
             <Ic.Warn className="n-icon" />
             <span>
-              Stripe checkout was cancelled. Your selections are still here when you&apos;re ready.
+              Checkout was cancelled. Your selections are still here when you&apos;re ready.
             </span>
           </div>
         ) : null}
@@ -413,7 +413,7 @@ export function OnboardingWizard({
                   </>
                 ) : (
                   <>
-                    {isSandbox ? "Complete sandbox checkout" : "Continue to Stripe"}
+                    {isSandbox ? "Complete sandbox checkout" : "Continue to Checkout"}
                     <Ic.ChevR className="b-icon" />
                   </>
                 )}

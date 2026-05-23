@@ -8,9 +8,9 @@ import { isOnboardingSandboxEnabled } from "@/lib/onboarding-runtime";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Sign in to Savant",
+  title: "Login to Savant",
   description:
-    "Continue to Savant with Auth0. Sign in to access your dashboard, onboarding, and protected workspace routes.",
+    "Login to access your dashboard, onboarding, and protected workspace routes.",
 };
 
 type SigninSearchParams = {

@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
   if (!identity) {
     return NextResponse.json(
-      createApiErrorResponse("auth_required", "Sign in with Auth0 before checking onboarding status."),
+      createApiErrorResponse("auth_required", "Login before checking onboarding status."),
       { status: 401 },
     );
   }

@@ -109,7 +109,7 @@ export function OnboardingSuccessState({
           <div className="note" style={{ maxWidth: 440 }}>
             <Ic.Clock className="n-icon" />
             <span>
-              Local sandbox mode simulated Auth0 and Stripe for this onboarding run. No external checkout was created.
+              Local sandbox mode simulated login and checkout for this onboarding run. No external checkout was created.
             </span>
           </div>
         ) : null}

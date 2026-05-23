@@ -232,7 +232,7 @@ export async function saveOnboardingDraft(
   if (existingTenant) {
     throw new OnboardingStoreError(
       "tenant_already_exists",
-      "This Auth0 account already belongs to a provisioned Savant tenant.",
+      "This login already belongs to a provisioned Savant workspace.",
       409,
     );
   }
@@ -328,7 +328,7 @@ export async function beginCheckoutForOnboarding(
   if (existingTenant) {
     throw new OnboardingStoreError(
       "tenant_already_exists",
-      "This Auth0 account already belongs to a provisioned Savant tenant.",
+      "This login already belongs to a provisioned Savant workspace.",
       409,
     );
   }

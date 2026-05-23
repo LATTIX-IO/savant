@@ -7,7 +7,13 @@ import {
   resolveOnboardingRuntimeAccess,
   sandboxCheckoutOutcome,
 } from "@/lib/onboarding-runtime";
-import { appUrl, checkoutLineItemFor, isStripeConfigured, stripe, stripeMode } from "@/lib/stripe";
+import {
+  checkoutLineItemFor,
+  isStripeConfigured,
+  resolveCheckoutBaseUrl,
+  stripe,
+  stripeMode,
+} from "@/lib/stripe";
 import { buildWorkspaceUrl } from "@/lib/workspace-url";
 import { createApiErrorResponse } from "@/server/control-plane/control-plane-response";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
@@ -54,7 +60,7 @@ export async function POST(request: Request) {
 
   if (!identity) {
     return NextResponse.json(
-      createApiErrorResponse("auth_required", "Sign in with Auth0 before starting Stripe checkout."),
+      createApiErrorResponse("auth_required", "Login before starting checkout."),
       { status: 401 },
     );
   }
@@ -63,13 +69,13 @@ export async function POST(request: Request) {
   if (!runtimeAccess.isSandbox && (!isStripeConfigured || !stripe)) {
     return NextResponse.json(
       createApiErrorResponse(
-        "stripe_not_configured",
-        "Stripe is not configured. Set STRIPE_SECRET_KEY to enable hosted checkout.",
+        "checkout_unavailable",
+        "Checkout is not available right now. Please try again later.",
       ),
       { status: 503 },
     );
   }
-  const baseUrl = runtimeAccess.isSandbox ? new URL(request.url).origin : appUrl();
+  const baseUrl = resolveCheckoutBaseUrl(request);
   const cancelUrl = `${baseUrl}/onboarding?cycle=${validatedDraft.value.cycle}&seats=${validatedDraft.value.seats}&cancelled=1`;
   const workspaceUrl = buildWorkspaceUrl(validatedDraft.value.workspaceSlug);
   let onboardingSession = null;
@@ -165,8 +171,8 @@ export async function POST(request: Request) {
   if (!stripeClient) {
     return NextResponse.json(
       createApiErrorResponse(
-        "stripe_not_configured",
-        "Stripe is not configured. Set STRIPE_SECRET_KEY to enable hosted checkout.",
+        "checkout_unavailable",
+        "Checkout is not available right now. Please try again later.",
       ),
       { status: 503 },
     );
@@ -213,14 +219,14 @@ export async function POST(request: Request) {
         await recordCheckoutFailure(
           onboardingSession.id,
           "stripe_checkout_failed",
-          "Unable to start Stripe checkout right now.",
+          "Unable to start checkout right now.",
         );
       }
 
       return NextResponse.json(
         createApiErrorResponse(
-          "stripe_checkout_missing_url",
-          "Stripe did not return a checkout URL.",
+          "checkout_missing_url",
+          "Checkout did not return a redirect URL.",
         ),
         { status: 502 },
       );
@@ -238,14 +244,14 @@ export async function POST(request: Request) {
       await recordCheckoutFailure(
         onboardingSession.id,
         "stripe_checkout_failed",
-        "Unable to start Stripe checkout right now.",
+        "Unable to start checkout right now.",
       );
     }
 
     return NextResponse.json(
       createApiErrorResponse(
-        "stripe_checkout_failed",
-        "Unable to start Stripe checkout. Please try again.",
+        "checkout_failed",
+        "Unable to start checkout. Please try again.",
       ),
       { status: 502 },
     );

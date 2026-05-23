@@ -112,6 +112,13 @@ export function getAuthCallbackFailureHint(failure: AuthCallbackFailure | null):
     return "Auth0 rejected the authorization code. Retry with a fresh login, then verify APP_BASE_URL and the Allowed Callback URLs exactly match the deployed origin.";
   }
 
+  if (
+    failure.sdkErrorCode === "authorization_code_grant_error"
+    && failure.oauthErrorCode === "invalid_request"
+  ) {
+    return "Auth0 rejected Savant's token request as malformed. Re-save AUTH0_CLIENT_SECRET in the deployment without extra whitespace, then verify the Auth0 application is a Regular Web Application using client_secret_post before redeploying.";
+  }
+
   if (failure.sdkErrorCode === "invalid_state" || failure.sdkErrorCode === "missing_state") {
     return "The callback returned without a matching transaction cookie. Retry from the same browser session and verify cookies are not being stripped between /auth/login and /auth/callback.";
   }

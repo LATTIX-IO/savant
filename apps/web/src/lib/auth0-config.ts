@@ -43,19 +43,23 @@ export type AuthStatusSource = "signin" | "signup" | "onboarding" | "unavailable
 
 const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 
+export function readConfiguredEnvValue(value: string | undefined): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+
+  return isConfiguredAuth0Value(trimmed) ? trimmed : null;
+}
+
 export function resolveAuth0ClientId(env: Auth0Env): string | null {
   for (const key of AUTH0_CLIENT_ID_FALLBACK_KEYS) {
-    const value = env[key];
+    const configuredValue = readConfiguredEnvValue(env[key]);
 
-    if (typeof value !== "string") {
-      continue;
+    if (configuredValue) {
+      return configuredValue;
     }
-
-    if (!isConfiguredAuth0Value(value)) {
-      continue;
-    }
-
-    return value.trim();
   }
 
   return null;
@@ -126,13 +130,9 @@ function normalizeAuth0DomainCandidate(value: string): string | null {
 
 export function resolveAuth0AppBaseUrl(env: Auth0Env): string | null {
   for (const key of AUTH0_APP_BASE_URL_FALLBACK_KEYS) {
-    const value = env[key];
+    const value = readConfiguredEnvValue(env[key]);
 
-    if (typeof value !== "string") {
-      continue;
-    }
-
-    if (!isConfiguredAuth0Value(value)) {
+    if (!value) {
       continue;
     }
 
@@ -144,13 +144,9 @@ export function resolveAuth0AppBaseUrl(env: Auth0Env): string | null {
 
 export function resolveAuth0Domain(env: Auth0Env): string | null {
   for (const key of AUTH0_DOMAIN_FALLBACK_KEYS) {
-    const value = env[key];
+    const value = readConfiguredEnvValue(env[key]);
 
-    if (typeof value !== "string") {
-      continue;
-    }
-
-    if (!isConfiguredAuth0Value(value)) {
+    if (!value) {
       continue;
     }
 

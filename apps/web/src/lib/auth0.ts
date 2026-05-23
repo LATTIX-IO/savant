@@ -4,6 +4,7 @@ import { Auth0Client } from "@auth0/nextjs-auth0/server";
 import {
 	hasAuth0EnvConfig,
 	normalizeReturnToPath,
+	readConfiguredEnvValue,
 	resolveAuth0AppBaseUrl,
 	resolveAuth0ClientId,
 	resolveAuth0Domain,
@@ -15,7 +16,9 @@ import {
 
 const resolvedAuth0AppBaseUrl = resolveAuth0AppBaseUrl(process.env);
 const resolvedAuth0ClientId = resolveAuth0ClientId(process.env);
+const resolvedAuth0ClientSecret = readConfiguredEnvValue(process.env.AUTH0_CLIENT_SECRET);
 const resolvedAuth0Domain = resolveAuth0Domain(process.env);
+const resolvedAuth0Secret = readConfiguredEnvValue(process.env.AUTH0_SECRET);
 
 if (resolvedAuth0Domain && process.env.AUTH0_DOMAIN !== resolvedAuth0Domain) {
 	process.env.AUTH0_DOMAIN = resolvedAuth0Domain;
@@ -25,8 +28,16 @@ if (resolvedAuth0ClientId && process.env.AUTH0_CLIENT_ID !== resolvedAuth0Client
 	process.env.AUTH0_CLIENT_ID = resolvedAuth0ClientId;
 }
 
+if (resolvedAuth0ClientSecret && process.env.AUTH0_CLIENT_SECRET !== resolvedAuth0ClientSecret) {
+	process.env.AUTH0_CLIENT_SECRET = resolvedAuth0ClientSecret;
+}
+
 if (resolvedAuth0AppBaseUrl && process.env.APP_BASE_URL !== resolvedAuth0AppBaseUrl) {
 	process.env.APP_BASE_URL = resolvedAuth0AppBaseUrl;
+}
+
+if (resolvedAuth0Secret && process.env.AUTH0_SECRET !== resolvedAuth0Secret) {
+	process.env.AUTH0_SECRET = resolvedAuth0Secret;
 }
 
 export const isAuth0Configured = hasAuth0EnvConfig(process.env);

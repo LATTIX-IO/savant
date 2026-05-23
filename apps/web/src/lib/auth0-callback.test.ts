@@ -63,4 +63,12 @@ test("getAuthCallbackFailureHint maps invalid_client to a deployment-secret acti
     }) ?? "",
     /transaction cookie/i,
   );
+
+  assert.match(
+    getAuthCallbackFailureHint({
+      sdkErrorCode: "authorization_code_grant_error",
+      oauthErrorCode: "invalid_request",
+    }) ?? "",
+    /client_secret_post|AUTH0_CLIENT_SECRET/i,
+  );
 });

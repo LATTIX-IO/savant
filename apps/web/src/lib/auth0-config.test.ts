@@ -14,6 +14,7 @@ import {
   isLocalDevHostname,
   isProtectedDashboardPath,
   normalizeReturnToPath,
+  readConfiguredEnvValue,
   resolveAuth0AppBaseUrl,
   resolveAuth0ClientId,
   resolveAuth0Domain,
@@ -27,6 +28,11 @@ test("isConfiguredAuth0Value rejects empty and placeholder values", () => {
   assert.equal(isConfiguredAuth0Value("placeholder-local-secret"), false);
   assert.equal(isConfiguredAuth0Value("REPLACE_ME"), false);
   assert.equal(isConfiguredAuth0Value("dev-tenant.us.auth0.com"), true);
+});
+
+test("readConfiguredEnvValue trims surrounding whitespace from configured values", () => {
+  assert.equal(readConfiguredEnvValue("  client-secret\n"), "client-secret");
+  assert.equal(readConfiguredEnvValue("   <AUTH0_CLIENT_SECRET>   "), null);
 });
 
 test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {

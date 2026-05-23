@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 
-import { resolveAuth0AppBaseUrl, type Auth0Env } from "./auth0-config.ts";
+import { readConfiguredEnvValue, type Auth0Env } from "./auth0-config.ts";
 
 /**
  * Server-only Stripe client.
@@ -27,6 +27,16 @@ type CheckoutSessionLineItem = NonNullable<
 
 const INLINE_STRIPE_PRODUCT_NAME = "Savant Seat";
 const INLINE_STRIPE_CURRENCY = "usd";
+const SERVER_APP_URL_ENV_KEYS = [
+  "APP_BASE_URL",
+  "AUTH0_BASE_URL",
+  "VERCEL_PROJECT_PRODUCTION_URL",
+  "VERCEL_URL",
+] as const;
+const PUBLIC_APP_URL_ENV_KEYS = [
+  "NEXT_PUBLIC_APP_URL",
+  "NEXT_PUBLIC_SITE_URL",
+] as const;
 
 const BILLING_CYCLE_CONFIG: Record<
   BillingCycle,
@@ -144,6 +154,21 @@ export function priceIdFor(cycle: BillingCycle, env: StripeEnv = process.env): s
   return readConfiguredStripeEnvValue(env, BILLING_CYCLE_CONFIG[cycle].priceEnvKey);
 }
 
+function resolveConfiguredAppUrl(
+  env: StripeEnv,
+  keys: readonly string[],
+): string | null {
+  for (const key of keys) {
+    const value = readConfiguredEnvValue(env[key]);
+
+    if (value) {
+      return normalizeStripeUrlCandidate(value);
+    }
+  }
+
+  return null;
+}
+
 export function checkoutLineItemFor(
   cycle: BillingCycle,
   seats: number,
@@ -177,12 +202,17 @@ export function checkoutLineItemFor(
 }
 
 export function appUrl(env: StripeEnv = process.env): string {
-  const publicUrl = readConfiguredStripeEnvValue(env, "NEXT_PUBLIC_APP_URL")
-    ?? readConfiguredStripeEnvValue(env, "NEXT_PUBLIC_SITE_URL");
+  const serverUrl = resolveConfiguredAppUrl(env, SERVER_APP_URL_ENV_KEYS);
 
-  if (publicUrl) {
-    return normalizeStripeUrlCandidate(publicUrl);
+  if (serverUrl) {
+    return serverUrl;
   }
 
-  return resolveAuth0AppBaseUrl(env) ?? "http://localhost:3000";
+  const publicUrl = resolveConfiguredAppUrl(env, PUBLIC_APP_URL_ENV_KEYS);
+
+  if (publicUrl) {
+    return publicUrl;
+  }
+
+  return "http://localhost:3000";
 }

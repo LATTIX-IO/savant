@@ -77,5 +77,12 @@ test("checkoutLineItemFor falls back to inline recurring price data", () => {
 test("appUrl prefers explicit Stripe return URLs and falls back to the app base url", () => {
   assert.equal(appUrl({ NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000/" }), "http://127.0.0.1:3000");
   assert.equal(appUrl({ APP_BASE_URL: "https://savantrepo.com" }), "https://savantrepo.com");
+  assert.equal(
+    appUrl({
+      APP_BASE_URL: "https://savantrepo.com",
+      NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000/",
+    }),
+    "https://savantrepo.com",
+  );
   assert.equal(appUrl({}), "http://localhost:3000");
 });

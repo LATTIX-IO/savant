@@ -50,6 +50,7 @@ export const auth0 = isAuth0Configured ? new Auth0Client({
 			console.error("[auth/callback] failed", {
 				sdkErrorCode: failure.sdkErrorCode ?? "unknown",
 				oauthErrorCode: failure.oauthErrorCode,
+				oauthErrorDescription: failure.oauthErrorDescription,
 				responseType: ctx.responseType ?? null,
 				challengeMode: ctx.challengeMode ?? "redirect",
 				appBaseUrlConfigured: Boolean(ctx.appBaseUrl || resolvedAuth0AppBaseUrl),
@@ -81,6 +82,7 @@ export const auth0 = isAuth0Configured ? new Auth0Client({
 				returnTo: ctx.returnTo,
 				sdkErrorCode: failure.sdkErrorCode,
 				oauthErrorCode: failure.oauthErrorCode,
+				oauthErrorDescription: failure.oauthErrorDescription,
 			});
 
 			return NextResponse.redirect(new URL(failureHref, appBaseUrl));

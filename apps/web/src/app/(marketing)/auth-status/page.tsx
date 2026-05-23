@@ -28,6 +28,7 @@ export const metadata = {
 type AuthStatusSearchParams = {
   callbackError?: string;
   oauthError?: string;
+  oauthMessage?: string;
   source?: string;
   returnTo?: string;
 };
@@ -231,6 +232,11 @@ export default async function AuthStatusPage({
                   <span className="chip chip-brass">oauth: {callbackFailure.oauthErrorCode}</span>
                 ) : null}
               </div>
+              {callbackFailure.oauthErrorDescription ? (
+                <div style={{ color: "var(--ink-3)", fontSize: 12.5, lineHeight: 1.55 }}>
+                  Auth0 said: {callbackFailure.oauthErrorDescription}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : null}

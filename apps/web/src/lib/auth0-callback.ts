@@ -4,12 +4,15 @@ const SAFE_AUTH_CALLBACK_CODE = /^[a-z0-9_:-]{1,64}$/i;
 
 type ErrorWithCode = {
   code?: unknown;
+  error_description?: unknown;
+  message?: unknown;
   cause?: unknown;
 };
 
 export type AuthCallbackFailure = {
   sdkErrorCode: string | null;
   oauthErrorCode: string | null;
+  oauthErrorDescription: string | null;
 };
 
 function sanitizeAuthCallbackCode(value: unknown): string | null {
@@ -24,6 +27,24 @@ function sanitizeAuthCallbackCode(value: unknown): string | null {
   }
 
   return normalized;
+}
+
+function sanitizeAuthCallbackDescription(value: unknown): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.replace(/\s+/g, " ").trim();
+
+  if (!normalized || /[\u0000-\u001f\u007f<>`]/.test(normalized)) {
+    return null;
+  }
+
+  if (normalized.length <= 200) {
+    return normalized;
+  }
+
+  return `${normalized.slice(0, 197).trimEnd()}...`;
 }
 
 function readErrorCode(error: unknown): string | null {
@@ -42,31 +63,46 @@ function readErrorCause(error: unknown): unknown {
   return (error as ErrorWithCode).cause;
 }
 
+function readErrorDescription(error: unknown): string | null {
+  if (typeof error !== "object" || error === null) {
+    return null;
+  }
+
+  return sanitizeAuthCallbackDescription((error as ErrorWithCode).error_description)
+    ?? sanitizeAuthCallbackDescription((error as ErrorWithCode).message);
+}
+
 export function extractAuthCallbackFailure(error: unknown): AuthCallbackFailure {
   const sdkErrorCode = readErrorCode(error);
   const directCause = readErrorCause(error);
-  const oauthErrorCode = readErrorCode(directCause) ?? readErrorCode(readErrorCause(directCause));
+  const nestedCause = readErrorCause(directCause);
+  const oauthErrorCode = readErrorCode(directCause) ?? readErrorCode(nestedCause);
+  const oauthErrorDescription = readErrorDescription(directCause) ?? readErrorDescription(nestedCause);
 
   return {
     sdkErrorCode,
     oauthErrorCode,
+    oauthErrorDescription,
   };
 }
 
 export function readAuthCallbackFailureParams(params: {
   callbackError?: string | undefined;
   oauthError?: string | undefined;
+  oauthMessage?: string | undefined;
 }): AuthCallbackFailure | null {
   const sdkErrorCode = sanitizeAuthCallbackCode(params.callbackError);
   const oauthErrorCode = sanitizeAuthCallbackCode(params.oauthError);
+  const oauthErrorDescription = sanitizeAuthCallbackDescription(params.oauthMessage);
 
-  if (!sdkErrorCode && !oauthErrorCode) {
+  if (!sdkErrorCode && !oauthErrorCode && !oauthErrorDescription) {
     return null;
   }
 
   return {
     sdkErrorCode,
     oauthErrorCode,
+    oauthErrorDescription,
   };
 }
 
@@ -74,6 +110,7 @@ export function buildAuthCallbackFailureHref({
   returnTo,
   sdkErrorCode,
   oauthErrorCode,
+  oauthErrorDescription,
 }: AuthCallbackFailure & {
   returnTo?: string | undefined;
 }): string {
@@ -88,6 +125,10 @@ export function buildAuthCallbackFailureHref({
 
   if (oauthErrorCode) {
     search.set("oauthError", oauthErrorCode);
+  }
+
+  if (oauthErrorDescription) {
+    search.set("oauthMessage", oauthErrorDescription);
   }
 
   return `/auth-status?${search.toString()}`;
@@ -116,6 +157,27 @@ export function getAuthCallbackFailureHint(failure: AuthCallbackFailure | null):
     failure.sdkErrorCode === "authorization_code_grant_error"
     && failure.oauthErrorCode === "invalid_request"
   ) {
+    const normalizedDescription = failure.oauthErrorDescription?.toLowerCase() ?? null;
+
+    if (normalizedDescription?.includes("redirect_uri")) {
+      return "Auth0 rejected the callback URL used during the token exchange. Verify APP_BASE_URL and the Auth0 Allowed Callback URLs exactly match https://savantrepo.com/auth/callback before redeploying.";
+    }
+
+    if (
+      normalizedDescription?.includes("grant type")
+      && normalizedDescription.includes("authorization_code")
+    ) {
+      return "Auth0 is rejecting the authorization_code grant for this application. Verify the client is a Regular Web Application and that the Authorization Code grant is enabled before redeploying.";
+    }
+
+    if (
+      normalizedDescription?.includes("unauthorized")
+      || normalizedDescription?.includes("client secret")
+      || normalizedDescription?.includes("client authentication")
+    ) {
+      return "Auth0 is rejecting Savant's confidential-client credentials at the token endpoint. Rotate AUTH0_CLIENT_SECRET, then verify the Auth0 application is a Regular Web Application using client_secret_post before redeploying.";
+    }
+
     return "Auth0 rejected Savant's token request as malformed. Re-save AUTH0_CLIENT_SECRET in the deployment as the raw secret value with no quotes or extra whitespace, then verify the Auth0 application is a Regular Web Application using client_secret_post before redeploying.";
   }
 

@@ -5,6 +5,7 @@ import {
   buildPublicAuthSettings,
   buildWorkspaceSettingsPayload,
   mergeTenantWorkspaceSettings,
+  resolveDefaultWorkspaceName,
 } from "./workspace-settings.ts";
 
 test("buildPublicAuthSettings marks partial local Auth0 setup as development bypass without exposing secrets", () => {
@@ -30,16 +31,28 @@ test("buildPublicAuthSettings marks partial local Auth0 setup as development byp
   });
 });
 
-test("buildWorkspaceSettingsPayload returns stable AI connection summaries and cloned member groups", () => {
+test("resolveDefaultWorkspaceName falls back to a generic local workspace label", () => {
+  assert.equal(resolveDefaultWorkspaceName({}), "Local Workspace");
+  assert.equal(
+    resolveDefaultWorkspaceName({ DEVELOPMENT_WORKSPACE_NAME: "Finance Sandbox" }),
+    "Finance Sandbox",
+  );
+});
+
+test("buildWorkspaceSettingsPayload avoids inventing local members or AI connections when no DB snapshot exists", () => {
   const result = buildWorkspaceSettingsPayload({});
 
-  assert.equal(result.aiConnections.length, 3);
-  assert.equal(result.aiConnections[0]?.aiConnectionUuid, "9f1bbfb0-7610-4c6b-a38d-92b2d5fbc101");
-  assert.equal(result.aiConnections[0]?.isDefaultExecution, true);
-  assert.equal(result.aiConnections[1]?.isDefaultJudge, true);
-  assert.equal(result.general.workspaceSlug, "wexler-hahn");
-  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/wexler-hahn");
-  assert.equal(result.members[0]?.groups === result.members[1]?.groups, false);
+  assert.equal(result.aiConnections.length, 0);
+  assert.equal(result.members.length, 0);
+  assert.equal(result.general.workspaceName, "Local Workspace");
+  assert.equal(result.general.workspaceSlug, "local-workspace");
+  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/local-workspace");
+  assert.equal(result.billing.activeSkills, 0);
+  assert.equal(result.billing.includedSeats, 0);
+  assert.equal(result.billing.usedSeats, 0);
+  assert.equal(result.billing.skillsIncluded, null);
+  assert.equal(result.billing.evalRunCapMonthly, null);
+  assert.equal(result.billing.apiCallsMonthly, null);
 });
 
 test("buildWorkspaceSettingsPayload accepts tenant overrides for the current workspace", () => {
@@ -121,6 +134,7 @@ test("mergeTenantWorkspaceSettings applies tenant-specific general, member, and 
       timeZone: "UTC",
       approvalRequirement: 3,
     },
+    aiConnections: [],
     members: [
       {
         name: "Ari Chen",
@@ -133,9 +147,11 @@ test("mergeTenantWorkspaceSettings applies tenant-specific general, member, and 
     ],
     billing: {
       activeSkills: 7,
+      billingCycle: "annual",
       includedSeats: 5,
       usedSeats: 2,
       renewalDate: "Awaiting Stripe sync",
+      skillsIncluded: null,
     },
   });
 
@@ -144,7 +160,10 @@ test("mergeTenantWorkspaceSettings applies tenant-specific general, member, and 
   assert.equal(result.members.length, 1);
   assert.equal(result.members[0]?.role, "Owner");
   assert.equal(result.billing.activeSkills, 7);
+  assert.equal(result.billing.billingCycle, "annual");
   assert.equal(result.billing.includedSeats, 5);
   assert.equal(result.billing.usedSeats, 2);
   assert.equal(result.billing.renewalDate, "Awaiting Stripe sync");
+  assert.equal(result.billing.skillsIncluded, null);
+  assert.equal(result.aiConnections.length, 0);
 });

@@ -7,7 +7,6 @@ import {
   type AuthSessionUser,
 } from "@/lib/auth0-session";
 import { normalizeWorkspaceSlug } from "@/lib/onboarding";
-import { ORG } from "@/lib/savant-data";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 
 import {
@@ -51,7 +50,7 @@ type TenantMembershipRow = {
   user_created_at: Date | string;
 };
 
-const DEVELOPMENT_DEFAULT_WORKSPACE_SLUG = normalizeWorkspaceSlug(ORG.name) ?? "workspace";
+const DEVELOPMENT_DEFAULT_WORKSPACE_SLUG = normalizeWorkspaceSlug("local-workspace") ?? "local-workspace";
 
 function normalizeTenantSlugOrThrow(workspaceSlug: string): string {
   const normalized = normalizeWorkspaceSlug(workspaceSlug);

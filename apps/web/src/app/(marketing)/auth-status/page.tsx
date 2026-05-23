@@ -3,6 +3,10 @@ import { headers } from "next/headers";
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import {
+  getAuthCallbackFailureHint,
+  readAuthCallbackFailureParams,
+} from "@/lib/auth0-callback";
 import { buildAuthStatusHref, normalizeReturnToPath } from "@/lib/auth0-config";
 import {
   doOriginsMatch,
@@ -22,6 +26,8 @@ export const metadata = {
 };
 
 type AuthStatusSearchParams = {
+  callbackError?: string;
+  oauthError?: string;
   source?: string;
   returnTo?: string;
 };
@@ -161,6 +167,8 @@ export default async function AuthStatusPage({
   const diagnostics = await getAuth0Diagnostics();
   const requestedSource = sourceLabel(params.source);
   const returnTo = normalizeReturnToPath(params.returnTo, "/dashboard");
+  const callbackFailure = readAuthCallbackFailureParams(params);
+  const callbackFailureHint = getAuthCallbackFailureHint(callbackFailure);
   const retrySigninHref = `/signin?returnTo=${encodeURIComponent(returnTo)}` as Route;
   const retrySignupHref = `/signup?returnTo=${encodeURIComponent(returnTo)}` as Route;
   const retryOnboardingHref = returnTo as Route;
@@ -171,7 +179,10 @@ export default async function AuthStatusPage({
     nodeEnv: process.env.NODE_ENV,
   });
   const requestOriginMatchesAppBaseUrl = doOriginsMatch(requestOrigin, diagnostics.appBaseUrl);
-  const authActions = getAuthBlockingIssues(diagnostics, requestOrigin);
+  const authActions = [
+    ...(callbackFailureHint ? [callbackFailureHint] : []),
+    ...getAuthBlockingIssues(diagnostics, requestOrigin),
+  ];
   const onboardingActions = getOnboardingBlockingIssues(diagnostics);
 
   return (
@@ -203,6 +214,26 @@ export default async function AuthStatusPage({
             completing a live OAuth exchange.
           </div>
         </div>
+
+        {callbackFailure ? (
+          <div className="note" style={{ margin: 0 }}>
+            <span className="n-icon">⚠️</span>
+            <div style={{ display: "grid", gap: 10 }}>
+              <div>
+                The last live callback reached Savant, but the OAuth exchange still failed.
+                {callbackFailureHint ? ` ${callbackFailureHint}` : ""}
+              </div>
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                {callbackFailure.sdkErrorCode ? (
+                  <span className="chip chip-blood">sdk: {callbackFailure.sdkErrorCode}</span>
+                ) : null}
+                {callbackFailure.oauthErrorCode ? (
+                  <span className="chip chip-brass">oauth: {callbackFailure.oauthErrorCode}</span>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         <div className="panel">
           <div className="panel-hd">

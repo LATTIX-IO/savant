@@ -23,21 +23,7 @@ import type {
   VersionHistoryItem,
 } from "@savant/types";
 
-import {
-  APPROVALS,
-  APPROVAL_TIMELINE,
-  AUDIT,
-  COMMENTS,
-  EVAL_RUNS,
-  ORG,
-  RECENT_CHANGES,
-  REGRESSIONS,
-  RELEASES,
-  REPO_DETAILS,
-  REPOS,
-  RUBRIC_BASELINE,
-  SKILLS,
-} from "@/lib/savant-data";
+import { findSkillByIdentifier } from "../../lib/skill-paths.ts";
 
 import { isControlPlaneDatabaseConfigured } from "./database.ts";
 import {
@@ -47,7 +33,14 @@ import {
   readSkillDetailFromDatabase,
   readSkillsFromDatabase,
 } from "./read-model-db.ts";
+import {
+  canUseTenantDatabaseReadModel,
+  isDevelopmentReadModelFallbackAllowed,
+} from "./read-model-policy.ts";
 import type { ResolvedTenantContext } from "./tenant-context.ts";
+
+type SavantDataModule = typeof import("../../lib/savant-data.ts");
+type ReadModelFallbackModule = typeof import("./read-model-fallback.ts");
 
 type RepositoryFilters = {
   provider?: string | undefined;
@@ -68,6 +61,18 @@ function createMeta(sourceOfTruth: OverviewResponse["meta"]["sourceOfTruth"]) {
     schemaVersion: 1 as const,
     sourceOfTruth,
   };
+}
+
+export class ReadModelUnavailableError extends Error {
+  readonly code: string;
+  readonly status: number;
+
+  constructor(code: string, message: string, status = 503) {
+    super(message);
+    this.name = "ReadModelUnavailableError";
+    this.code = code;
+    this.status = status;
+  }
 }
 
 export function createNotFoundResponse(code: string, message: string): ApiErrorResponse {
@@ -281,20 +286,28 @@ function normalizeText(value: string) {
   return value.trim().toLowerCase();
 }
 
-function mapRubricBaseline(): RubricComparisonRow[] {
-  return RUBRIC_BASELINE.map((row) => ({
-    baseline: row.baseline,
-    candidate: row.candidate,
-    direction: row.dir,
-    label: row.label,
-  }));
+async function loadFallbackReadModelDependencies(): Promise<{
+  fixtures: SavantDataModule;
+  fallback: ReadModelFallbackModule;
+}> {
+  const [fixtures, fallback] = await Promise.all([
+    import("../../lib/savant-data.ts"),
+    import("./read-model-fallback.ts"),
+  ]);
+
+  return { fixtures, fallback };
 }
 
-function mapApprovalTimeline(): ApprovalTimelineItem[] {
-  return APPROVAL_TIMELINE.map((event) => ({
-    ...event,
-    node: event.node as TimelineNodeColor,
-  }));
+function createLiveDataRequiredError(
+  code:
+    | "overview_live_data_required"
+    | "repository_list_live_data_required"
+    | "repository_detail_live_data_required"
+    | "skill_list_live_data_required"
+    | "skill_detail_live_data_required",
+  message: string,
+): ReadModelUnavailableError {
+  return new ReadModelUnavailableError(code, message, 503);
 }
 
 function fallbackRepositoryDetails(skillCount: number, branch: string): RepositoryDetailRecord {
@@ -312,7 +325,12 @@ function fallbackRepositoryDetails(skillCount: number, branch: string): Reposito
   };
 }
 
-function getFallbackOverviewResponse(): OverviewResponse {
+async function getFallbackOverviewResponse(): Promise<OverviewResponse> {
+  const {
+    fixtures: { APPROVALS, AUDIT, ORG, RECENT_CHANGES, REGRESSIONS, RELEASES, REPOS },
+    fallback: { FALLBACK_OVERVIEW_SOURCE_OF_TRUTH, mapFallbackRepository },
+  } = await loadFallbackReadModelDependencies();
+
   return {
     data: {
       organization: ORG,
@@ -326,16 +344,21 @@ function getFallbackOverviewResponse(): OverviewResponse {
       approvals: APPROVALS,
       recentChanges: RECENT_CHANGES,
       regressions: REGRESSIONS,
-      repositories: REPOS,
+      repositories: REPOS.map(mapFallbackRepository),
       auditHighlights: AUDIT,
       releaseQueue: RELEASES.slice(0, 3),
     },
-    meta: createMeta("mixed"),
+    meta: createMeta(FALLBACK_OVERVIEW_SOURCE_OF_TRUTH),
   };
 }
 
-function getFallbackRepositoriesResponse(filters: RepositoryFilters = {}): RepositoryListResponse {
-  const repositories = REPOS.filter((repository) => {
+async function getFallbackRepositoriesResponse(filters: RepositoryFilters = {}): Promise<RepositoryListResponse> {
+  const {
+    fixtures: { REPOS },
+    fallback: { FALLBACK_REPOSITORY_LIST_SOURCE_OF_TRUTH, mapFallbackRepository },
+  } = await loadFallbackReadModelDependencies();
+
+  const repositories = REPOS.map(mapFallbackRepository).filter((repository) => {
     if (filters.provider && normalizeText(repository.provider) !== normalizeText(filters.provider)) {
       return false;
     }
@@ -350,14 +373,19 @@ function getFallbackRepositoriesResponse(filters: RepositoryFilters = {}): Repos
   return {
     data: repositories,
     meta: {
-      ...createMeta("database"),
+      ...createMeta(FALLBACK_REPOSITORY_LIST_SOURCE_OF_TRUTH),
       count: repositories.length,
     },
   };
 }
 
-function getFallbackRepositoryDetailResponse(id: string): RepositoryDetailResponse | null {
-  const repository = REPOS.find((entry) => entry.id === id);
+async function getFallbackRepositoryDetailResponse(id: string): Promise<RepositoryDetailResponse | null> {
+  const {
+    fixtures: { REPO_DETAILS, REPOS },
+    fallback: { FALLBACK_REPOSITORY_DETAIL_SOURCE_OF_TRUTH, mapFallbackRepository },
+  } = await loadFallbackReadModelDependencies();
+
+  const repository = REPOS.map(mapFallbackRepository).find((entry) => entry.id === id);
 
   if (!repository) {
     return null;
@@ -370,12 +398,17 @@ function getFallbackRepositoryDetailResponse(id: string): RepositoryDetailRespon
       repository,
       details,
     },
-    meta: createMeta("mixed"),
+    meta: createMeta(FALLBACK_REPOSITORY_DETAIL_SOURCE_OF_TRUTH),
   };
 }
 
-function getFallbackSkillsResponse(filters: SkillFilters = {}): SkillListResponse {
-  const skills = SKILLS.filter((skill) => {
+async function getFallbackSkillsResponse(filters: SkillFilters = {}): Promise<SkillListResponse> {
+  const {
+    fixtures: { SKILLS },
+    fallback: { FALLBACK_SKILL_LIST_SOURCE_OF_TRUTH, mapFallbackSkill },
+  } = await loadFallbackReadModelDependencies();
+
+  const skills = SKILLS.map(mapFallbackSkill).filter((skill) => {
     if (filters.query) {
       const query = normalizeText(filters.query);
       const haystack = [skill.name, skill.description, skill.owner, skill.team, skill.repo].join(" ").toLowerCase();
@@ -406,14 +439,27 @@ function getFallbackSkillsResponse(filters: SkillFilters = {}): SkillListRespons
   return {
     data: skills as SkillListItem[],
     meta: {
-      ...createMeta("derived-index"),
+      ...createMeta(FALLBACK_SKILL_LIST_SOURCE_OF_TRUTH),
       count: skills.length,
     },
   };
 }
 
-function getFallbackSkillDetailResponse(id: string): SkillDetailResponse | null {
-  const skill = SKILLS.find((entry) => entry.id === id);
+async function getFallbackSkillDetailResponse(id: string): Promise<SkillDetailResponse | null> {
+  const {
+    fixtures: {
+      APPROVAL_TIMELINE,
+      AUDIT,
+      COMMENTS,
+      EVAL_RUNS,
+      RELEASES,
+      RUBRIC_BASELINE,
+      SKILLS,
+    },
+    fallback: { FALLBACK_SKILL_DETAIL_SOURCE_OF_TRUTH, mapFallbackSkill },
+  } = await loadFallbackReadModelDependencies();
+
+  const skill = findSkillByIdentifier(SKILLS.map(mapFallbackSkill), id);
 
   if (!skill) {
     return null;
@@ -423,8 +469,16 @@ function getFallbackSkillDetailResponse(id: string): SkillDetailResponse | null 
     data: {
       skill,
       evaluations: EVAL_RUNS.filter((run) => run.skill === skill.name),
-      rubricBaseline: mapRubricBaseline(),
-      approvalTimeline: mapApprovalTimeline(),
+      rubricBaseline: RUBRIC_BASELINE.map((row) => ({
+        baseline: row.baseline,
+        candidate: row.candidate,
+        direction: row.dir,
+        label: row.label,
+      } satisfies RubricComparisonRow)),
+      approvalTimeline: APPROVAL_TIMELINE.map((event) => ({
+        ...event,
+        node: event.node as TimelineNodeColor,
+      } satisfies ApprovalTimelineItem)),
       requiredApprovals: DEFAULT_REQUIRED_APPROVALS,
       reviewerComments: COMMENTS,
       flaggedCases: DEFAULT_FLAGGED_CASES,
@@ -435,7 +489,7 @@ function getFallbackSkillDetailResponse(id: string): SkillDetailResponse | null 
       activeRelease: RELEASES.find((release) => release.skill === skill.name) ?? null,
       auditHighlights: AUDIT,
     },
-    meta: createMeta("mixed"),
+    meta: createMeta(FALLBACK_SKILL_DETAIL_SOURCE_OF_TRUTH),
   };
 }
 
@@ -447,63 +501,104 @@ export function getTenantSkillRepoContractResponse(): TenantSkillRepoContractRes
 }
 
 function canUseDatabase(context?: ResolvedTenantContext): context is ResolvedTenantContext {
-  return Boolean(
-    context &&
-    isControlPlaneDatabaseConfigured &&
-    !context.isDevelopmentFallback,
-  );
+  return canUseTenantDatabaseReadModel({
+    context,
+    isDatabaseConfigured: isControlPlaneDatabaseConfigured,
+  });
+}
+
+function canUseDevelopmentFallback(context?: ResolvedTenantContext): boolean {
+  return isDevelopmentReadModelFallbackAllowed({
+    context,
+    nodeEnv: process.env.NODE_ENV,
+  });
 }
 
 export async function getOverviewResponse(
   context?: ResolvedTenantContext,
 ): Promise<OverviewResponse> {
-  if (!canUseDatabase(context)) {
+  if (canUseDatabase(context)) {
+    return readOverviewFromDatabase(context);
+  }
+
+  if (canUseDevelopmentFallback(context)) {
     return getFallbackOverviewResponse();
   }
 
-  return readOverviewFromDatabase(context);
+  throw createLiveDataRequiredError(
+    "overview_live_data_required",
+    "Live overview data is unavailable outside local development when no tenant-backed control-plane context exists.",
+  );
 }
 
 export async function listRepositoriesResponse(
   filters: RepositoryFilters = {},
   context?: ResolvedTenantContext,
 ): Promise<RepositoryListResponse> {
-  if (!canUseDatabase(context)) {
+  if (canUseDatabase(context)) {
+    return readRepositoriesFromDatabase(context, filters);
+  }
+
+  if (canUseDevelopmentFallback(context)) {
     return getFallbackRepositoriesResponse(filters);
   }
 
-  return readRepositoriesFromDatabase(context, filters);
+  throw createLiveDataRequiredError(
+    "repository_list_live_data_required",
+    "Live repository data is unavailable outside local development when no tenant-backed control-plane context exists.",
+  );
 }
 
 export async function getRepositoryDetailResponse(
   id: string,
   context?: ResolvedTenantContext,
 ): Promise<RepositoryDetailResponse | null> {
-  if (!canUseDatabase(context)) {
+  if (canUseDatabase(context)) {
+    return readRepositoryDetailFromDatabase(context, id);
+  }
+
+  if (canUseDevelopmentFallback(context)) {
     return getFallbackRepositoryDetailResponse(id);
   }
 
-  return readRepositoryDetailFromDatabase(context, id);
+  throw createLiveDataRequiredError(
+    "repository_detail_live_data_required",
+    "Live repository detail is unavailable outside local development when no tenant-backed control-plane context exists.",
+  );
 }
 
 export async function listSkillsResponse(
   filters: SkillFilters = {},
   context?: ResolvedTenantContext,
 ): Promise<SkillListResponse> {
-  if (!canUseDatabase(context)) {
+  if (canUseDatabase(context)) {
+    return readSkillsFromDatabase(context, filters);
+  }
+
+  if (canUseDevelopmentFallback(context)) {
     return getFallbackSkillsResponse(filters);
   }
 
-  return readSkillsFromDatabase(context, filters);
+  throw createLiveDataRequiredError(
+    "skill_list_live_data_required",
+    "Live skill data is unavailable outside local development when no tenant-backed control-plane context exists.",
+  );
 }
 
 export async function getSkillDetailResponse(
   id: string,
   context?: ResolvedTenantContext,
 ): Promise<SkillDetailResponse | null> {
-  if (!canUseDatabase(context)) {
+  if (canUseDatabase(context)) {
+    return readSkillDetailFromDatabase(context, id);
+  }
+
+  if (canUseDevelopmentFallback(context)) {
     return getFallbackSkillDetailResponse(id);
   }
 
-  return readSkillDetailFromDatabase(context, id);
+  throw createLiveDataRequiredError(
+    "skill_detail_live_data_required",
+    "Live skill detail is unavailable outside local development when no tenant-backed control-plane context exists.",
+  );
 }

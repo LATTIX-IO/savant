@@ -1,9 +1,8 @@
 import type { Route } from "next";
-import { notFound, redirect } from "next/navigation";
+import { redirect } from "next/navigation";
 
 import { auth0 } from "@/lib/auth0";
 import { SkillScreen } from "@/components/savant/screens/skill";
-import { SKILLS } from "@/lib/savant-data";
 import { resolvePreferredTenantAppPath } from "@/server/control-plane/tenant-context";
 
 export default async function SkillDetailPage({
@@ -12,6 +11,7 @@ export default async function SkillDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+
   const session = auth0 ? await auth0.getSession() : null;
   const tenantPath = await resolvePreferredTenantAppPath(session?.user, `/skills/${id}`);
 
@@ -19,7 +19,5 @@ export default async function SkillDetailPage({
     redirect(tenantPath as Route);
   }
 
-  const exists = SKILLS.some((s) => s.id === id);
-  if (!exists) notFound();
   return <SkillScreen skillId={id} />;
 }

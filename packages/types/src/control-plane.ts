@@ -1,3 +1,5 @@
+import type { RepositoryProviderReadiness } from "./repository-provider-readiness";
+
 export type GitProvider =
   | "github"
   | "gitlab"
@@ -49,14 +51,23 @@ export interface OrganizationSummary {
 
 export type RepositorySyncStatus = "ok" | "warn" | "stale";
 
+export interface RepositoryProjectionMetadata {
+  indexedAt: string | null;
+  lastSuccessfulSyncAt: string | null;
+  lastWebhookAt: string | null;
+}
+
 export interface RepositoryListItem {
   id: string;
   provider: GitProvider;
+  providerReadiness: RepositoryProviderReadiness;
   name: string;
+  webUrl: string | null;
   branch: string;
   skills: number;
   lastSync: string;
   status: RepositorySyncStatus;
+  projection: RepositoryProjectionMetadata;
 }
 
 export interface RepositoryCommitSummary {
@@ -117,8 +128,15 @@ export interface RegressionItem {
 
 export type SkillTier = 1 | 2 | 3;
 
+export interface SkillProjectionMetadata {
+  sourcePath: string | null;
+  sourceCommitSha: string | null;
+  indexedAt: string | null;
+}
+
 export interface SkillListItem {
   id: string;
+  skillUuid: string;
   name: string;
   description: string;
   tier: SkillTier;
@@ -139,6 +157,7 @@ export interface SkillListItem {
   accessGroup: string;
   lastEval: string;
   status: string;
+  projection: SkillProjectionMetadata;
 }
 
 export interface RubricComparisonRow {
@@ -168,7 +187,8 @@ export type EvaluationStatus =
   | "running"
   | "complete"
   | "complete-with-regressions"
-  | "complete-baseline";
+  | "complete-baseline"
+  | "failed";
 
 export interface EvalRunSummary {
   id: string;
@@ -182,6 +202,44 @@ export interface EvalRunSummary {
   duration: string;
   delta: number | null;
   status: EvaluationStatus;
+}
+
+export interface EvaluationRunListItem extends EvalRunSummary {
+  skillId: string;
+  skillTier: SkillTier;
+  startedAt: string | null;
+  passRate: number;
+}
+
+export type EvaluationDashboardMetricKey =
+  | "coverage"
+  | "avg-cases"
+  | "regressions-24h"
+  | "median-pass-rate";
+
+export type EvaluationDashboardMetricTrend = "up" | "down" | "flat";
+
+export interface EvaluationDashboardMetric {
+  key: EvaluationDashboardMetricKey;
+  label: string;
+  value: number;
+  trendLabel: string;
+  trend: EvaluationDashboardMetricTrend;
+  unit?: string | undefined;
+  displayDecimals?: number | undefined;
+}
+
+export interface EvaluationTierCoverageItem {
+  tier: SkillTier;
+  evaluatedSkills: number;
+  totalSkills: number;
+  coveragePct: number;
+}
+
+export interface EvaluationDashboardPayload {
+  kpis: EvaluationDashboardMetric[];
+  runs: EvaluationRunListItem[];
+  coverageByTier: EvaluationTierCoverageItem[];
 }
 
 export interface RequiredApprovalItem {
@@ -310,13 +368,75 @@ export interface SkillDetailPayload {
   auditHighlights: AuditHighlightItem[];
 }
 
+export interface SkillSourcePayload {
+  skillId: string;
+  skillUuid: string;
+  name: string;
+  repository: string;
+  repoProvider: GitProvider;
+  branch: string;
+  sourcePath: string;
+  sourceCommitSha: string | null;
+  contentSha: string | null;
+  content: string;
+  mode: "repository" | "fallback";
+  canSave: boolean;
+  saveDisabledReason?: string | undefined;
+}
+
+export interface SkillSourceUpdateRequest {
+  content: string;
+  commitMessage?: string | undefined;
+  connectionId?: string | undefined;
+}
+
+export interface SkillSourceCommitSummary {
+  sha: string;
+  committedAt: string;
+  url: string | null;
+  changedPaths: string[];
+}
+
+export interface SkillSourceUpdatePayload {
+  skillId: string;
+  skillUuid: string;
+  branch: string;
+  sourcePath: string;
+  commit: SkillSourceCommitSummary;
+  warnings: string[];
+}
+
 export interface ReleaseHistoryItem {
   ref: string;
   skill: string;
-  env: string;
+  env: ReleaseEnvironment;
   who: string;
   when: string;
-  outcome: string;
+  outcome: "released" | "rolled-back";
+}
+
+export type ReleaseDashboardMetricKey =
+  | "active-candidates"
+  | "release-turnaround"
+  | "rollbacks-30d"
+  | "pinned-in-production";
+
+export type ReleaseDashboardMetricTrend = "up" | "down" | "flat";
+
+export interface ReleaseDashboardMetric {
+  key: ReleaseDashboardMetricKey;
+  label: string;
+  value: number | null;
+  unit?: "d" | undefined;
+  displayDecimals?: number | undefined;
+  trendLabel: string;
+  trend: ReleaseDashboardMetricTrend;
+}
+
+export interface ReleaseDashboardPayload {
+  kpis: ReleaseDashboardMetric[];
+  inMotion: ReleaseQueueItem[];
+  history: ReleaseHistoryItem[];
 }
 
 export type PolicyType = "access" | "approval" | "distribution" | "environment";
@@ -324,6 +444,17 @@ export type PolicyType = "access" | "approval" | "distribution" | "environment";
 export interface PolicyRuleItem {
   rule: string;
   value: string;
+}
+
+export type PolicyActivityStatus = "allowed" | "blocked" | "info";
+
+export interface PolicyActivityRecord {
+  occurredAt: string;
+  when: string;
+  who: string;
+  action: string;
+  detail: string;
+  status: PolicyActivityStatus;
 }
 
 export interface PolicySummary {
@@ -336,6 +467,7 @@ export interface PolicySummary {
   appliedBy: string;
   updated: string;
   rules: PolicyRuleItem[];
+  recentActivity: PolicyActivityRecord[];
 }
 
 export type AuditCategory =
@@ -348,7 +480,10 @@ export type AuditCategory =
   | "repo"
   | "review";
 
+export type AuditEventRange = "24h" | "7d" | "30d" | "90d" | "all";
+
 export interface AuditEventRecord {
+  occurredAt: string;
   when: string;
   time: string;
   who: string;
@@ -361,6 +496,22 @@ export interface AuditEventRecord {
 export type ConnectorCategory = "local" | "native" | "notify" | "bundle";
 export type ConnectorStatus = "healthy" | "degraded" | "warning" | "offline";
 
+export type ConnectorDashboardMetricKey =
+  | "active-connectors"
+  | "enabled-targets"
+  | "sync-runs-24h"
+  | "issues";
+
+export type ConnectorDashboardMetricTrend = "up" | "down" | "flat";
+
+export interface ConnectorDashboardMetric {
+  key: ConnectorDashboardMetricKey;
+  label: string;
+  value: number;
+  trendLabel: string;
+  trend: ConnectorDashboardMetricTrend;
+}
+
 export interface ConnectorRecord {
   id: string;
   name: string;
@@ -372,6 +523,11 @@ export interface ConnectorRecord {
   skills: number | string;
   users: number | string;
   scope: string;
+}
+
+export interface ConnectorDashboardPayload {
+  kpis: ConnectorDashboardMetric[];
+  connectors: ConnectorRecord[];
 }
 
 export interface MemberRecord {
@@ -399,7 +555,7 @@ export interface PublicAuthProviderSettings {
   sessionMode: "server-side session";
 }
 
-export type AIProviderId = "openai" | "anthropic" | "azure-openai" | (string & {});
+export type AIProviderId = "openai" | "anthropic" | "azure-openai" | "openai-compatible" | (string & {});
 export type AIConnectionStatus = "active" | "needs-rotation" | "revoked";
 
 export interface AIConnectionSummary {
@@ -417,6 +573,41 @@ export interface AIConnectionSummary {
   supportsJudging: boolean;
   isDefaultExecution: boolean;
   isDefaultJudge: boolean;
+}
+
+export interface AIConnectionCreateRequest {
+  provider: AIProviderId;
+  label: string;
+  defaultModel: string;
+  purpose: string;
+  usageScope: string;
+  apiKey: string;
+  allowedModels?: string[] | undefined;
+  supportsExecution?: boolean | undefined;
+  supportsJudging?: boolean | undefined;
+  isDefaultExecution?: boolean | undefined;
+  isDefaultJudge?: boolean | undefined;
+  baseUrl?: string | undefined;
+  apiVersion?: string | undefined;
+}
+
+export interface AIConnectionRevokeRequest {
+  reason?: string | undefined;
+}
+
+export interface AIConnectionRotateRequest {
+  apiKey: string;
+  defaultModel?: string | undefined;
+  purpose?: string | undefined;
+  usageScope?: string | undefined;
+  allowedModels?: string[] | undefined;
+  baseUrl?: string | undefined;
+  apiVersion?: string | undefined;
+}
+
+export interface AIConnectionSetDefaultRequest {
+  setAsExecutionDefault?: boolean | undefined;
+  setAsJudgeDefault?: boolean | undefined;
 }
 
 export interface WorkspaceGeneralSettings {
@@ -452,18 +643,19 @@ export interface WorkspaceNotificationSettings {
 
 export interface WorkspaceBillingSettings {
   planName: string;
+  billingCycle: string | null;
   renewalDate: string;
-  skillsIncluded: number;
+  skillsIncluded: number | null;
   activeSkills: number;
   includedSeats: number;
   usedSeats: number;
-  evalRunCapMonthly: number;
-  evalRunsUsedMonthly: number;
-  distributionsMonthly: number;
-  storageGbUsed: number;
-  storageGbCap: number;
-  apiCallsMonthly: number;
-  apiCallsDeltaPct: number;
+  evalRunCapMonthly: number | null;
+  evalRunsUsedMonthly: number | null;
+  distributionsMonthly: number | null;
+  storageGbUsed: number | null;
+  storageGbCap: number | null;
+  apiCallsMonthly: number | null;
+  apiCallsDeltaPct: number | null;
 }
 
 export interface WorkspaceSettingsPayload {
@@ -481,4 +673,13 @@ export type RepositoryListResponse = CollectionResponse<RepositoryListItem>;
 export type RepositoryDetailResponse = ResourceResponse<RepositoryDetailPayload>;
 export type SkillListResponse = CollectionResponse<SkillListItem>;
 export type SkillDetailResponse = ResourceResponse<SkillDetailPayload>;
+export type SkillSourceResponse = ResourceResponse<SkillSourcePayload>;
+export type SkillSourceUpdateResponse = ResourceResponse<SkillSourceUpdatePayload>;
 export type WorkspaceSettingsResponse = ResourceResponse<WorkspaceSettingsPayload>;
+export type AIConnectionListResponse = CollectionResponse<AIConnectionSummary>;
+export type AIConnectionResponse = ResourceResponse<AIConnectionSummary>;
+export type AuditListResponse = CollectionResponse<AuditEventRecord>;
+export type PolicyListResponse = CollectionResponse<PolicySummary>;
+export type EvaluationDashboardResponse = ResourceResponse<EvaluationDashboardPayload>;
+export type ReleaseDashboardResponse = ResourceResponse<ReleaseDashboardPayload>;
+export type ConnectorDashboardResponse = ResourceResponse<ConnectorDashboardPayload>;

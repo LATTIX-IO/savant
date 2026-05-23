@@ -1,9 +1,33 @@
 import type {
+  AIConnectionCreateRequest,
+  AIConnectionListResponse,
+  AIConnectionResponse,
+  AuditEventRange,
+  AuditListResponse,
+  AIConnectionRevokeRequest,
+  AIConnectionRotateRequest,
+  AIConnectionSetDefaultRequest,
+  ConnectorDashboardResponse,
+  EvaluationDashboardResponse,
   ApiErrorResponse,
+  PolicyListResponse,
+  ReleaseDashboardResponse,
+  RepoProvisionRequest,
+  RepoProvisionResponse,
+  RepoSyncRequest,
+  RepoSyncResponse,
   RepositoryDetailResponse,
   RepositoryListResponse,
+  SkillScaffoldApplyRequest,
+  SkillScaffoldApplyResponse,
+  SkillDetailResponse,
   SkillListResponse,
+  SkillSourceResponse,
+  SkillSourceUpdateRequest,
+  SkillSourceUpdateResponse,
 } from "@savant/types";
+
+import type { EvaluationDetailResponse } from "./evaluation-detail-helpers.ts";
 
 import {
   extractWorkspaceSlugFromPathname,
@@ -120,6 +144,136 @@ export function fetchRepositoryList(options?: TenantRequestOptions): Promise<Rep
   );
 }
 
+export function fetchAIConnections(options?: TenantRequestOptions): Promise<AIConnectionListResponse> {
+  return fetchControlPlaneJson<AIConnectionListResponse>(
+    buildTenantScopedControlPlanePath("/api/ai-connections", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchAuditEvents(
+  filters?: {
+    range?: AuditEventRange | undefined;
+  },
+  options?: TenantRequestOptions,
+): Promise<AuditListResponse> {
+  return fetchControlPlaneJson<AuditListResponse>(
+    buildTenantScopedControlPlanePath(`/api/audit${buildControlPlaneQuery({
+      range: filters?.range,
+    })}`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchPolicies(options?: TenantRequestOptions): Promise<PolicyListResponse> {
+  return fetchControlPlaneJson<PolicyListResponse>(
+    buildTenantScopedControlPlanePath("/api/policies", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchReleaseDashboard(options?: TenantRequestOptions): Promise<ReleaseDashboardResponse> {
+  return fetchControlPlaneJson<ReleaseDashboardResponse>(
+    buildTenantScopedControlPlanePath("/api/releases", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchConnectorDashboard(options?: TenantRequestOptions): Promise<ConnectorDashboardResponse> {
+  return fetchControlPlaneJson<ConnectorDashboardResponse>(
+    buildTenantScopedControlPlanePath("/api/connectors", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchEvaluationDashboard(options?: TenantRequestOptions): Promise<EvaluationDashboardResponse> {
+  return fetchControlPlaneJson<EvaluationDashboardResponse>(
+    buildTenantScopedControlPlanePath("/api/evaluations", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchEvaluationDetail(
+  id: string,
+  options?: TenantRequestOptions,
+): Promise<EvaluationDetailResponse> {
+  return fetchControlPlaneJson<EvaluationDetailResponse>(
+    buildTenantScopedControlPlanePath(`/api/evaluations/${encodeURIComponent(id)}`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function createAIConnection(
+  request: AIConnectionCreateRequest,
+  options?: TenantRequestOptions,
+): Promise<AIConnectionResponse> {
+  return fetchControlPlaneJson<AIConnectionResponse>(
+    buildTenantScopedControlPlanePath("/api/ai-connections", options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function revokeAIConnection(
+  id: string,
+  request: AIConnectionRevokeRequest = {},
+  options?: TenantRequestOptions,
+): Promise<AIConnectionResponse> {
+  return fetchControlPlaneJson<AIConnectionResponse>(
+    buildTenantScopedControlPlanePath(`/api/ai-connections/${encodeURIComponent(id)}/revoke`, options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function rotateAIConnection(
+  id: string,
+  request: AIConnectionRotateRequest,
+  options?: TenantRequestOptions,
+): Promise<AIConnectionResponse> {
+  return fetchControlPlaneJson<AIConnectionResponse>(
+    buildTenantScopedControlPlanePath(`/api/ai-connections/${encodeURIComponent(id)}/rotate`, options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function setAIConnectionDefaults(
+  id: string,
+  request: AIConnectionSetDefaultRequest,
+  options?: TenantRequestOptions,
+): Promise<AIConnectionResponse> {
+  return fetchControlPlaneJson<AIConnectionResponse>(
+    buildTenantScopedControlPlanePath(`/api/ai-connections/${encodeURIComponent(id)}/default`, options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
 export function fetchRepositoryDetail(
   id: string,
   options?: TenantRequestOptions,
@@ -127,6 +281,58 @@ export function fetchRepositoryDetail(
   return fetchControlPlaneJson<RepositoryDetailResponse>(
     buildTenantScopedControlPlanePath(`/api/repositories/${encodeURIComponent(id)}`, options),
     options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function triggerRepositorySync(
+  id: string,
+  request: RepoSyncRequest = {},
+  options?: TenantRequestOptions,
+): Promise<RepoSyncResponse> {
+  return fetchControlPlaneJson<RepoSyncResponse>(
+    buildTenantScopedControlPlanePath(`/api/repositories/${encodeURIComponent(id)}/sync`, options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function provisionRepository(
+  request: RepoProvisionRequest,
+  options?: TenantRequestOptions,
+): Promise<RepoProvisionResponse> {
+  return fetchControlPlaneJson<RepoProvisionResponse>(
+    buildTenantScopedControlPlanePath("/api/repositories/provision", options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function applySkillScaffold(
+  request: SkillScaffoldApplyRequest,
+  options?: TenantRequestOptions,
+): Promise<SkillScaffoldApplyResponse> {
+  return fetchControlPlaneJson<SkillScaffoldApplyResponse>(
+    buildTenantScopedControlPlanePath("/api/skills/scaffold/apply", options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
   );
 }
 
@@ -149,5 +355,43 @@ export function fetchSkillList(
       tier: filters?.tier,
     })}`, options),
     options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchSkillDetail(
+  id: string,
+  options?: TenantRequestOptions,
+): Promise<SkillDetailResponse> {
+  return fetchControlPlaneJson<SkillDetailResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchSkillSource(
+  id: string,
+  options?: TenantRequestOptions,
+): Promise<SkillSourceResponse> {
+  return fetchControlPlaneJson<SkillSourceResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/source`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function updateSkillSource(
+  id: string,
+  request: SkillSourceUpdateRequest,
+  options?: TenantRequestOptions,
+): Promise<SkillSourceUpdateResponse> {
+  return fetchControlPlaneJson<SkillSourceUpdateResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/source`, options),
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
   );
 }

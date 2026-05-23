@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "session": {
+    "id": "<runtime-assessment-session-id>",
+    "measuredAt": "<ISO-8601>",
+    "gitCommit": "<git-sha>",
+    "runtime": "<rust|python>",
+    "entrypointShape": "<apps-web-bff-harness|dedicated-api|dedicated-worker>",
+    "vercelProject": "<project-name>",
+    "vercelEnvironment": "<preview|production-like>",
+    "region": "<region>"
+  },
+  "fixtureSet": {
+    "profile": "<small|medium|large>",
+    "referenceRepoShape": "docs/architecture/tenant-skill-storage.md"
+  },
+  "scenarios": [
+    {
+      "id": "repo-connect-validate",
+      "coldStarts": [
+        {
+          "attempt": 1,
+          "latencyMs": 0,
+          "memoryMb": 0,
+          "notes": ""
+        }
+      ],
+      "warmRuns": [
+        {
+          "attempt": 1,
+          "latencyMs": 0,
+          "cpuMs": 0,
+          "notes": ""
+        }
+      ],
+      "errors": [],
+      "observations": []
+    }
+  ],
+  "scores": {
+    "coldStart": 0,
+    "warmLatency": 0,
+    "packaging": 0,
+    "ecosystemFit": 0,
+    "localDeveloperExperience": 0,
+    "observability": 0,
+    "operationalLimits": 0,
+    "securitySupplyChain": 0,
+    "total": 0
+  },
+  "recommendation": {
+    "fit": "<primary|fallback|reject>",
+    "summary": "",
+    "knownRisks": [],
+    "suggestedWorkloads": [],
+    "avoidFor": []
+  }
+}

@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import type {
+  RepoSyncReason,
   RepositoryDetailPayload,
   RepositoryListItem,
   RepositorySyncStatus,
@@ -18,12 +19,13 @@ import { useOnboarding } from "@/components/savant/onboarding-context";
 import {
   fetchRepositoryDetail,
   fetchRepositoryList,
+  triggerRepositorySync,
 } from "@/lib/control-plane-client";
 
 type ProviderFilter = "all" | "github" | "gitlab" | "azure" | "bitbucket";
 
 export function RepositoriesScreen() {
-  const { show } = useOnboarding();
+  const { show, latestConnectedRepository } = useOnboarding();
   const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
   const [selId, setSelId] = useState("");
   const [repositories, setRepositories] = useState<RepositoryListItem[]>([]);
@@ -34,6 +36,16 @@ export function RepositoriesScreen() {
   const [detailError, setDetailError] = useState<string | null>(null);
   const [reloadListToken, setReloadListToken] = useState(0);
   const [reloadDetailToken, setReloadDetailToken] = useState(0);
+  const [syncingRepositoryId, setSyncingRepositoryId] = useState<string | null>(null);
+  const [syncNotice, setSyncNotice] = useState<{
+    tone: "default" | "warning" | "error";
+    message: string;
+  } | null>(null);
+  const autoRequestedSyncAtRef = useRef(0);
+  const latestConnectedAt = latestConnectedRepository?.at ?? 0;
+  const latestConnectedEntry = latestConnectedRepository
+    ? repositories.find((repository) => repository.id === latestConnectedRepository.id) ?? null
+    : null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -68,7 +80,21 @@ export function RepositoriesScreen() {
       active = false;
       controller.abort();
     };
-  }, [reloadListToken]);
+  }, [latestConnectedAt, reloadListToken]);
+
+  useEffect(() => {
+    if (!latestConnectedRepository) {
+      return;
+    }
+
+    const timeoutHandle = window.setTimeout(() => {
+      setSelId(latestConnectedRepository.id);
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutHandle);
+    };
+  }, [latestConnectedRepository]);
 
   const filtered = useMemo(
     () =>
@@ -120,10 +146,66 @@ export function RepositoriesScreen() {
       active = false;
       controller.abort();
     };
-  }, [activeSelId, reloadDetailToken]);
+  }, [activeSelId, latestConnectedAt, reloadDetailToken]);
 
   const sel = filtered.find((repository) => repository.id === activeSelId) ?? filtered[0] ?? null;
   const det = detail?.repository.id === activeSelId ? detail.details : null;
+  const selectedRepositoryUrl = sel?.webUrl ?? null;
+
+  const requestRepositorySyncFor = useCallback(async (repositoryId: string, reason: RepoSyncReason) => {
+    setSyncingRepositoryId(repositoryId);
+    setSyncNotice(null);
+
+    try {
+      const response = await triggerRepositorySync(repositoryId, { reason });
+      setSyncNotice({
+        tone: response.data.accepted ? "default" : "warning",
+        message: response.data.message,
+      });
+      setReloadListToken((value) => value + 1);
+      setReloadDetailToken((value) => value + 1);
+    } catch (error) {
+      setSyncNotice({
+        tone: "error",
+        message: error instanceof Error ? error.message : "Could not request repository sync.",
+      });
+    } finally {
+      setSyncingRepositoryId((value) => (value === repositoryId ? null : value));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!latestConnectedRepository || repositoriesStatus !== "success" || !latestConnectedEntry) {
+      return;
+    }
+
+    if (autoRequestedSyncAtRef.current >= latestConnectedRepository.at) {
+      return;
+    }
+
+    autoRequestedSyncAtRef.current = latestConnectedRepository.at;
+
+    if (!latestConnectedEntry.providerReadiness.indexingSupported) {
+      const timeoutHandle = window.setTimeout(() => {
+        setSyncNotice({
+          tone: "warning",
+          message: `Connected ${latestConnectedEntry.name}. ${latestConnectedEntry.providerReadiness.immediateIndexing.message}`,
+        });
+      }, 0);
+
+      return () => {
+        window.clearTimeout(timeoutHandle);
+      };
+    }
+
+    const timeoutHandle = window.setTimeout(() => {
+      void requestRepositorySyncFor(latestConnectedRepository.id, "initial_connect");
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutHandle);
+    };
+  }, [latestConnectedEntry, latestConnectedRepository, repositoriesStatus, requestRepositorySyncFor]);
 
   const totalSkills = repositories.reduce((count, repository) => count + repository.skills, 0);
   const stale = repositories.filter((repository) => repository.status !== "ok").length;
@@ -148,9 +230,31 @@ export function RepositoriesScreen() {
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn btn-ghost">
-            <Ic.Refresh className="b-icon" />
-            Resync all
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              if (!sel || syncingRepositoryId || !sel.providerReadiness.indexingSupported) {
+                return;
+              }
+
+              void requestRepositorySyncFor(sel.id, "manual");
+            }}
+            disabled={!sel || syncingRepositoryId !== null || !sel.providerReadiness.indexingSupported}
+            title={sel && !sel.providerReadiness.indexingSupported
+              ? sel.providerReadiness.immediateIndexing.message
+              : undefined}
+          >
+            {syncingRepositoryId === sel?.id ? (
+              <Ic.Spinner className="b-icon" />
+            ) : (
+              <Ic.Refresh className="b-icon" />
+            )}
+            {syncingRepositoryId === sel?.id
+              ? "Requesting sync…"
+              : sel && !sel.providerReadiness.indexingSupported
+                ? "Sync unavailable"
+                : "Sync selected"}
           </button>
           <button type="button" className="btn btn-primary" onClick={show}>
             <Ic.Plus className="b-icon" />
@@ -158,6 +262,22 @@ export function RepositoriesScreen() {
           </button>
         </div>
       </div>
+
+      {syncNotice ? (
+        <div
+          className={`note${syncNotice.tone === "warning" ? " brass" : syncNotice.tone === "error" ? " blood" : ""}`}
+          style={{ marginBottom: 16 }}
+        >
+          {syncNotice.tone === "error" ? (
+            <Ic.XCircle className="n-icon" />
+          ) : syncNotice.tone === "warning" ? (
+            <Ic.Warn className="n-icon" />
+          ) : (
+            <Ic.Refresh className="n-icon" />
+          )}
+          <span>{syncNotice.message}</span>
+        </div>
+      ) : null}
 
       <div className="kpi-strip" style={{ marginBottom: 24 }}>
         <div className="kpi">
@@ -263,9 +383,22 @@ export function RepositoriesScreen() {
                           <div className="tbl-name">
                             <ProviderIcon p={r.provider} size={13} />
                             <div className="tbl-name-text">
-                              <span className="pri mono" style={{ fontSize: 12.5 }}>
-                                {r.name}
-                              </span>
+                              {r.webUrl ? (
+                                <a
+                                  href={r.webUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="pri mono link"
+                                  style={{ fontSize: 12.5, width: "fit-content" }}
+                                  onClick={(event) => event.stopPropagation()}
+                                >
+                                  {r.name}
+                                </a>
+                              ) : (
+                                <span className="pri mono" style={{ fontSize: 12.5 }}>
+                                  {r.name}
+                                </span>
+                              )}
                               <span className="sec">{r.provider}</span>
                             </div>
                           </div>
@@ -295,10 +428,27 @@ export function RepositoriesScreen() {
         <div className="panel" style={{ position: "sticky", top: 0 }}>
           <div className="panel-hd">
             <div className="panel-title">Repository details</div>
-            <button type="button" className="btn btn-sm" disabled={!sel} title="Provider deep links land in a later slice.">
-              <Ic.ExternalLink className="b-icon" />
-              Open in {sel?.provider ?? "provider"}
-            </button>
+            {selectedRepositoryUrl ? (
+              <a
+                href={selectedRepositoryUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-sm"
+              >
+                <Ic.ExternalLink className="b-icon" />
+                Open in {sel?.provider ?? "provider"}
+              </a>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled
+                title="No repository URL is available for this provider yet."
+              >
+                <Ic.ExternalLink className="b-icon" />
+                Open in {sel?.provider ?? "provider"}
+              </button>
+            )}
           </div>
           <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             {!sel ? (
@@ -349,8 +499,28 @@ export function RepositoriesScreen() {
                   <DetailRow label="Sync mode">
                     <span className="chip chip-paper">{det.syncMode}</span>
                   </DetailRow>
+                  <DetailRow label="Supported sync">
+                    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                      {sel.providerReadiness.supportedSyncModes.map((mode) => (
+                        <span key={mode} className="chip chip-paper">{mode}</span>
+                      ))}
+                    </div>
+                  </DetailRow>
+                  <DetailRow label="Indexing">
+                    <ReadinessPill
+                      supported={sel.providerReadiness.indexingSupported}
+                      message={sel.providerReadiness.immediateIndexing.message}
+                    />
+                  </DetailRow>
                   <DetailRow label="Webhook">
-                    <WebhookHealthPill health={det.webhookHealth} lastSync={sel.lastSync} />
+                    {sel.providerReadiness.supportsWebhookRegistration ? (
+                      <WebhookHealthPill health={det.webhookHealth} lastSync={sel.lastSync} />
+                    ) : (
+                      <ReadinessPill
+                        supported={false}
+                        message={sel.providerReadiness.webhookRegistration.message}
+                      />
+                    )}
                   </DetailRow>
                   <DetailRow label="Tier policy">
                     <span style={{ fontSize: 12.5 }}>{det.tierPolicy}</span>
@@ -466,6 +636,18 @@ function WebhookHealthPill({ health, lastSync }: { health: string; lastSync: str
       <span className="dot" />
       {health}
     </span>
+  );
+}
+
+function ReadinessPill({ supported, message }: { supported: boolean; message: string }) {
+  return (
+    <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+      <span className={`chip ${supported ? "chip-moss" : "chip-paper"}`}>
+        <span className="dot" />
+        {supported ? "available" : "not yet wired"}
+      </span>
+      <span className="muted" style={{ fontSize: 11.5 }}>{message}</span>
+    </div>
   );
 }
 

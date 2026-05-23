@@ -21,7 +21,7 @@ export const tenantSkillRepoContract: TenantSkillRepoContract = {
   notes: [
     "Registry files are the canonical index for discovery, ownership, routing, and dependency resolution.",
     "Tier 1, Tier 2, and Tier 3 package paths should remain deterministic so repository scans can be provider-neutral.",
-    "Authored evaluation datasets, rubrics, baselines, and finalized comparison artifacts may live in Git when they are intentionally retained.",
+    "Authored evaluation datasets, fixtures, rubrics, baselines, and finalized comparison artifacts may live in Git when they are intentionally retained.",
     "Transient worker logs, secret material, and queue telemetry must remain outside the repository.",
   ],
   storageBoundary: {
@@ -44,7 +44,13 @@ export const tenantSkillRepoContract: TenantSkillRepoContract = {
       {
         key: "repo-evals",
         description: "Repository-level authored evaluation assets and retained evidence that should travel with the repo history.",
-        paths: ["evals/baselines/**", "evals/datasets/**", "evals/rubrics/**", "evals/runs/**"],
+        paths: [
+          "evals/baselines/**",
+          "evals/datasets/**",
+          "evals/fixtures/**",
+          "evals/rubrics/**",
+          "evals/runs/**",
+        ],
       },
       {
         key: "templates-and-traceability",

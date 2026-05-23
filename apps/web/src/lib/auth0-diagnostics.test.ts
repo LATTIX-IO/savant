@@ -50,7 +50,7 @@ test("buildAuth0Diagnostics accepts public Auth0 aliases used in some deployment
     APP_BASE_URL: "https://savantrepo.com",
     DATABASE_URL: "postgres://db.example.com/savant",
     STRIPE_SECRET_KEY: "sk_test_123",
-    STRIPE_WEBHOOK_SECRET: "whsec_123",
+    STRIPE_WEBHOOK_SECRET: "whsec_example",
   });
 
   assert.equal(result.tenantDomain, "tenant.example.com");

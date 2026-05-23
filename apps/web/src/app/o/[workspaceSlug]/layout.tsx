@@ -5,6 +5,7 @@ import { SavantShell } from "@/components/savant/app-shell";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
+import { getSavantShellData } from "@/server/control-plane/shell-data";
 import {
   resolveTenantMembershipForUser,
   TenantContextError,
@@ -61,9 +62,12 @@ export default async function TenantWorkspaceLayout({
     );
   }
 
+  const shellData = await getSavantShellData(tenantContext);
+
   return (
     <SavantShell
       viewer={buildAuthViewer(session?.user)}
+      shellData={shellData}
       workspace={{
         name: tenantContext.tenant.workspaceName,
         short: buildWorkspaceShortLabel(tenantContext.tenant.workspaceName),

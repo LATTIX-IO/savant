@@ -45,18 +45,28 @@ export async function POST(request: Request) {
       );
     }
 
-    if (syncMode && syncMode !== "webhook" && syncMode !== "poll" && syncMode !== "manual") {
+    if (syncMode === "webhook") {
+      return NextResponse.json(
+        createApiErrorResponse(
+          "repository_sync_mode_disabled",
+          "Webhook sync is disabled in the current secure MVP. Use poll or manual sync.",
+        ),
+        { status: 409 },
+      );
+    }
+
+    if (syncMode && syncMode !== "poll" && syncMode !== "manual") {
       return NextResponse.json(
         createApiErrorResponse(
           "invalid_sync_mode",
-          "Repository bootstrap preview syncMode must be webhook, poll, or manual.",
+          "Repository bootstrap preview syncMode must be poll or manual.",
         ),
         { status: 400 },
       );
     }
 
     const validatedSyncMode: RepoBootstrapTemplateRequest["syncMode"] =
-      syncMode === "webhook" || syncMode === "poll" || syncMode === "manual"
+      syncMode === "poll" || syncMode === "manual"
         ? syncMode
         : undefined;
 

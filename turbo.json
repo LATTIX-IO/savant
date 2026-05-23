@@ -3,7 +3,21 @@
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "env": [
+        "APP_BASE_URL",
+        "NEXT_PUBLIC_APP_URL",
+        "AUTH0_*",
+        "NEXT_PUBLIC_AUTH0_*",
+        "DATABASE_URL",
+        "STRIPE_*",
+        "NEXT_PUBLIC_STRIPE_*",
+        "NEXT_ADAPTER_PATH",
+        "NEXT_DEPLOYMENT_ID",
+        "NEXT_PRIVATE_OUTPUT_TRACE_ROOT",
+        "VERCEL",
+        "VERCEL_*"
+      ]
     },
     "dev": {
       "cache": false,

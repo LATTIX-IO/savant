@@ -3,7 +3,16 @@
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useMemo, useReducer, useState } from "react";
+
+import type {
+  ActivityEventItem,
+  EvalRunSummary,
+  FlaggedCaseItem,
+  ReviewerComment,
+  SkillDetailPayload,
+  SkillSourcePayload,
+} from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
 import {
@@ -16,74 +25,375 @@ import {
   Tier,
 } from "@/components/savant/primitives";
 import {
-  APPROVAL_TIMELINE,
-  COMMENTS,
-  RUBRIC_BASELINE,
-  SKILLS,
-  type Skill,
-} from "@/lib/savant-data";
+  fetchSkillDetail,
+  fetchSkillSource,
+  updateSkillSource,
+} from "@/lib/control-plane-client";
+import {
+  buildSkillRecommendationQueueScope,
+  buildSkillRecommendationQueueStorageKey,
+  parseQueuedSkillRecommendations,
+  type QueuedSkillRecommendation,
+} from "@/lib/evaluation-recommendation-queue.ts";
+import {
+  insertQueuedSkillRecommendationsIntoDraft,
+  parseMarkdownPreviewBlocks,
+} from "@/lib/skill-builder";
+import { buildRepositoryWebUrl } from "@/lib/repository-links";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 
-type TabKey = "evaluation" | "versions" | "access" | "activity";
+type TabKey = "evaluation" | "builder" | "versions" | "access" | "activity";
+
+type LoadStatus = "idle" | "loading" | "error" | "success";
+
+type SaveStatus = "idle" | "saving" | "error" | "success";
+
+type BuilderFeedback = {
+  tone: "info" | "success" | "error";
+  message: string;
+};
+
+const EMPTY_QUEUED_RECOMMENDATIONS: QueuedSkillRecommendation[] = [];
+const queuedRecommendationSnapshotCache = new Map<
+  string,
+  { rawValue: string | null; parsed: QueuedSkillRecommendation[] }
+>();
+
+function subscribeToQueuedRecommendationStorage(
+  storageKey: string | null,
+  onStoreChange: () => void,
+) {
+  if (typeof window === "undefined" || !storageKey) {
+    return () => {};
+  }
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === storageKey || event.key === null) {
+      onStoreChange();
+    }
+  };
+
+  window.addEventListener("storage", handleStorage);
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+  };
+}
+
+function readQueuedRecommendationSnapshot(storageKey: string | null): QueuedSkillRecommendation[] {
+  if (typeof window === "undefined" || !storageKey) {
+    return EMPTY_QUEUED_RECOMMENDATIONS;
+  }
+
+  const rawValue = window.localStorage.getItem(storageKey);
+  const cachedSnapshot = queuedRecommendationSnapshotCache.get(storageKey);
+
+  if (cachedSnapshot && cachedSnapshot.rawValue === rawValue) {
+    return cachedSnapshot.parsed;
+  }
+
+  const parsedSnapshot = rawValue
+    ? parseQueuedSkillRecommendations(rawValue)
+    : EMPTY_QUEUED_RECOMMENDATIONS;
+  const normalizedSnapshot = parsedSnapshot.length > 0
+    ? parsedSnapshot
+    : EMPTY_QUEUED_RECOMMENDATIONS;
+
+  queuedRecommendationSnapshotCache.set(storageKey, {
+    rawValue,
+    parsed: normalizedSnapshot,
+  });
+
+  return normalizedSnapshot;
+}
+
+function formatQueuedRecommendationValue(value: string): string {
+  if (!value.trim()) {
+    return "Unknown";
+  }
+
+  return value
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function queuedRecommendationChipClass(recommendation: QueuedSkillRecommendation) {
+  if (recommendation.effort === "high") {
+    return "chip chip-blood";
+  }
+
+  if (recommendation.effort === "medium") {
+    return "chip chip-brass";
+  }
+
+  return "chip chip-moss";
+}
 
 export function SkillScreen({ skillId }: { skillId: string }) {
-  const skill = SKILLS.find((s) => s.id === skillId) ?? SKILLS[0]!;
-  const [tab, setTab] = useState<TabKey>("evaluation");
-  const baselineScore = skill.score ?? 0;
+  const [tab, setTab] = useState<TabKey>("builder");
   const pathname = usePathname() || "/";
   const catalogHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
+  const [detail, setDetail] = useState<SkillDetailPayload | null>(null);
+  const [detailStatus, setDetailStatus] = useState<LoadStatus>("loading");
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [source, setSource] = useState<SkillSourcePayload | null>(null);
+  const [sourceStatus, setSourceStatus] = useState<LoadStatus>("idle");
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [builderFeedback, setBuilderFeedback] = useState<BuilderFeedback | null>(null);
+  const [, bumpQueuedRecommendationsVersion] = useReducer(
+    (current: number) => current + 1,
+    0,
+  );
+  const sourceSkillId = source?.skillId ?? null;
+  const sourceSkillUuid = source?.skillUuid ?? null;
 
-  const railSteps: ProvenanceStep[] = [
-    {
-      label: "Repository",
-      value: skill.repo,
-      meta: (
-        <span className="row" style={{ gap: 4 }}>
-          <ProviderIcon p={skill.repoProvider} size={9} />
-          <span className="muted">{skill.repoProvider}</span>
-        </span>
-      ),
-      state: "ok",
-    },
-    {
-      label: "Reference",
-      value: skill.candidateRef !== "—" ? skill.candidateRef : skill.ref,
-      meta: (
-        <span className="mono subtle" style={{ fontSize: 10.5 }}>
-          {skill.candidateCommit !== "—" ? skill.candidateCommit : skill.commit} · {skill.branch}
-        </span>
-      ),
-      state: "ok",
-    },
-    {
-      label: "Evaluation",
-      value: skill.status.startsWith("candidate-running")
-        ? "Running · 184 / 248"
-        : "248 cases · 6 flagged",
-      meta: (
-        <span className="muted">
-          Baseline {skill.score?.toFixed(1) ?? "—"} → cand {(baselineScore + 0.6).toFixed(1)}
-        </span>
-      ),
-      state: "warn",
-    },
-    {
-      label: "Approval",
-      value: "2 of 3 approved",
-      meta: <span className="muted">awaiting compliance</span>,
-      state: "now",
-    },
-    {
-      label: "Release",
-      value: skill.channel === "production" ? `Production · ${skill.ref}` : "Not released",
-      meta: (
-        <span className="muted">
-          {skill.channel === "production" ? "Pinned 2d ago" : "Promote after approval"}
-        </span>
-      ),
-      state: skill.channel === "production" ? "ok" : "",
-    },
-  ];
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadSkillDetail() {
+      setDetailStatus("loading");
+      setDetailError(null);
+
+      try {
+        const response = await fetchSkillDetail(skillId, { signal: controller.signal });
+
+        if (!active) {
+          return;
+        }
+
+        setDetail(response.data);
+        setDetailStatus("success");
+      } catch (error) {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
+        setDetailStatus("error");
+        setDetailError(
+          error instanceof Error ? error.message : "Could not load the skill detail.",
+        );
+      }
+    }
+
+    void loadSkillDetail();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [reloadToken, skillId]);
+
+  useEffect(() => {
+    if (tab !== "builder" || detailStatus !== "success" || !detail) {
+      return;
+    }
+
+    const activeSourceMatchesCurrentSkill = sourceSkillId === detail.skill.id || sourceSkillUuid === detail.skill.skillUuid;
+
+    if (sourceStatus === "loading" || activeSourceMatchesCurrentSkill) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadSkillSource() {
+      setSourceStatus("loading");
+      setSourceError(null);
+
+      try {
+        const response = await fetchSkillSource(skillId, { signal: controller.signal });
+
+        if (!active) {
+          return;
+        }
+
+        setSource(response.data);
+        setDraft(response.data.content);
+        setSourceStatus("success");
+        setSaveStatus("idle");
+        setSaveMessage(null);
+        setBuilderFeedback(null);
+      } catch (error) {
+        if (!active || controller.signal.aborted) {
+          return;
+        }
+
+        setSourceStatus("error");
+        setSourceError(
+          error instanceof Error ? error.message : "Could not load the skill source.",
+        );
+      }
+    }
+
+    void loadSkillSource();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    detail,
+    detailStatus,
+    skillId,
+    sourceSkillId,
+    sourceSkillUuid,
+    sourceStatus,
+    tab,
+  ]);
+
+  const skill = detail?.skill ?? null;
+  const latestEval = detail?.evaluations[0] ?? null;
+  const activeSource = source && skill && source.skillId === skill.id ? source : null;
+  const queueStorageKey = skill
+    ? buildSkillRecommendationQueueStorageKey(buildSkillRecommendationQueueScope({
+        id: skill.id,
+        name: skill.name,
+        team: skill.team,
+        repo: skill.repo,
+        branch: skill.branch,
+      }))
+    : null;
+
+  useEffect(() => {
+    if (!queueStorageKey) {
+      return;
+    }
+
+    return subscribeToQueuedRecommendationStorage(queueStorageKey, () => {
+      bumpQueuedRecommendationsVersion();
+    });
+  }, [queueStorageKey]);
+
+  const queuedRecommendations = readQueuedRecommendationSnapshot(queueStorageKey);
+
+  const repositoryHref = skill
+    ? buildRepositoryWebUrl({
+        provider: skill.repoProvider,
+        name: skill.repo,
+      })
+    : null;
+  const latestEvalHref = latestEval
+    ? buildTenantAwareAppPath(pathname, `/evaluations/${encodeURIComponent(latestEval.id)}`) as Route
+    : null;
+  const railSteps = useMemo(() => buildRailSteps(detail), [detail]);
+  const builderIsDirty = activeSource ? draft !== activeSource.content : false;
+
+  async function saveBuilderDraft() {
+    if (!activeSource || !builderIsDirty || !activeSource.canSave || saveStatus === "saving") {
+      return;
+    }
+
+    setSaveStatus("saving");
+    setSaveMessage(null);
+    setBuilderFeedback(null);
+
+    try {
+      const response = await updateSkillSource(skillId, {
+        content: draft,
+      });
+
+      setSource({
+        ...activeSource,
+        content: draft,
+        sourceCommitSha: response.data.commit.sha,
+        canSave: true,
+        saveDisabledReason: undefined,
+      });
+      setSaveStatus("success");
+      setSaveMessage(
+        response.data.warnings.length > 0
+          ? response.data.warnings.join(" ")
+          : `Saved ${activeSource.sourcePath} to ${response.data.branch}.`,
+      );
+      setReloadToken((current) => current + 1);
+    } catch (error) {
+      setSaveStatus("error");
+      setSaveMessage(
+        error instanceof Error ? error.message : "Could not save the skill source.",
+      );
+    }
+  }
+
+  function resetBuilderDraft() {
+    setDraft(activeSource?.content ?? "");
+    setSaveStatus("idle");
+    setSaveMessage(null);
+    setBuilderFeedback(null);
+  }
+
+  function insertQueuedRecommendationsIntoBuilder(nextRecommendations: QueuedSkillRecommendation[]) {
+    if (!activeSource) {
+      setBuilderFeedback({
+        tone: "error",
+        message: "Load the current Builder source before inserting queued recommendations.",
+      });
+      return;
+    }
+
+    const result = insertQueuedSkillRecommendationsIntoDraft(draft, nextRecommendations);
+
+    if (result.insertedCount > 0) {
+      setDraft(result.draft);
+      setSaveStatus("idle");
+      setSaveMessage(null);
+      setBuilderFeedback({
+        tone: "success",
+        message: `Inserted ${result.insertedCount} queued recommendation${result.insertedCount === 1 ? "" : "s"} into the draft. Save SKILL.md when you are ready.`,
+      });
+      return;
+    }
+
+    setBuilderFeedback({
+      tone: "info",
+      message: nextRecommendations.length === 1
+        ? "That queued recommendation is already present in the draft."
+        : "All queued recommendations are already present in the draft.",
+    });
+  }
+
+  function insertQueuedRecommendation(queueId: string) {
+    const recommendation = queuedRecommendations.find((candidate) => candidate.queueId === queueId);
+
+    if (!recommendation) {
+      setBuilderFeedback({
+        tone: "error",
+        message: "That queued recommendation is no longer available. Refresh the page and try again.",
+      });
+      return;
+    }
+
+    insertQueuedRecommendationsIntoBuilder([recommendation]);
+  }
+
+  function insertAllQueuedRecommendations() {
+    insertQueuedRecommendationsIntoBuilder(queuedRecommendations);
+  }
+
+  if (detailStatus === "loading" && !detail) {
+    return <ScreenState kind="loading" message="Loading governed skill detail from the control-plane API…" />;
+  }
+
+  if (detailStatus === "error" && !detail) {
+    return (
+      <ScreenState
+        kind="error"
+        message={detailError ?? "Could not load the skill detail."}
+        actionLabel="Retry"
+        onAction={() => setReloadToken((current) => current + 1)}
+      />
+    );
+  }
+
+  if (!detail || !skill) {
+    return <ScreenState kind="error" message="Skill detail is unavailable." />;
+  }
 
   return (
     <div className="page-inner">
@@ -106,16 +416,25 @@ export function SkillScreen({ skillId }: { skillId: string }) {
           <div className="page-head-sub">{skill.description}</div>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn btn-ghost">
-            <Ic.ExternalLink className="b-icon" />
-            View in {skill.repoProvider}
-          </button>
-          <button type="button" className="btn btn-danger">
-            Reject candidate
-          </button>
-          <button type="button" className="btn btn-brass">
-            <Ic.Check className="b-icon" />
-            Approve for release
+          {latestEvalHref ? (
+            <Link href={latestEvalHref} className="btn btn-ghost">
+              <Ic.Eval className="b-icon" />
+              Open latest eval
+            </Link>
+          ) : null}
+          {repositoryHref ? (
+            <a href={repositoryHref} target="_blank" rel="noreferrer" className="btn btn-ghost">
+              <Ic.ExternalLink className="b-icon" />
+              View in {skill.repoProvider}
+            </a>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setReloadToken((current) => current + 1)}
+          >
+            <Ic.Refresh className="b-icon" />
+            Refresh
           </button>
         </div>
       </div>
@@ -137,134 +456,234 @@ export function SkillScreen({ skillId }: { skillId: string }) {
       >
         {(
           [
-            ["evaluation", "Evaluation", "6 regressions"],
+            ["builder", "Builder", queuedRecommendations.length > 0 ? `${queuedRecommendations.length} queued` : source?.mode === "repository" ? source.sourcePath : undefined],
+            ["evaluation", "Evaluation", `${detail.flaggedCases.length} flagged`],
             ["versions", "Versions", `${skill.versionCount}`],
             ["access", "Access"],
             ["activity", "Activity"],
           ] as Array<[TabKey, string, string?]>
         ).map(([k, label, badge]) => (
-          <div
+          <button
+            type="button"
             key={k}
             onClick={() => setTab(k)}
             className={`tab ${tab === k ? "active" : ""}`}
-            style={{ padding: "0 18px" }}
+            style={{ padding: "0 18px", background: "transparent", border: 0 }}
           >
             <span>{label}</span>
             {badge ? <span className="tab-count">{badge}</span> : null}
-          </div>
+          </button>
         ))}
       </div>
 
-      {tab === "evaluation" && <EvalTab skill={skill} />}
-      {tab === "versions" && <VersionsTab skill={skill} />}
-      {tab === "access" && <AccessTab />}
-      {tab === "activity" && <ActivityTab />}
+      {tab === "evaluation" && <EvaluationTab detail={detail} pathname={pathname} />}
+      {tab === "builder" && (
+        <BuilderTab
+          detail={detail}
+          pathname={pathname}
+          draft={activeSource ? draft : ""}
+          source={activeSource}
+          sourceStatus={sourceStatus}
+          sourceError={sourceError}
+          saveStatus={saveStatus}
+          saveMessage={saveMessage}
+          feedback={builderFeedback}
+          queuedRecommendations={queuedRecommendations}
+          isDirty={builderIsDirty}
+          onDraftChange={setDraft}
+          onResetDraft={resetBuilderDraft}
+          onSaveDraft={() => {
+            void saveBuilderDraft();
+          }}
+          onInsertQueuedRecommendation={insertQueuedRecommendation}
+          onInsertAllQueuedRecommendations={insertAllQueuedRecommendations}
+          onRetryLoad={() => {
+            setSource(null);
+            setSourceStatus("idle");
+            setSourceError(null);
+            setDraft("");
+            setSaveStatus("idle");
+            setSaveMessage(null);
+            setBuilderFeedback(null);
+          }}
+        />
+      )}
+      {tab === "versions" && <VersionsTab detail={detail} />}
+      {tab === "access" && <AccessTab detail={detail} />}
+      {tab === "activity" && <ActivityTab detail={detail} />}
     </div>
   );
 }
 
-function EvalTab({ skill }: { skill: Skill }) {
-  const overallDelta = +0.6;
-  const baselineScore = skill.score ?? 0;
+function buildRailSteps(detail: SkillDetailPayload | null): ProvenanceStep[] {
+  if (!detail) {
+    return [];
+  }
+
+  const latestEval = detail.evaluations[0] ?? null;
+  const approvedCount = detail.requiredApprovals.filter((approval) => approval.status === "approved").length;
+  const currentRef = detail.skill.candidateRef !== "—" ? detail.skill.candidateRef : detail.skill.ref;
+  const currentCommit = detail.skill.candidateCommit !== "—"
+    ? detail.skill.candidateCommit
+    : detail.skill.commit;
+  const evalValue = latestEval
+    ? `${latestEval.cases} cases · ${detail.flaggedCases.length} flagged`
+    : "Awaiting first run";
+  const evalMeta = latestEval
+    ? `${latestEval.dataset} · ${latestEval.duration} · ${latestEval.started}`
+    : "Run an evaluation to capture baseline deltas.";
+
+  return [
+    {
+      label: "Repository",
+      value: detail.skill.repo,
+      meta: (
+        <span className="row" style={{ gap: 4 }}>
+          <ProviderIcon p={detail.skill.repoProvider} size={9} />
+          <span className="muted">{detail.skill.repoProvider}</span>
+        </span>
+      ),
+      state: "ok",
+    },
+    {
+      label: "Reference",
+      value: currentRef,
+      meta: (
+        <span className="mono subtle" style={{ fontSize: 10.5 }}>
+          {currentCommit} · {detail.skill.branch}
+        </span>
+      ),
+      state: detail.skill.candidateRef !== "—" ? "now" : "ok",
+    },
+    {
+      label: "Evaluation",
+      value: evalValue,
+      meta: <span className="muted">{evalMeta}</span>,
+      state: latestEval?.status === "running" || latestEval?.status === "failed"
+        ? "warn"
+        : detail.flaggedCases.length > 0
+          ? "warn"
+          : "ok",
+    },
+    {
+      label: "Approval",
+      value: `${approvedCount} of ${detail.requiredApprovals.length} approved`,
+      meta: <span className="muted">{detail.requiredApprovals.find((approval) => approval.status === "pending")?.role ?? "Ready for release"}</span>,
+      state: approvedCount === detail.requiredApprovals.length ? "ok" : "now",
+    },
+    {
+      label: "Release",
+      value: detail.activeRelease
+        ? `${detail.activeRelease.toEnv} · ${detail.activeRelease.candidateRef}`
+        : detail.skill.channel === "production"
+          ? `Production · ${detail.skill.ref}`
+          : `Channel · ${detail.skill.channel}`,
+      meta: (
+        <span className="muted">
+          {detail.activeRelease
+            ? `${detail.activeRelease.readinessPct}% ready · ${detail.activeRelease.when}`
+            : detail.skill.channel === "production"
+              ? `Last eval ${detail.skill.lastEval}`
+              : "Promote after approval"}
+        </span>
+      ),
+      state: detail.activeRelease ? "now" : detail.skill.channel === "production" ? "ok" : "",
+    },
+  ];
+}
+
+function EvaluationTab({
+  detail,
+  pathname,
+}: {
+  detail: SkillDetailPayload;
+  pathname: string;
+}) {
+  const latestEval = detail.evaluations[0] ?? null;
+  const passRate = latestEval ? Math.round((latestEval.passed / Math.max(latestEval.cases, 1)) * 1000) / 10 : null;
+  const latestEvalHref = latestEval
+    ? buildTenantAwareAppPath(pathname, `/evaluations/${encodeURIComponent(latestEval.id)}`) as Route
+    : null;
+
   return (
     <div className="split wide">
       <div className="col" style={{ gap: "var(--gutter)", minWidth: 0 }}>
-        <div className="note brass">
-          <Ic.Warn className="n-icon" />
+        <div className={`note ${latestEval?.status === "complete-with-regressions" || latestEval?.status === "failed" || detail.flaggedCases.length > 0 ? "brass" : ""}`}>
+          {latestEval?.status === "running"
+            ? <Ic.Spinner className="n-icon" />
+            : latestEval?.status === "failed"
+              ? <Ic.Warn className="n-icon" />
+              : <Ic.Eval className="n-icon" />}
           <div className="grow">
             <div style={{ fontSize: 13, fontWeight: 500, color: "var(--brass-deep)" }}>
-              Candidate introduces 2 regressions and 4 improvements over baseline.
+              {latestEval
+                ? buildEvaluationBanner(detail, latestEval)
+                : "This skill has not completed a control-plane evaluation yet."}
             </div>
             <div
               style={{ fontSize: 12, color: "var(--brass-deep)", opacity: 0.8, marginTop: 2 }}
             >
-              Eval set: <span className="mono">contract-corpus-v9.eval</span> · 248 cases · ran 58m
-              ago · 24s
+              {latestEval
+                ? (
+                    <>
+                      Eval set: <span className="mono">{latestEval.dataset}</span> · {latestEval.cases} cases · {latestEval.started} · {latestEval.duration}
+                    </>
+                  )
+                : "Run or connect an evaluation to populate rubric and regression context here."}
             </div>
           </div>
-          <button
-            type="button"
-            className="btn btn-sm"
-            style={{ background: "var(--panel)", borderColor: "var(--rule-2)" }}
-          >
-            View regressions <Ic.ChevR className="b-icon" />
-          </button>
-        </div>
-
-        <div className="ab">
-          <div className="ab-side">
-            <div className="ab-head">
-              <div className="ab-label">Baseline</div>
-              <span className="chip chip-paper">production</span>
-            </div>
-            <div className="row" style={{ gap: 8 }}>
-              <CommitRef commit={skill.commit} label={skill.ref} />
-              <span className="subtle" style={{ fontSize: 11.5 }}>
-                shipped 6d ago
-              </span>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div className="row" style={{ gap: 14, marginBottom: 8 }}>
-                <Score label="Overall" value={baselineScore} />
-                <Score label="Pass rate" value={91.3} unit="%" />
-                <Score label="Latency p95" value={2.8} unit="s" />
-              </div>
-              <div className="ab-snippet">{`{
-  "summary": "Standard 3-year SaaS NDA. Clauses align with master playbook v6.",
-  "risk_flags": [],
-  "recommend": "approve"
-}`}</div>
-            </div>
-          </div>
-          <div className="ab-side">
-            <div className="ab-head">
-              <div className="ab-label">Candidate</div>
-              <span className="chip chip-brass">awaiting approval</span>
-            </div>
-            <div className="row" style={{ gap: 8 }}>
-              <CommitRef commit={skill.candidateCommit} label={skill.candidateRef} />
-              <span className="subtle" style={{ fontSize: 11.5 }}>
-                by {skill.owner} · 1h ago
-              </span>
-            </div>
-            <div style={{ marginTop: 12 }}>
-              <div className="row" style={{ gap: 14, marginBottom: 8 }}>
-                <Score label="Overall" value={baselineScore + overallDelta} delta={overallDelta} />
-                <Score label="Pass rate" value={93.5} delta={+2.2} unit="%" />
-                <Score label="Latency p95" value={3.1} delta={+0.3} unit="s" worseUp />
-              </div>
-              <div className="ab-snippet">{`{
-  "summary": "Standard 3-year SaaS NDA with non-standard mutual indemnity clause (§7.4).",
-  "risk_flags": [
-    "non-standard indemnity scope — deviates from master playbook v6",
-    "auto-renewal language uses 60-day instead of 30-day notice"
-  ],
-  "recommend": "review"
-}`}</div>
-            </div>
-          </div>
+          {latestEvalHref ? (
+            <Link
+              href={latestEvalHref}
+              className="btn btn-sm"
+              style={{ background: "var(--panel)", borderColor: "var(--rule-2)" }}
+            >
+              Open eval <Ic.ChevR className="b-icon" />
+            </Link>
+          ) : null}
         </div>
 
         <div className="panel">
           <div className="panel-hd">
+            <div className="panel-title">Run summary</div>
+            {detail.activeRelease ? (
+              <span className="chip chip-brass">{detail.activeRelease.readinessPct}% ready for {detail.activeRelease.toEnv}</span>
+            ) : null}
+          </div>
+          <div className="panel-bd" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14 }}>
+            <Score label="Overall" value={detail.skill.score} />
+            <Score
+              label="Pass rate"
+              value={passRate}
+              unit="%"
+              {...(latestEval?.delta != null ? { delta: latestEval.delta } : {})}
+            />
+            <Score label="Flagged cases" value={detail.flaggedCases.length} />
+            <Score label="Versions tracked" value={detail.versionHistory.length} />
+          </div>
+        </div>
+
+        <RecentEvaluationsPanel evaluations={detail.evaluations} pathname={pathname} />
+
+        <div className="panel">
+          <div className="panel-hd">
             <div className="panel-title">Rubric breakdown</div>
-            <div className="row" style={{ gap: 6 }}>
-              <span className="row" style={{ gap: 5, fontSize: 11.5, color: "var(--muted)" }}>
-                <span style={{ width: 1, height: 10, background: "var(--ink-3)" }} /> baseline
-              </span>
-              <span
-                className="row"
-                style={{ gap: 5, fontSize: 11.5, color: "var(--muted)", marginLeft: 12 }}
-              >
-                <span style={{ width: 8, height: 6, background: "var(--moss)", borderRadius: 2 }} />{" "}
-                candidate
-              </span>
-            </div>
+            <span className="subtle" style={{ fontSize: 11.5 }}>
+              {detail.rubricBaseline.length} metrics
+            </span>
           </div>
           <div className="panel-bd">
-            {RUBRIC_BASELINE.map((r, i) => (
-              <ScoreBar key={i} {...r} />
-            ))}
+            {detail.rubricBaseline.length > 0 ? detail.rubricBaseline.map((row, index) => (
+              <ScoreBar
+                key={`${row.label}-${index}`}
+                label={row.label}
+                baseline={row.baseline}
+                candidate={row.candidate}
+                dir={row.direction}
+              />
+            )) : (
+              <EmptyPanelState message="Rubric comparisons will appear after the first indexed evaluation run." />
+            )}
           </div>
         </div>
 
@@ -272,38 +691,31 @@ function EvalTab({ skill }: { skill: Skill }) {
           <div className="panel-hd">
             <div className="row" style={{ gap: 10 }}>
               <div className="panel-title">Flagged cases</div>
-              <span className="chip chip-blood">6 regressions</span>
-            </div>
-            <div className="row" style={{ gap: 6 }}>
-              <button type="button" className="btn btn-sm">
-                Filter
-              </button>
-              <button type="button" className="btn btn-sm">
-                Open in eval ↗
-              </button>
+              <span className="chip chip-blood">{detail.flaggedCases.length}</span>
             </div>
           </div>
           <div className="panel-bd tight">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th style={{ width: 100 }}>Case</th>
-                  <th>Description</th>
-                  <th>Rubric</th>
-                  <th style={{ textAlign: "right" }}>Baseline</th>
-                  <th style={{ textAlign: "right" }}>Candidate</th>
-                  <th style={{ textAlign: "right" }}>Δ</th>
-                </tr>
-              </thead>
-              <tbody>
-                <FlagRow id="0117" desc="Mutual NDA with non-standard indemnity" rubric="Clause extraction precision" b={1.0} c={0.55} />
-                <FlagRow id="0142" desc="MSA with custom termination clause" rubric="Clause extraction precision" b={0.94} c={0.71} />
-                <FlagRow id="0089" desc="Vendor agreement with auto-renewal language" rubric="Tone compliance" b={0.97} c={0.88} />
-                <FlagRow id="0203" desc="Procurement DPA — schedule 3 omitted" rubric="Risk flag recall" b={0.81} c={0.74} />
-                <FlagRow id="0226" desc="Non-standard governing law" rubric="Clause extraction precision" b={0.9} c={0.79} />
-                <FlagRow id="0234" desc="Indemnity carve-out for IP infringement" rubric="Tone compliance" b={0.96} c={0.91} />
-              </tbody>
-            </table>
+            {detail.flaggedCases.length > 0 ? (
+              <table className="tbl">
+                <thead>
+                  <tr>
+                    <th style={{ width: 100 }}>Case</th>
+                    <th>Description</th>
+                    <th>Rubric</th>
+                    <th style={{ textAlign: "right" }}>Baseline</th>
+                    <th style={{ textAlign: "right" }}>Candidate</th>
+                    <th style={{ textAlign: "right" }}>Δ</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.flaggedCases.map((flag) => (
+                    <FlagRow key={flag.caseId} flag={flag} />
+                  ))}
+                </tbody>
+              </table>
+            ) : (
+              <EmptyPanelState message="No flagged cases are attached to the current evaluation set." />
+            )}
           </div>
         </div>
       </div>
@@ -314,21 +726,23 @@ function EvalTab({ skill }: { skill: Skill }) {
             <div className="panel-title">Approval timeline</div>
             <span className="chip chip-brass">
               <span className="dot" />
-              awaiting compliance
+              {detail.requiredApprovals.some((approval) => approval.status === "pending")
+                ? "awaiting approval"
+                : "ready for release"}
             </span>
           </div>
           <div className="panel-bd">
             <div className="tl">
-              {APPROVAL_TIMELINE.map((e, i) => (
-                <div className="tl-item" key={i}>
-                  <span className={`tl-node ${e.node}`} />
+              {detail.approvalTimeline.map((event, index) => (
+                <div className="tl-item" key={`${event.when}-${event.role}-${index}`}>
+                  <span className={`tl-node ${event.node}`} />
                   <div>
                     <div className="tl-pri">
-                      <b>{e.who}</b> <span className="muted">{e.action}</span>
+                      <b>{event.who}</b> <span className="muted">{event.action}</span>
                     </div>
-                    <div className="tl-sec">{e.role}</div>
+                    <div className="tl-sec">{event.role}</div>
                   </div>
-                  <div className="tl-meta">{e.when}</div>
+                  <div className="tl-meta">{event.when}</div>
                 </div>
               ))}
             </div>
@@ -339,13 +753,19 @@ function EvalTab({ skill }: { skill: Skill }) {
           <div className="panel-hd">
             <div className="panel-title">Required approvals</div>
             <span className="subtle" style={{ fontSize: 11.5 }}>
-              2 of 3
+              {detail.requiredApprovals.filter((approval) => approval.status === "approved").length} of {detail.requiredApprovals.length}
             </span>
           </div>
           <div className="panel-bd tight">
-            <ApprovalRow role="Skill owner" who="ari.chen" status="approved" when="1h ago" />
-            <ApprovalRow role="Security" who="sasha.gw" status="approved" when="30m ago" />
-            <ApprovalRow role="Compliance" who="—" status="pending" when="—" />
+            {detail.requiredApprovals.map((approval) => (
+              <ApprovalRow
+                key={approval.role}
+                role={approval.role}
+                who={approval.assignee ?? "—"}
+                status={approval.status}
+                when={approval.when ?? "—"}
+              />
+            ))}
           </div>
         </div>
 
@@ -353,45 +773,15 @@ function EvalTab({ skill }: { skill: Skill }) {
           <div className="panel-hd">
             <div className="panel-title">Reviewer notes</div>
             <span className="subtle" style={{ fontSize: 11.5 }}>
-              {COMMENTS.length}
+              {detail.reviewerComments.length}
             </span>
           </div>
           <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {COMMENTS.map((c, i) => (
-              <div key={i} className="col" style={{ gap: 6 }}>
-                <div className="row" style={{ gap: 8 }}>
-                  <span className="avatar sm">{c.who.slice(0, 2).toUpperCase()}</span>
-                  <span style={{ fontSize: 12.5, fontWeight: 500 }}>{c.who}</span>
-                  <span className="subtle" style={{ fontSize: 11.5 }}>
-                    {c.when}
-                  </span>
-                </div>
-                <div
-                  style={{
-                    fontSize: 12.5,
-                    color: "var(--ink-2)",
-                    lineHeight: 1.5,
-                    paddingLeft: 28,
-                  }}
-                >
-                  {c.text}
-                </div>
-              </div>
-            ))}
-            <textarea
-              placeholder="Add a note for reviewers…"
-              style={{
-                background: "var(--linen)",
-                border: "1px solid var(--rule-2)",
-                borderRadius: 5,
-                padding: "10px 12px",
-                fontSize: 12.5,
-                resize: "none",
-                outline: "none",
-                minHeight: 60,
-                fontFamily: "inherit",
-              }}
-            />
+            {detail.reviewerComments.length > 0 ? detail.reviewerComments.map((comment, index) => (
+              <CommentRow key={`${comment.who}-${comment.when}-${index}`} comment={comment} />
+            )) : (
+              <EmptyPanelState message="No reviewer comments have been indexed for this skill yet." />
+            )}
           </div>
         </div>
       </div>
@@ -399,37 +789,383 @@ function EvalTab({ skill }: { skill: Skill }) {
   );
 }
 
-function FlagRow({
-  id,
-  desc,
-  rubric,
-  b,
-  c,
+function BuilderTab({
+  detail,
+  pathname,
+  source,
+  draft,
+  sourceStatus,
+  sourceError,
+  saveStatus,
+  saveMessage,
+  feedback,
+  queuedRecommendations,
+  isDirty,
+  onDraftChange,
+  onResetDraft,
+  onSaveDraft,
+  onInsertQueuedRecommendation,
+  onInsertAllQueuedRecommendations,
+  onRetryLoad,
 }: {
-  id: string;
-  desc: string;
-  rubric: string;
-  b: number;
-  c: number;
+  detail: SkillDetailPayload;
+  pathname: string;
+  source: SkillSourcePayload | null;
+  draft: string;
+  sourceStatus: LoadStatus;
+  sourceError: string | null;
+  saveStatus: SaveStatus;
+  saveMessage: string | null;
+  feedback: BuilderFeedback | null;
+  queuedRecommendations: QueuedSkillRecommendation[];
+  isDirty: boolean;
+  onDraftChange: (nextDraft: string) => void;
+  onResetDraft: () => void;
+  onSaveDraft: () => void;
+  onInsertQueuedRecommendation: (queueId: string) => void;
+  onInsertAllQueuedRecommendations: () => void;
+  onRetryLoad: () => void;
 }) {
-  const delta = c - b;
+  const previewBlocks = useMemo(
+    () => parseMarkdownPreviewBlocks(draft),
+    [draft],
+  );
+
+  return (
+    <div className="split wide">
+      <div className="col" style={{ gap: "var(--gutter)", minWidth: 0 }}>
+        {sourceStatus === "loading" ? (
+          <div className="note">
+            <Ic.Spinner className="n-icon" />
+            <span>Loading the current SKILL.md source…</span>
+          </div>
+        ) : null}
+        {sourceStatus === "error" ? (
+          <div className="note blood" style={{ justifyContent: "space-between", alignItems: "center" }}>
+            <div className="row" style={{ alignItems: "flex-start" }}>
+              <Ic.XCircle className="n-icon" />
+              <span>{sourceError ?? "Could not load the skill source."}</span>
+            </div>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={onRetryLoad}>
+              Retry
+            </button>
+          </div>
+        ) : null}
+        {feedback ? (
+          <div className={`note ${feedback.tone === "error" ? "blood" : ""}`}>
+            {feedback.tone === "error" ? <Ic.XCircle className="n-icon" /> : <Ic.Check className="n-icon" />}
+            <span>{feedback.message}</span>
+          </div>
+        ) : null}
+        {source ? (
+          <>
+            <div className={`note ${source.mode === "fallback" ? "brass" : ""}`}>
+              {source.mode === "repository" ? <Ic.Repo className="n-icon" /> : <Ic.Warn className="n-icon" />}
+              <div className="grow">
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--ink)" }}>
+                  {source.mode === "repository"
+                    ? `Editing ${source.sourcePath} from ${source.branch}.`
+                    : "Showing a generated builder draft because live SKILL.md content is unavailable."}
+                </div>
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                  {source.mode === "repository"
+                    ? `Source commit ${source.sourceCommitSha ?? "pending"} · ${source.repository}`
+                    : source.saveDisabledReason ?? "Connect a supported provider-backed repository to enable live Builder edits."}
+                </div>
+              </div>
+            </div>
+
+            {saveStatus !== "idle" && saveMessage ? (
+              <div className={`note ${saveStatus === "error" ? "blood" : saveStatus === "success" && source.mode === "fallback" ? "brass" : ""}`}>
+                {saveStatus === "error" ? <Ic.XCircle className="n-icon" /> : <Ic.Check className="n-icon" />}
+                <span>{saveMessage}</span>
+              </div>
+            ) : null}
+
+            <div className="panel">
+              <div className="panel-hd">
+                <div className="panel-title">Markdown source</div>
+                <div className="row" style={{ gap: 6 }}>
+                  <button type="button" className="btn btn-sm" onClick={onResetDraft} disabled={!isDirty || saveStatus === "saving"}>
+                    Reset
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={onSaveDraft}
+                    disabled={!isDirty || !source.canSave || saveStatus === "saving"}
+                  >
+                    {saveStatus === "saving" ? <Ic.Spinner className="b-icon" /> : <Ic.Check className="b-icon" />}
+                    Save SKILL.md
+                  </button>
+                </div>
+              </div>
+              <div className="panel-bd" style={{ padding: 0 }}>
+                <textarea
+                  value={draft}
+                  onChange={(event) => {
+                    onDraftChange(event.target.value);
+                  }}
+                  spellCheck={false}
+                  aria-label="SKILL markdown source"
+                  style={{
+                    width: "100%",
+                    minHeight: 540,
+                    border: 0,
+                    resize: "vertical",
+                    outline: "none",
+                    padding: 18,
+                    fontFamily: "var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace)",
+                    fontSize: 12.5,
+                    lineHeight: 1.6,
+                    background: "var(--panel)",
+                    color: "var(--ink)",
+                  }}
+                />
+              </div>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      <div className="col" style={{ gap: "var(--gutter)" }}>
+        <QueuedRecommendationsPanel
+          pathname={pathname}
+          queuedRecommendations={queuedRecommendations}
+          canInsert={Boolean(source)}
+          onInsertQueuedRecommendation={onInsertQueuedRecommendation}
+          onInsertAllQueuedRecommendations={onInsertAllQueuedRecommendations}
+        />
+
+        <div className="panel">
+          <div className="panel-hd">
+            <div className="panel-title">Preview</div>
+            <span className="subtle" style={{ fontSize: 11.5 }}>
+              Safe markdown preview
+            </span>
+          </div>
+          <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {previewBlocks.length > 0 ? previewBlocks.map((block, index) => (
+              <MarkdownPreviewBlockView key={`${block.type}-${index}`} block={block} />
+            )) : (
+              <EmptyPanelState message="Add markdown content to start building the skill source." />
+            )}
+          </div>
+        </div>
+
+        <div className="panel">
+          <div className="panel-hd">
+            <div className="panel-title">Implementation context</div>
+            <span className="subtle" style={{ fontSize: 11.5 }}>
+              Live evaluation signals
+            </span>
+          </div>
+          <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <ContextMetric label="Latest eval" value={detail.evaluations[0]?.dataset ?? "Not available yet"} />
+            <ContextMetric label="Flagged cases" value={String(detail.flaggedCases.length)} />
+            <ContextMetric label="Reviewer comments" value={String(detail.reviewerComments.length)} />
+            <ContextMetric label="Source path" value={source?.sourcePath ?? "SKILL.md"} mono />
+
+            {detail.flaggedCases.slice(0, 3).length > 0 ? (
+              <div className="col" style={{ gap: 8 }}>
+                <div className="eyebrow" style={{ fontSize: 10 }}>Top flagged cases</div>
+                {detail.flaggedCases.slice(0, 3).map((flag) => (
+                  <div
+                    key={flag.caseId}
+                    style={{
+                      padding: "10px 12px",
+                      border: "1px solid var(--rule)",
+                      borderRadius: 4,
+                      background: "var(--linen)",
+                    }}
+                  >
+                    <div style={{ fontSize: 12.5, fontWeight: 500, color: "var(--ink)" }}>#{flag.caseId} · {flag.rubric}</div>
+                    <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>{flag.description}</div>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QueuedRecommendationsPanel({
+  pathname,
+  queuedRecommendations,
+  canInsert,
+  onInsertQueuedRecommendation,
+  onInsertAllQueuedRecommendations,
+}: {
+  pathname: string;
+  queuedRecommendations: QueuedSkillRecommendation[];
+  canInsert: boolean;
+  onInsertQueuedRecommendation: (queueId: string) => void;
+  onInsertAllQueuedRecommendations: () => void;
+}) {
+  return (
+    <div className="panel">
+      <div className="panel-hd">
+        <div>
+          <div className="panel-title">Queued from evaluations</div>
+          <div className="subtle" style={{ fontSize: 11.5, marginTop: 4 }}>
+            Recommendations marked <strong style={{ color: "var(--ink)" }}>Queue next</strong> show up here until their evaluation decision changes.
+          </div>
+        </div>
+        <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
+          {queuedRecommendations.length > 1 ? (
+            <button type="button" className="btn btn-sm btn-ghost" onClick={onInsertAllQueuedRecommendations} disabled={!canInsert}>
+              Insert all
+            </button>
+          ) : null}
+          <span className="chip chip-paper">{queuedRecommendations.length} queued</span>
+        </div>
+      </div>
+      <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        {queuedRecommendations.length > 0 ? queuedRecommendations.map((recommendation) => {
+          const evaluationHref = buildTenantAwareAppPath(pathname, `/evaluations/${encodeURIComponent(recommendation.evaluationUuid)}`) as Route;
+
+          return (
+            <div
+              key={recommendation.queueId}
+              style={{
+                border: "1px solid var(--rule)",
+                borderRadius: 6,
+                background: "var(--linen)",
+                padding: "12px 14px",
+                display: "grid",
+                gap: 10,
+              }}
+            >
+              <div className="row between" style={{ gap: 10, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)" }}>{recommendation.title}</div>
+                  <div className="subtle" style={{ fontSize: 11.5, marginTop: 4 }}>
+                    {recommendation.evaluationRef} · {recommendation.evaluationDataset} · {recommendation.evaluationStarted}
+                  </div>
+                </div>
+                <span className={queuedRecommendationChipClass(recommendation)}>
+                  {formatQueuedRecommendationValue(recommendation.category)} · {formatQueuedRecommendationValue(recommendation.effort)}
+                </span>
+              </div>
+
+              <div style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.6 }}>
+                {recommendation.rationale}
+              </div>
+
+              <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6, fontSize: 12, color: "var(--ink-2)" }}>
+                {recommendation.actions.map((action) => (
+                  <li key={action}>{action}</li>
+                ))}
+              </ul>
+
+              <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => onInsertQueuedRecommendation(recommendation.queueId)}
+                  disabled={!canInsert}
+                >
+                  Insert into draft
+                </button>
+                <Link href={evaluationHref} className="btn btn-sm btn-ghost">
+                  Open eval
+                </Link>
+              </div>
+            </div>
+          );
+        }) : (
+          <EmptyPanelState message="Mark a recommendation as Queue next on an evaluation to bring it here." />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RecentEvaluationsPanel({
+  evaluations,
+  pathname,
+}: {
+  evaluations: EvalRunSummary[];
+  pathname: string;
+}) {
+  return (
+    <div className="panel">
+      <div className="panel-hd">
+        <div className="panel-title">Recent evaluations</div>
+        <span className="subtle" style={{ fontSize: 11.5 }}>
+          {evaluations.length}
+        </span>
+      </div>
+      <div className="panel-bd tight">
+        {evaluations.length > 0 ? (
+          <table className="tbl">
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Dataset</th>
+                <th style={{ textAlign: "right" }}>Cases</th>
+                <th style={{ textAlign: "right" }}>Pass</th>
+                <th>Status</th>
+                <th style={{ textAlign: "right" }}>Δ</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {evaluations.map((evaluation) => {
+                const href = buildTenantAwareAppPath(pathname, `/evaluations/${encodeURIComponent(evaluation.id)}`) as Route;
+
+                return (
+                  <tr key={evaluation.id}>
+                    <td>
+                      <div className="tbl-name-text">
+                        <span className="pri mono">{evaluation.ref}</span>
+                        <span className="sec">{evaluation.started}</span>
+                      </div>
+                    </td>
+                    <td>{evaluation.dataset}</td>
+                    <td className="mono num" style={{ textAlign: "right" }}>{evaluation.cases}</td>
+                    <td className="mono num" style={{ textAlign: "right" }}>{evaluation.passed}</td>
+                    <td>{renderEvaluationStatusChip(evaluation.status)}</td>
+                    <td style={{ textAlign: "right" }}>
+                      {evaluation.delta == null ? <span className="subtle">—</span> : <Delta v={evaluation.delta} />}
+                    </td>
+                    <td style={{ textAlign: "right" }}>
+                      <Link href={href} className="btn btn-sm">Open</Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        ) : (
+          <EmptyPanelState message="No evaluations are attached to this skill yet." />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FlagRow({ flag }: { flag: FlaggedCaseItem }) {
   return (
     <tr>
       <td>
-        <span className="mono num">#{id}</span>
+        <span className="mono num">#{flag.caseId}</span>
       </td>
-      <td>{desc}</td>
+      <td>{flag.description}</td>
       <td className="muted" style={{ fontSize: 12 }}>
-        {rubric}
+        {flag.rubric}
       </td>
       <td className="mono num" style={{ textAlign: "right" }}>
-        {b.toFixed(2)}
+        {flag.baseline.toFixed(2)}
       </td>
       <td className="mono num" style={{ textAlign: "right", color: "var(--oxblood)" }}>
-        {c.toFixed(2)}
+        {flag.candidate.toFixed(2)}
       </td>
       <td style={{ textAlign: "right" }}>
-        <Delta v={delta * 100} />
+        <Delta v={flag.delta * 100} />
       </td>
     </tr>
   );
@@ -443,7 +1179,7 @@ function Score({
   worseUp,
 }: {
   label: string;
-  value: number;
+  value: number | null;
   delta?: number;
   unit?: string;
   worseUp?: boolean;
@@ -459,10 +1195,14 @@ function Score({
         {label}
       </div>
       <div className="row" style={{ gap: 6, alignItems: "baseline" }}>
-        <span className="h-display" style={{ fontSize: 20 }}>
-          {value.toFixed(1)}
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>{unit || ""}</span>
-        </span>
+        {value == null ? (
+          <span className="h-display" style={{ fontSize: 20, color: "var(--subtle)" }}>—</span>
+        ) : (
+          <span className="h-display" style={{ fontSize: 20 }}>
+            {value.toFixed(1)}
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>{unit || ""}</span>
+          </span>
+        )}
         {delta != null && (
           <span className="mono num" style={{ fontSize: 11, color: deltaColor }}>
             {delta > 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}
@@ -535,151 +1275,129 @@ type Version = {
   delta: number;
 };
 
-function VersionsTab({ skill }: { skill: Skill }) {
-  const versions: Version[] = [
-    { ref: "v2.4.0-rc.2", commit: "8a31cf2", who: skill.owner, when: "1h ago", channel: "candidate", score: 92.0, delta: +0.6 },
-    { ref: "v2.3.7", commit: "a13f9c2", who: "ari.chen", when: "6d ago", channel: "production", score: 91.4, delta: +0.4 },
-    { ref: "v2.3.6", commit: "44dd1ab", who: "ari.chen", when: "11d ago", channel: "production", score: 91.0, delta: +0.7 },
-    { ref: "v2.3.5", commit: "c0918dd", who: "kalia.b", when: "18d ago", channel: "archived", score: 90.3, delta: +1.2 },
-    { ref: "v2.3.4", commit: "1bea90e", who: "kalia.b", when: "26d ago", channel: "archived", score: 89.1, delta: -0.4 },
-    { ref: "v2.3.3", commit: "5fa12bb", who: "ari.chen", when: "32d ago", channel: "archived", score: 89.5, delta: +0.9 },
-  ];
+function VersionsTab({ detail }: { detail: SkillDetailPayload }) {
+  const versions: Version[] = detail.versionHistory;
+
   return (
     <div className="panel">
       <div className="panel-hd">
         <div className="panel-title">Version history</div>
-        <div className="row" style={{ gap: 6 }}>
-          <button type="button" className="btn btn-sm">
-            Compare versions
-          </button>
-          <button type="button" className="btn btn-sm">
-            Export
-          </button>
-        </div>
+        <span className="subtle" style={{ fontSize: 11.5 }}>
+          {versions.length} tracked revisions
+        </span>
       </div>
       <div className="panel-bd tight">
-        <table className="tbl">
-          <thead>
-            <tr>
-              <th>Version</th>
-              <th>Commit</th>
-              <th>Author</th>
-              <th>Channel</th>
-              <th>Released</th>
-              <th style={{ textAlign: "right" }}>Score</th>
-              <th style={{ textAlign: "right" }}>Δ</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {versions.map((v, i) => (
-              <tr key={i}>
-                <td>
-                  <span className="mono num" style={{ color: "var(--ink)", fontWeight: 500 }}>
-                    {v.ref}
-                  </span>
-                </td>
-                <td>
-                  <CommitRef commit={v.commit} />
-                </td>
-                <td className="muted">{v.who}</td>
-                <td>
-                  {v.channel === "candidate" ? (
-                    <span className="chip chip-brass">candidate</span>
-                  ) : v.channel === "production" ? (
-                    <EnvPill env="production" />
-                  ) : (
-                    <span className="chip chip-paper">archived</span>
-                  )}
-                </td>
-                <td className="subtle">{v.when}</td>
-                <td className="mono num" style={{ textAlign: "right" }}>
-                  {v.score.toFixed(1)}
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <Delta v={v.delta} />
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button type="button" className="btn btn-sm">
-                    Diff
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-function AccessTab() {
-  const groups = [
-    { name: "legal-readers", members: 24, perm: "view + use", source: "Okta · synced", last: "12m ago" },
-    { name: "legal-owners", members: 6, perm: "edit + review", source: "Okta · synced", last: "1h ago" },
-    { name: "platform-admins", members: 3, perm: "approve + release", source: "manual", last: "2d ago" },
-    { name: "all-employees", members: 412, perm: "request access", source: "Okta · synced", last: "12m ago" },
-  ];
-  const pols = [
-    { rule: "Cannot be used outside", value: "Production environment" },
-    { rule: "Distribution blocked for", value: "Local sync agent (Tier 1 restriction)" },
-    { rule: "Required at runtime", value: "User must be member of legal-readers" },
-    { rule: "Customer-managed key", value: "Disabled · org-managed key in use" },
-  ];
-  return (
-    <div className="grid-2" style={{ alignItems: "flex-start" }}>
-      <div className="panel">
-        <div className="panel-hd">
-          <div className="panel-title">Groups with access</div>
-          <button type="button" className="btn btn-sm">
-            <Ic.Plus className="b-icon" />
-            Add group
-          </button>
-        </div>
-        <div className="panel-bd tight">
+        {versions.length > 0 ? (
           <table className="tbl">
             <thead>
               <tr>
-                <th>Group</th>
-                <th>Members</th>
-                <th>Permissions</th>
-                <th>Source</th>
-                <th style={{ textAlign: "right" }}>Last sync</th>
+                <th>Version</th>
+                <th>Commit</th>
+                <th>Author</th>
+                <th>Channel</th>
+                <th>Released</th>
+                <th style={{ textAlign: "right" }}>Score</th>
+                <th style={{ textAlign: "right" }}>Δ</th>
               </tr>
             </thead>
             <tbody>
-              {groups.map((g, i) => (
-                <tr key={i}>
+              {versions.map((version, index) => (
+                <tr key={`${version.ref}-${index}`}>
                   <td>
-                    <span className="mono" style={{ color: "var(--ink)" }}>
-                      {g.name}
+                    <span className="mono num" style={{ color: "var(--ink)", fontWeight: 500 }}>
+                      {version.ref}
                     </span>
                   </td>
-                  <td className="num">{g.members}</td>
-                  <td className="muted">{g.perm}</td>
                   <td>
-                    <span className="chip chip-paper">{g.source}</span>
+                    <CommitRef commit={version.commit} />
                   </td>
-                  <td className="subtle" style={{ textAlign: "right" }}>
-                    {g.last}
+                  <td className="muted">{version.who}</td>
+                  <td>
+                    {version.channel === "candidate" ? (
+                      <span className="chip chip-brass">candidate</span>
+                    ) : version.channel === "production" ? (
+                      <EnvPill env="production" />
+                    ) : (
+                      <span className="chip chip-paper">archived</span>
+                    )}
+                  </td>
+                  <td className="subtle">{version.when}</td>
+                  <td className="mono num" style={{ textAlign: "right" }}>
+                    {version.score.toFixed(1)}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <Delta v={version.delta} />
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        ) : (
+          <EmptyPanelState message="No indexed versions are available for this skill yet." />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AccessTab({ detail }: { detail: SkillDetailPayload }) {
+  return (
+    <div className="grid-2" style={{ alignItems: "flex-start" }}>
+      <div className="panel">
+        <div className="panel-hd">
+          <div className="panel-title">Groups with access</div>
+          <span className="subtle" style={{ fontSize: 11.5 }}>
+            {detail.accessGrants.length}
+          </span>
+        </div>
+        <div className="panel-bd tight">
+          {detail.accessGrants.length > 0 ? (
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Group</th>
+                  <th>Members</th>
+                  <th>Permissions</th>
+                  <th>Source</th>
+                  <th style={{ textAlign: "right" }}>Last sync</th>
+                </tr>
+              </thead>
+              <tbody>
+                {detail.accessGrants.map((grant) => (
+                  <tr key={grant.name}>
+                    <td>
+                      <span className="mono" style={{ color: "var(--ink)" }}>
+                        {grant.name}
+                      </span>
+                    </td>
+                    <td className="num">{grant.members}</td>
+                    <td className="muted">{grant.permission}</td>
+                    <td>
+                      <span className="chip chip-paper">{grant.source}</span>
+                    </td>
+                    <td className="subtle" style={{ textAlign: "right" }}>
+                      {grant.lastSync}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptyPanelState message="No access grants are indexed for this skill yet." />
+          )}
         </div>
       </div>
       <div className="panel">
         <div className="panel-hd">
           <div className="panel-title">Access policy</div>
-          <button type="button" className="btn btn-sm">
-            Edit policy
-          </button>
+          <span className="subtle" style={{ fontSize: 11.5 }}>
+            {detail.accessPolicyRules.length} rules
+          </span>
         </div>
         <div className="panel-bd" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {pols.map((p, i) => (
+          {detail.accessPolicyRules.length > 0 ? detail.accessPolicyRules.map((policy, index) => (
             <div
-              key={i}
+              key={`${policy.rule}-${index}`}
               style={{
                 padding: "10px 12px",
                 border: "1px solid var(--rule)",
@@ -688,52 +1406,247 @@ function AccessTab() {
               }}
             >
               <div className="eyebrow" style={{ fontSize: 10, marginBottom: 3 }}>
-                {p.rule}
+                {policy.rule}
               </div>
-              <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{p.value}</div>
+              <div style={{ fontSize: 13, color: "var(--ink-2)" }}>{policy.value}</div>
             </div>
-          ))}
+          )) : <EmptyPanelState message="No access policy rules are attached to this skill yet." />}
         </div>
       </div>
     </div>
   );
 }
 
-function ActivityTab() {
-  const events: Array<{ when: string; who: string; action: string; target: ReactNode; node: "moss" | "brass" | "blood" | "slate" }> = [
-    { when: "8m ago", who: "compliance", action: "Held approval", target: "candidate v2.4.0-rc.2", node: "brass" },
-    { when: "30m ago", who: "sasha.gw", action: "Approved", target: "security review", node: "moss" },
-    { when: "58m ago", who: "eval-runner", action: "Completed eval", target: "248 cases · 24s", node: "slate" },
-    { when: "1h ago", who: "ari.chen", action: "Submitted candidate", target: "v2.4.0-rc.2", node: "slate" },
-    { when: "6d ago", who: "ari.chen", action: "Released", target: "v2.3.7 → production", node: "moss" },
-    { when: "6d ago", who: "compliance", action: "Approved", target: "v2.3.7", node: "moss" },
-    { when: "7d ago", who: "sasha.gw", action: "Approved", target: "v2.3.7", node: "moss" },
-    { when: "8d ago", who: "eval-runner", action: "Completed eval", target: "v2.3.7-rc.1 · 246 cases", node: "slate" },
-    { when: "11d ago", who: "ari.chen", action: "Released", target: "v2.3.6 → production", node: "moss" },
-  ];
+function ActivityTab({ detail }: { detail: SkillDetailPayload }) {
   return (
-    <div className="panel">
-      <div className="panel-hd">
-        <div className="panel-title">Activity log</div>
-        <button type="button" className="btn btn-sm">
-          Export log
-        </button>
+    <div className="grid-2" style={{ alignItems: "flex-start" }}>
+      <div className="panel">
+        <div className="panel-hd">
+          <div className="panel-title">Activity log</div>
+          <span className="subtle" style={{ fontSize: 11.5 }}>
+            {detail.activityLog.length}
+          </span>
+        </div>
+        <div className="panel-bd">
+          {detail.activityLog.length > 0 ? (
+            <Timeline events={detail.activityLog} />
+          ) : (
+            <EmptyPanelState message="No activity events have been recorded for this skill yet." />
+          )}
+        </div>
       </div>
-      <div className="panel-bd">
-        <div className="tl">
-          {events.map((e, i) => (
-            <div className="tl-item" key={i}>
-              <span className={`tl-node ${e.node}`} />
-              <div>
-                <div className="tl-pri">
-                  <b>{e.who}</b> <span className="muted">{e.action.toLowerCase()}</span> {e.target}
-                </div>
-              </div>
-              <div className="tl-meta">{e.when}</div>
-            </div>
-          ))}
+      <div className="panel">
+        <div className="panel-hd">
+          <div className="panel-title">Audit highlights</div>
+          <span className="subtle" style={{ fontSize: 11.5 }}>
+            {detail.auditHighlights.length}
+          </span>
+        </div>
+        <div className="panel-bd">
+          {detail.auditHighlights.length > 0 ? (
+            <Timeline events={detail.auditHighlights} />
+          ) : (
+            <EmptyPanelState message="No audit highlights are attached to this skill yet." />
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function ScreenState({
+  kind,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  kind: "loading" | "error";
+  message: string;
+  actionLabel?: string;
+  onAction?: (() => void) | undefined;
+}) {
+  return (
+    <div className="page-inner">
+      <div className={`note ${kind === "error" ? "blood" : ""}`} style={{ marginTop: 24, justifyContent: "space-between", alignItems: "center" }}>
+        <div className="row" style={{ alignItems: "flex-start" }}>
+          {kind === "loading" ? <Ic.Spinner className="n-icon" /> : <Ic.XCircle className="n-icon" />}
+          <span>{message}</span>
+        </div>
+        {actionLabel && onAction ? (
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onAction}>
+            {actionLabel}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EmptyPanelState({ message }: { message: string }) {
+  return (
+    <div className="note">
+      <Ic.Overview className="n-icon" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function CommentRow({ comment }: { comment: ReviewerComment }) {
+  return (
+    <div className="col" style={{ gap: 6 }}>
+      <div className="row" style={{ gap: 8 }}>
+        <span className="avatar sm">{comment.who.slice(0, 2).toUpperCase()}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 500 }}>{comment.who}</span>
+        <span className="subtle" style={{ fontSize: 11.5 }}>
+          {comment.when}
+        </span>
+      </div>
+      <div
+        style={{
+          fontSize: 12.5,
+          color: "var(--ink-2)",
+          lineHeight: 1.5,
+          paddingLeft: 28,
+        }}
+      >
+        {comment.text}
+      </div>
+    </div>
+  );
+}
+
+function ContextMetric({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div
+      style={{
+        padding: "10px 12px",
+        border: "1px solid var(--rule)",
+        borderRadius: 4,
+        background: "var(--linen)",
+      }}
+    >
+      <div className="eyebrow" style={{ fontSize: 10, marginBottom: 4 }}>{label}</div>
+      <div className={mono ? "mono" : undefined} style={{ fontSize: 13, color: "var(--ink)" }}>{value}</div>
+    </div>
+  );
+}
+
+function MarkdownPreviewBlockView({
+  block,
+}: {
+  block: ReturnType<typeof parseMarkdownPreviewBlocks>[number];
+}) {
+  if (block.type === "heading") {
+    const size = 24 - (block.level - 1) * 2;
+
+    return (
+      <div style={{ fontSize: size, fontWeight: 600, color: "var(--ink)", lineHeight: 1.25 }}>
+        {block.text}
+      </div>
+    );
+  }
+
+  if (block.type === "paragraph") {
+    return <div style={{ fontSize: 13, color: "var(--ink-2)", lineHeight: 1.7 }}>{block.text}</div>;
+  }
+
+  if (block.type === "blockquote") {
+    return (
+      <div style={{ borderLeft: "2px solid var(--rule-2)", paddingLeft: 12, color: "var(--muted)", fontSize: 12.5, lineHeight: 1.6 }}>
+        {block.text}
+      </div>
+    );
+  }
+
+  if (block.type === "code") {
+    return (
+      <div style={{ border: "1px solid var(--rule)", borderRadius: 4, overflow: "hidden", background: "var(--linen)" }}>
+        <div style={{ padding: "8px 12px", borderBottom: "1px solid var(--rule)", fontSize: 11, color: "var(--muted)", textTransform: "uppercase" }}>
+          {block.language ?? "code"}
+        </div>
+        <pre
+          style={{
+            margin: 0,
+            padding: 14,
+            fontSize: 12,
+            lineHeight: 1.6,
+            overflowX: "auto",
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+          }}
+        >
+          {block.content}
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <ul style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8, color: "var(--ink-2)", fontSize: 13 }}>
+      {block.items.map((item, index) => (
+        <li key={`${item}-${index}`}>{item}</li>
+      ))}
+    </ul>
+  );
+}
+
+function Timeline({ events }: { events: Array<Pick<ActivityEventItem, "when" | "who" | "action" | "target" | "node">> }) {
+  return (
+    <div className="tl">
+      {events.map((event, index) => (
+        <div className="tl-item" key={`${event.when}-${event.action}-${index}`}>
+          <span className={`tl-node ${event.node}`} />
+          <div>
+            <div className="tl-pri">
+              <b>{event.who}</b> <span className="muted">{event.action.toLowerCase()}</span> {event.target}
+            </div>
+          </div>
+          <div className="tl-meta">{event.when}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function buildEvaluationBanner(detail: SkillDetailPayload, latestEval: EvalRunSummary): string {
+  if (latestEval.status === "running") {
+    return `Evaluation is still running across ${latestEval.cases} cases.`;
+  }
+
+  if (latestEval.status === "failed") {
+    return "Latest run failed before scoring completed. Review the indexed run and rerun once the underlying issue is fixed.";
+  }
+
+  if (detail.flaggedCases.length > 0) {
+    return `Latest run surfaced ${detail.flaggedCases.length} flagged cases that should inform the next Builder edit.`;
+  }
+
+  if (latestEval.delta != null) {
+    return `Latest run completed with a ${latestEval.delta >= 0 ? "positive" : "negative"} delta of ${latestEval.delta.toFixed(1)} points.`;
+  }
+
+  return "Latest run completed without flagged regressions.";
+}
+
+function renderEvaluationStatusChip(status: EvalRunSummary["status"]) {
+  switch (status) {
+    case "running":
+      return <span className="chip chip-paper">running</span>;
+    case "complete-with-regressions":
+      return <span className="chip chip-brass">regressions</span>;
+    case "complete-baseline":
+      return <span className="chip chip-paper">baseline</span>;
+    case "failed":
+      return <span className="chip chip-blood">failed</span>;
+    default:
+      return <span className="chip chip-moss">complete</span>;
+  }
 }

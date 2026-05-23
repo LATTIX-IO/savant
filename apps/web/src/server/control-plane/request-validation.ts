@@ -1,5 +1,3 @@
-import "server-only";
-
 type JsonObject = Record<string, unknown>;
 
 function isJsonObject(value: unknown): value is JsonObject {

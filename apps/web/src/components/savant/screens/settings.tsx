@@ -10,20 +10,22 @@ import type {
   WorkspaceSecuritySettings,
   WorkspaceSettingsPayload,
 } from "@savant/types";
-import { useState, type CSSProperties, type ReactNode } from "react";
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 
 import type { AuthViewer } from "@/lib/auth0-session";
+import {
+  getVisibleSettingsSectionIds,
+  type SettingsSectionId,
+} from "@/lib/workspace-features";
+import {
+  createAIConnection,
+  fetchAIConnections,
+  revokeAIConnection,
+  rotateAIConnection,
+  setAIConnectionDefaults,
+} from "@/lib/control-plane-client";
 
-type SectionId =
-  | "general"
-  | "auth"
-  | "ai"
-  | "members"
-  | "security"
-  | "notifications"
-  | "billing";
-
-const SECTIONS: { id: SectionId; label: string; sub: string }[] = [
+const SECTIONS: { id: SettingsSectionId; label: string; sub: string }[] = [
   { id: "general", label: "General", sub: "Org identity & defaults" },
   { id: "auth", label: "Authentication", sub: "SSO, IdP, MFA" },
   { id: "ai", label: "AI providers", sub: "BYO models & key routing" },
@@ -40,7 +42,11 @@ export function SettingsScreen({
   viewer: AuthViewer;
   settings: WorkspaceSettingsPayload;
 }) {
-  const [section, setSection] = useState<SectionId>("general");
+  const [section, setSection] = useState<SettingsSectionId>("general");
+  const visibleSections = getVisibleSettingsSectionIds().map((id) => SECTIONS.find((section) => section.id === id)!).filter(Boolean);
+  const activeSection = visibleSections.some((visibleSection) => visibleSection.id === section)
+    ? section
+    : visibleSections[0]?.id ?? "general";
 
   return (
     <div className="page-inner">
@@ -62,7 +68,7 @@ export function SettingsScreen({
       <div className="split" style={{ gridTemplateColumns: "240px minmax(0, 1fr)" }}>
         <div className="panel" style={{ position: "sticky", top: 0, padding: 8 }}>
           <div className="col" style={{ gap: 2 }}>
-            {SECTIONS.map((s) => (
+            {visibleSections.map((s) => (
               <div
                 key={s.id}
                 onClick={() => setSection(s.id)}
@@ -70,12 +76,12 @@ export function SettingsScreen({
                   padding: "10px 12px",
                   borderRadius: 5,
                   cursor: "pointer",
-                  background: section === s.id ? "var(--moss-soft)" : "transparent",
+                  background: activeSection === s.id ? "var(--moss-soft)" : "transparent",
                   transition: "background 100ms var(--ease)",
                   position: "relative",
                 }}
               >
-                {section === s.id && (
+                {activeSection === s.id && (
                   <span
                     style={{
                       position: "absolute",
@@ -90,8 +96,8 @@ export function SettingsScreen({
                 <div
                   style={{
                     fontSize: 13,
-                    fontWeight: section === s.id ? 500 : 450,
-                    color: section === s.id ? "var(--ink)" : "var(--ink-2)",
+                    fontWeight: activeSection === s.id ? 500 : 450,
+                    color: activeSection === s.id ? "var(--ink)" : "var(--ink-2)",
                   }}
                 >
                   {s.label}
@@ -105,13 +111,19 @@ export function SettingsScreen({
         </div>
 
         <div>
-          {section === "general" && <GeneralSection settings={settings.general} />}
-          {section === "auth" && <AuthSection viewer={viewer} settings={settings.authentication} />}
-          {section === "ai" && <AIProvidersSection connections={settings.aiConnections} />}
-          {section === "members" && <MembersSection members={settings.members} />}
-          {section === "security" && <SecuritySection settings={settings.security} />}
-          {section === "notifications" && <NotificationsSection settings={settings.notifications} />}
-          {section === "billing" && <BillingSection settings={settings.billing} />}
+          {activeSection === "general" && <GeneralSection settings={settings.general} />}
+          {activeSection === "auth" && <AuthSection viewer={viewer} settings={settings.authentication} />}
+          {activeSection === "ai" && (
+            <AIProvidersSection
+              viewer={viewer}
+              members={settings.members}
+              connections={settings.aiConnections}
+            />
+          )}
+          {activeSection === "members" && <MembersSection members={settings.members} />}
+          {activeSection === "security" && <SecuritySection settings={settings.security} />}
+          {activeSection === "notifications" && <NotificationsSection settings={settings.notifications} />}
+          {activeSection === "billing" && <BillingSection settings={settings.billing} />}
         </div>
       </div>
     </div>
@@ -197,19 +209,31 @@ function FormRow({
 
 function TextInput({
   defaultValue,
+  value,
   mono,
+  onChange,
+  placeholder,
   readOnly,
   style,
+  type,
 }: {
-  defaultValue: string;
+  defaultValue?: string;
+  value?: string;
   mono?: boolean;
+  onChange?: (value: string) => void;
+  placeholder?: string;
   readOnly?: boolean;
   style?: CSSProperties;
+  type?: "text" | "password" | "url";
 }) {
   return (
     <input
       defaultValue={defaultValue}
+      value={value}
+      onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+      placeholder={placeholder}
       readOnly={readOnly}
+      type={type ?? "text"}
       style={{
         width: "100%",
         maxWidth: 420,
@@ -279,6 +303,7 @@ function formatProviderLabel(provider: string): string {
   if (provider === "openai") return "OpenAI";
   if (provider === "anthropic") return "Anthropic";
   if (provider === "azure-openai") return "Azure OpenAI";
+  if (provider === "openai-compatible") return "OpenAI-compatible";
   return provider;
 }
 
@@ -300,6 +325,62 @@ function formatCapabilities(connection: AIConnectionSummary): string {
   }
 
   return "Inactive";
+}
+
+function formatOptionalMetricValue(
+  value: number | null,
+  options?: {
+    compactThousands?: boolean;
+    suffix?: string;
+    decimals?: number;
+  },
+): ReactNode {
+  if (value == null) {
+    return <span className="muted">—</span>;
+  }
+
+  if (options?.compactThousands) {
+    const compactValue = value / 1000;
+    const decimals = options.decimals ?? (compactValue >= 10 ? 0 : 2);
+
+    return (
+      <>
+        {compactValue.toFixed(decimals)}
+        <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+      </>
+    );
+  }
+
+  return (
+    <>
+      {value.toLocaleString()}
+      {options?.suffix ? <span style={{ fontSize: 16, color: "var(--muted)" }}>{options.suffix}</span> : null}
+    </>
+  );
+}
+
+function buildBillingCycleLabel(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.replace(/[_-]+/g, " ");
+}
+
+function buildBillingStatusLabel(settings: WorkspaceBillingSettings): string {
+  if (
+    settings.renewalDate.toLowerCase().startsWith("stripe sync") ||
+    settings.renewalDate.toLowerCase().includes("awaiting billing")
+  ) {
+    return settings.renewalDate;
+  }
+
+  return `Renews ${settings.renewalDate}`;
 }
 
 function AuthStatusChip({ status }: { status: PublicAuthProviderSettings["status"] }) {
@@ -348,6 +429,209 @@ function AIConnectionStatusChip({ status }: { status: AIConnectionStatus }) {
       <span className="dot" />
       revoked
     </span>
+  );
+}
+
+type AIConnectionCreateFormState = {
+  provider: string;
+  label: string;
+  defaultModel: string;
+  purpose: string;
+  usageScope: string;
+  apiKey: string;
+  allowedModels: string;
+  supportsExecution: boolean;
+  supportsJudging: boolean;
+  isDefaultExecution: boolean;
+  isDefaultJudge: boolean;
+  baseUrl: string;
+  apiVersion: string;
+};
+
+type AIConnectionRotateFormState = {
+  apiKey: string;
+  defaultModel: string;
+  purpose: string;
+  usageScope: string;
+  allowedModels: string;
+  baseUrl: string;
+  apiVersion: string;
+};
+
+type AIConnectionFeedback = {
+  kind: "success" | "error";
+  message: string;
+};
+
+const AI_PROVIDER_OPTIONS = [
+  { value: "openai", label: "OpenAI" },
+  { value: "anthropic", label: "Anthropic" },
+  { value: "azure-openai", label: "Azure OpenAI" },
+  { value: "openai-compatible", label: "OpenAI-compatible" },
+];
+
+function createEmptyAIConnectionForm(): AIConnectionCreateFormState {
+  return {
+    provider: "openai",
+    label: "",
+    defaultModel: "",
+    purpose: "",
+    usageScope: "",
+    apiKey: "",
+    allowedModels: "",
+    supportsExecution: true,
+    supportsJudging: true,
+    isDefaultExecution: true,
+    isDefaultJudge: false,
+    baseUrl: "",
+    apiVersion: "",
+  };
+}
+
+function createRotateAIConnectionForm(connection: AIConnectionSummary): AIConnectionRotateFormState {
+  return {
+    apiKey: "",
+    defaultModel: connection.defaultModel,
+    purpose: connection.purpose,
+    usageScope: connection.usageScope,
+    allowedModels: "",
+    baseUrl: "",
+    apiVersion: "",
+  };
+}
+
+function createEmptyRotateAIConnectionForm(): AIConnectionRotateFormState {
+  return {
+    apiKey: "",
+    defaultModel: "",
+    purpose: "",
+    usageScope: "",
+    allowedModels: "",
+    baseUrl: "",
+    apiVersion: "",
+  };
+}
+
+function sortAIConnections(connections: AIConnectionSummary[]): AIConnectionSummary[] {
+  return [...connections].sort((left, right) => {
+    if (left.status === "revoked" && right.status !== "revoked") {
+      return 1;
+    }
+
+    if (left.status !== "revoked" && right.status === "revoked") {
+      return -1;
+    }
+
+    if (left.isDefaultExecution !== right.isDefaultExecution) {
+      return left.isDefaultExecution ? -1 : 1;
+    }
+
+    if (left.isDefaultJudge !== right.isDefaultJudge) {
+      return left.isDefaultJudge ? -1 : 1;
+    }
+
+    return left.label.localeCompare(right.label);
+  });
+}
+
+function toOptionalTrimmedValue(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseAllowedModels(value: string): string[] | undefined {
+  const models = value
+    .split(/[\n,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
+  return models.length > 0 ? models : undefined;
+}
+
+function isWorkspaceAdminRole(role: string): boolean {
+  const normalized = role.trim().toLowerCase();
+  return normalized === "owner" || normalized === "admin";
+}
+
+function canViewerManageAIConnections(
+  viewer: AuthViewer,
+  members: WorkspaceSettingsPayload["members"],
+): boolean {
+  if (!viewer.isAuthenticated || !viewer.email) {
+    return false;
+  }
+
+  const member = members.find((candidate) => candidate.email.toLowerCase() === viewer.email?.toLowerCase());
+  return member ? isWorkspaceAdminRole(member.role) : false;
+}
+
+function AIManagementAccessChip({ canManage }: { canManage: boolean }) {
+  return canManage
+    ? (
+      <span className="chip chip-moss">
+        <span className="dot" />
+        admin access
+      </span>
+    )
+    : <span className="chip chip-paper">view only</span>;
+}
+
+function AIManagementFeedback({ feedback }: { feedback: AIConnectionFeedback | null }) {
+  if (!feedback) {
+    return null;
+  }
+
+  return (
+    <div
+      className="note"
+      style={{
+        marginBottom: 14,
+        borderColor: feedback.kind === "error" ? "rgba(130, 40, 40, 0.2)" : undefined,
+      }}
+    >
+      <span className="n-icon">{feedback.kind === "error" ? "⚠️" : "✅"}</span>
+      <div>{feedback.message}</div>
+    </div>
+  );
+}
+
+function AIConnectionFlag({ children }: { children: ReactNode }) {
+  return (
+    <span className="chip chip-paper" style={{ height: 24, padding: "0 8px", fontSize: 10.5 }}>
+      {children}
+    </span>
+  );
+}
+
+function AIConnectionFormCheckbox({
+  checked,
+  disabled,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        fontSize: 12.5,
+        color: disabled ? "var(--ink-3)" : "var(--ink-2)",
+      }}
+    >
+      <input
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+        type="checkbox"
+      />
+      <span>{label}</span>
+    </label>
   );
 }
 
@@ -556,77 +840,612 @@ function AuthSection({
   );
 }
 
-function AIProvidersSection({ connections }: { connections: AIConnectionSummary[] }) {
-  const defaultExecution = connections.find((connection) => connection.isDefaultExecution) ?? null;
-  const defaultJudge = connections.find((connection) => connection.isDefaultJudge) ?? null;
+function AIProvidersSection({
+  viewer,
+  members,
+  connections,
+}: {
+  viewer: AuthViewer;
+  members: WorkspaceSettingsPayload["members"];
+  connections: AIConnectionSummary[];
+}) {
+  const [aiConnections, setAIConnections] = useState<AIConnectionSummary[]>(() => sortAIConnections(connections));
+  const [createForm, setCreateForm] = useState<AIConnectionCreateFormState>(() => createEmptyAIConnectionForm());
+  const [rotateForm, setRotateForm] = useState<AIConnectionRotateFormState>(() => createEmptyRotateAIConnectionForm());
+  const [isCreateOpen, setCreateOpen] = useState(connections.length === 0);
+  const [rotateConnectionId, setRotateConnectionId] = useState<string | null>(null);
+  const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<AIConnectionFeedback | null>(null);
+  const canManage = canViewerManageAIConnections(viewer, members);
+
+  const defaultExecution = aiConnections.find((connection) => connection.isDefaultExecution) ?? null;
+  const defaultJudge = aiConnections.find((connection) => connection.isDefaultJudge) ?? null;
+  const rotatingConnection = aiConnections.find((connection) => connection.aiConnectionUuid === rotateConnectionId) ?? null;
+
+  async function refreshConnections(successMessage?: string) {
+    const response = await fetchAIConnections();
+    setAIConnections(sortAIConnections(response.data));
+
+    if (successMessage) {
+      setFeedback({ kind: "success", message: successMessage });
+    }
+  }
+
+  async function handleCreateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canManage || busyAction) {
+      return;
+    }
+
+    if (!createForm.supportsExecution && !createForm.supportsJudging) {
+      setFeedback({
+        kind: "error",
+        message: "Choose at least one capability before saving an AI connection.",
+      });
+      return;
+    }
+
+    setBusyAction("create");
+    setFeedback(null);
+
+    try {
+      await createAIConnection({
+        provider: createForm.provider,
+        label: createForm.label.trim(),
+        defaultModel: createForm.defaultModel.trim(),
+        purpose: createForm.purpose.trim(),
+        usageScope: createForm.usageScope.trim(),
+        apiKey: createForm.apiKey,
+        allowedModels: parseAllowedModels(createForm.allowedModels),
+        supportsExecution: createForm.supportsExecution,
+        supportsJudging: createForm.supportsJudging,
+        isDefaultExecution: createForm.supportsExecution ? createForm.isDefaultExecution : false,
+        isDefaultJudge: createForm.supportsJudging ? createForm.isDefaultJudge : false,
+        baseUrl: toOptionalTrimmedValue(createForm.baseUrl),
+        apiVersion: toOptionalTrimmedValue(createForm.apiVersion),
+      });
+
+      setCreateForm(createEmptyAIConnectionForm());
+      setCreateOpen(false);
+      await refreshConnections("AI connection saved. The secret stayed server-side the whole time.");
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not save the AI connection.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleRefresh() {
+    if (busyAction) {
+      return;
+    }
+
+    setBusyAction("refresh");
+    setFeedback(null);
+
+    try {
+      await refreshConnections("AI connection metadata refreshed.");
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not refresh AI connections.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleSetDefault(connection: AIConnectionSummary, mode: "execution" | "judge") {
+    if (!canManage || busyAction) {
+      return;
+    }
+
+    setBusyAction(`${mode}:${connection.aiConnectionUuid}`);
+    setFeedback(null);
+
+    try {
+      await setAIConnectionDefaults(connection.aiConnectionUuid, {
+        setAsExecutionDefault: mode === "execution",
+        setAsJudgeDefault: mode === "judge",
+      });
+      await refreshConnections(
+        mode === "execution"
+          ? `${connection.label} is now the default execution model.`
+          : `${connection.label} is now the default judge model.`,
+      );
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not update the default AI routing.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  async function handleRevoke(connection: AIConnectionSummary) {
+    if (!canManage || busyAction) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Revoke ${connection.label}? Existing eval runs keep their historical metadata, but the connection will stop accepting new work.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setBusyAction(`revoke:${connection.aiConnectionUuid}`);
+    setFeedback(null);
+
+    try {
+      await revokeAIConnection(connection.aiConnectionUuid, {
+        reason: "Revoked from workspace settings.",
+      });
+      if (rotateConnectionId === connection.aiConnectionUuid) {
+        setRotateConnectionId(null);
+      }
+      await refreshConnections(`${connection.label} was revoked.`);
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not revoke the AI connection.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
+
+  function handleOpenRotate(connection: AIConnectionSummary) {
+    if (!canManage || connection.status === "revoked") {
+      return;
+    }
+
+    if (rotateConnectionId === connection.aiConnectionUuid) {
+      setRotateConnectionId(null);
+      setRotateForm(createEmptyRotateAIConnectionForm());
+      return;
+    }
+
+    setRotateConnectionId(connection.aiConnectionUuid);
+    setRotateForm(createRotateAIConnectionForm(connection));
+    setFeedback(null);
+  }
+
+  async function handleRotateSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!canManage || !rotateConnectionId || busyAction) {
+      return;
+    }
+
+    setBusyAction(`rotate:${rotateConnectionId}`);
+    setFeedback(null);
+
+    try {
+      await rotateAIConnection(rotateConnectionId, {
+        apiKey: rotateForm.apiKey,
+        defaultModel: toOptionalTrimmedValue(rotateForm.defaultModel),
+        purpose: toOptionalTrimmedValue(rotateForm.purpose),
+        usageScope: toOptionalTrimmedValue(rotateForm.usageScope),
+        allowedModels: parseAllowedModels(rotateForm.allowedModels),
+        baseUrl: toOptionalTrimmedValue(rotateForm.baseUrl),
+        apiVersion: toOptionalTrimmedValue(rotateForm.apiVersion),
+      });
+
+      setRotateConnectionId(null);
+      setRotateForm(createEmptyRotateAIConnectionForm());
+      await refreshConnections("AI connection secret rotated.");
+    } catch (error) {
+      setFeedback({
+        kind: "error",
+        message: error instanceof Error ? error.message : "Could not rotate the AI connection secret.",
+      });
+    } finally {
+      setBusyAction(null);
+    }
+  }
 
   return (
     <>
       <SettingsPanel
         title="Bring-your-own AI connections"
         sub="Tenant-scoped provider credentials used for evaluation execution, judging, and recommendation generation."
-        actions={
-          <button type="button" className="btn btn-sm">
-            Connect provider
-          </button>
-        }
+        actions={(
+          <>
+            <AIManagementAccessChip canManage={canManage} />
+            <button type="button" className="btn btn-sm" disabled={busyAction === "refresh"} onClick={handleRefresh}>
+              {busyAction === "refresh" ? "Refreshing…" : "Refresh"}
+            </button>
+            {canManage ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={busyAction !== null && busyAction !== "create"}
+                onClick={() => {
+                  setCreateOpen((open) => !open);
+                  setFeedback(null);
+                }}
+              >
+                {isCreateOpen ? "Close form" : "Connect provider"}
+              </button>
+            ) : null}
+          </>
+        )}
       >
         <div className="note" style={{ marginBottom: 14 }}>
           <span className="n-icon">🔐</span>
           <div>
-            Raw API keys stay in external secret storage. Savant stores only metadata, stable UUIDs, usage history, and rotation posture.
+            Raw API keys stay in Savant&apos;s encrypted server-side vault. The workspace settings view only shows metadata,
+            stable UUIDs, usage history, and rotation posture.
           </div>
         </div>
 
-        <div
-          className="panel-bd tight"
-          style={{ margin: "0 calc(-1 * var(--pad-card))", borderTop: "1px solid var(--rule)" }}
-        >
-          <table className="tbl">
-            <thead>
-              <tr>
-                <th>Connection</th>
-                <th>Default model</th>
-                <th>Capabilities</th>
-                <th>Scope</th>
-                <th>Secret store</th>
-                <th>Rotation</th>
-                <th style={{ textAlign: "right" }}>Last used</th>
-              </tr>
-            </thead>
-            <tbody>
-              {connections.map((connection) => (
-                <tr key={connection.aiConnectionUuid}>
-                  <td>
-                    <div className="tbl-name-text">
-                      <span className="pri">{connection.label}</span>
-                      <span className="sec mono">
-                        {formatProviderLabel(connection.provider)} · {connection.aiConnectionUuid}
-                      </span>
-                    </div>
-                  </td>
-                  <td>
-                    <span className="chip chip-paper">{connection.defaultModel}</span>
-                  </td>
-                  <td>
-                    <div className="col" style={{ gap: 4 }}>
-                      <AIConnectionStatusChip status={connection.status} />
-                      <span className="muted" style={{ fontSize: 11.5 }}>
-                        {formatCapabilities(connection)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="muted">{connection.usageScope}</td>
-                  <td className="muted">{connection.secretStore}</td>
-                  <td className="subtle">{connection.lastRotated}</td>
-                  <td className="subtle" style={{ textAlign: "right" }}>
-                    {connection.lastUsed}
-                  </td>
+        <AIManagementFeedback feedback={feedback} />
+
+        {!canManage ? (
+          <div className="muted" style={{ fontSize: 12, marginBottom: 14, lineHeight: 1.5 }}>
+            You can review provider metadata here, but only workspace owners or members of <span className="mono">platform-admins</span>
+            can add, rotate, default, or revoke BYO-AI connections.
+          </div>
+        ) : null}
+
+        {isCreateOpen && canManage ? (
+          <form onSubmit={handleCreateSubmit}>
+            <div style={{ borderTop: "1px solid var(--rule)", marginBottom: 8 }}>
+              <FormRow label="Provider" sub="Pick the managed provider or a standards-compatible endpoint.">
+                <select
+                  onChange={(event) => {
+                    const provider = event.target.value;
+                    setCreateForm((current) => ({ ...current, provider }));
+                  }}
+                  style={selectStyle}
+                  value={createForm.provider}
+                >
+                  {AI_PROVIDER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </FormRow>
+              <FormRow label="Display label" sub="Human-friendly name shown in routing and audit views.">
+                <TextInput
+                  onChange={(value) => setCreateForm((current) => ({ ...current, label: value }))}
+                  placeholder="Production GPT-4.1"
+                  value={createForm.label}
+                />
+              </FormRow>
+              <FormRow label="Default model" sub="Default model identifier used when a run does not override it.">
+                <TextInput
+                  onChange={(value) => setCreateForm((current) => ({ ...current, defaultModel: value }))}
+                  placeholder="gpt-4.1"
+                  value={createForm.defaultModel}
+                />
+              </FormRow>
+              <FormRow label="Purpose" sub="Why this provider exists in the workspace.">
+                <TextInput
+                  onChange={(value) => setCreateForm((current) => ({ ...current, purpose: value }))}
+                  placeholder="Primary execution provider"
+                  value={createForm.purpose}
+                />
+              </FormRow>
+              <FormRow label="Usage scope" sub="Describe which jobs or environments should use it.">
+                <TextInput
+                  onChange={(value) => setCreateForm((current) => ({ ...current, usageScope: value }))}
+                  placeholder="Production evaluations"
+                  value={createForm.usageScope}
+                />
+              </FormRow>
+              <FormRow label="API key" sub="Submitted once to the server and stored only as encrypted ciphertext.">
+                <TextInput
+                  onChange={(value) => setCreateForm((current) => ({ ...current, apiKey: value }))}
+                  placeholder="sk-…"
+                  type="password"
+                  value={createForm.apiKey}
+                />
+              </FormRow>
+              <FormRow label="Allowed models" sub="Optional allow-list. Separate items with commas or new lines.">
+                <textarea
+                  onChange={(event) => setCreateForm((current) => ({ ...current, allowedModels: event.target.value }))}
+                  placeholder="gpt-4.1, gpt-4.1-mini"
+                  style={{
+                    width: "100%",
+                    maxWidth: 420,
+                    minHeight: 72,
+                    padding: 10,
+                    border: "1px solid var(--rule-2)",
+                    borderRadius: 4,
+                    fontSize: 13,
+                    outline: "none",
+                    background: "var(--panel)",
+                    resize: "vertical",
+                  }}
+                  value={createForm.allowedModels}
+                />
+              </FormRow>
+              <FormRow label="Capabilities" sub="Controls which routing lanes this provider can serve.">
+                <div className="col" style={{ gap: 10 }}>
+                  <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+                    <AIConnectionFormCheckbox
+                      checked={createForm.supportsExecution}
+                      label="Supports execution"
+                      onChange={(checked) => {
+                        setCreateForm((current) => ({
+                          ...current,
+                          supportsExecution: checked,
+                          isDefaultExecution: checked ? current.isDefaultExecution : false,
+                        }));
+                      }}
+                    />
+                    <AIConnectionFormCheckbox
+                      checked={createForm.supportsJudging}
+                      label="Supports judging"
+                      onChange={(checked) => {
+                        setCreateForm((current) => ({
+                          ...current,
+                          supportsJudging: checked,
+                          isDefaultJudge: checked ? current.isDefaultJudge : false,
+                        }));
+                      }}
+                    />
+                  </div>
+                  <div className="row" style={{ gap: 16, flexWrap: "wrap" }}>
+                    <AIConnectionFormCheckbox
+                      checked={createForm.isDefaultExecution}
+                      disabled={!createForm.supportsExecution}
+                      label="Make execution default"
+                      onChange={(checked) => setCreateForm((current) => ({ ...current, isDefaultExecution: checked }))}
+                    />
+                    <AIConnectionFormCheckbox
+                      checked={createForm.isDefaultJudge}
+                      disabled={!createForm.supportsJudging}
+                      label="Make judge default"
+                      onChange={(checked) => setCreateForm((current) => ({ ...current, isDefaultJudge: checked }))}
+                    />
+                  </div>
+                </div>
+              </FormRow>
+              <FormRow label="Advanced endpoint" sub="Required for OpenAI-compatible endpoints; optional for Azure/OpenAI variants.">
+                <div className="col" style={{ gap: 10, maxWidth: 420 }}>
+                  <TextInput
+                    onChange={(value) => setCreateForm((current) => ({ ...current, baseUrl: value }))}
+                    placeholder={createForm.provider === "openai-compatible" ? "https://model.example.com/v1" : "Optional base URL override"}
+                    type="url"
+                    value={createForm.baseUrl}
+                  />
+                  <TextInput
+                    onChange={(value) => setCreateForm((current) => ({ ...current, apiVersion: value }))}
+                    placeholder="Optional API version"
+                    value={createForm.apiVersion}
+                  />
+                </div>
+              </FormRow>
+            </div>
+
+            <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn btn-sm"
+                disabled={busyAction === "create"}
+                onClick={() => {
+                  setCreateForm(createEmptyAIConnectionForm());
+                  setCreateOpen(false);
+                  setFeedback(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button type="submit" className="btn btn-primary" disabled={busyAction === "create"}>
+                {busyAction === "create" ? "Saving…" : "Save connection"}
+              </button>
+            </div>
+          </form>
+        ) : null}
+
+        {aiConnections.length === 0 ? (
+          <div
+            style={{
+              borderTop: "1px solid var(--rule)",
+              paddingTop: 14,
+              fontSize: 12.5,
+              color: "var(--ink-2)",
+              lineHeight: 1.5,
+            }}
+          >
+            No BYO-AI connections are configured for this workspace yet. Add a provider connection before running
+            in-platform evaluations or recommendation jobs.
+          </div>
+        ) : (
+          <div
+            className="panel-bd tight"
+            style={{ margin: "0 calc(-1 * var(--pad-card))", borderTop: "1px solid var(--rule)" }}
+          >
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Connection</th>
+                  <th>Default model</th>
+                  <th>Capabilities</th>
+                  <th>Scope</th>
+                  <th>Secret store</th>
+                  <th>Rotation</th>
+                  <th>Actions</th>
+                  <th style={{ textAlign: "right" }}>Last used</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {aiConnections.map((connection) => (
+                  <tr key={connection.aiConnectionUuid}>
+                    <td>
+                      <div className="tbl-name-text" style={{ gap: 6 }}>
+                        <span className="pri">{connection.label}</span>
+                        <span className="sec mono">
+                          {formatProviderLabel(connection.provider)} · {connection.aiConnectionUuid}
+                        </span>
+                        <div className="row" style={{ gap: 4, flexWrap: "wrap" }}>
+                          {connection.isDefaultExecution ? <AIConnectionFlag>Execution default</AIConnectionFlag> : null}
+                          {connection.isDefaultJudge ? <AIConnectionFlag>Judge default</AIConnectionFlag> : null}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className="chip chip-paper">{connection.defaultModel}</span>
+                    </td>
+                    <td>
+                      <div className="col" style={{ gap: 4 }}>
+                        <AIConnectionStatusChip status={connection.status} />
+                        <span className="muted" style={{ fontSize: 11.5 }}>
+                          {formatCapabilities(connection)}
+                        </span>
+                      </div>
+                    </td>
+                        <td>
+                          {canManage ? (
+                            <div className="row" style={{ gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                              {connection.supportsExecution && !connection.isDefaultExecution ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={busyAction === `execution:${connection.aiConnectionUuid}`}
+                                  onClick={() => handleSetDefault(connection, "execution")}
+                                >
+                                  {busyAction === `execution:${connection.aiConnectionUuid}` ? "Saving…" : "Set exec default"}
+                                </button>
+                              ) : null}
+                              {connection.supportsJudging && !connection.isDefaultJudge ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm"
+                                  disabled={busyAction === `judge:${connection.aiConnectionUuid}`}
+                                  onClick={() => handleSetDefault(connection, "judge")}
+                                >
+                                  {busyAction === `judge:${connection.aiConnectionUuid}` ? "Saving…" : "Set judge default"}
+                                </button>
+                              ) : null}
+                              {connection.status !== "revoked" ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    disabled={busyAction === `rotate:${connection.aiConnectionUuid}`}
+                                    onClick={() => handleOpenRotate(connection)}
+                                  >
+                                    {rotateConnectionId === connection.aiConnectionUuid ? "Close rotate" : "Rotate"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm"
+                                    disabled={busyAction === `revoke:${connection.aiConnectionUuid}`}
+                                    onClick={() => handleRevoke(connection)}
+                                  >
+                                    {busyAction === `revoke:${connection.aiConnectionUuid}` ? "Revoking…" : "Revoke"}
+                                  </button>
+                                </>
+                              ) : (
+                                <span className="subtle" style={{ fontSize: 11.5 }}>Archived</span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="subtle" style={{ fontSize: 11.5 }}>View only</span>
+                          )}
+                        </td>
+                    <td className="muted">{connection.usageScope}</td>
+                    <td className="muted">{connection.secretStore}</td>
+                    <td className="subtle">{connection.lastRotated}</td>
+                    <td className="subtle" style={{ textAlign: "right" }}>
+                      {connection.lastUsed}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+
+            {rotatingConnection && canManage ? (
+              <form onSubmit={handleRotateSubmit} style={{ borderTop: "1px solid var(--rule)", marginTop: 14 }}>
+                <FormRow
+                  label={`Rotate ${rotatingConnection.label}`}
+                  sub="Submit a new secret without ever revealing the stored value back to the browser."
+                >
+                  <div className="col" style={{ gap: 10, maxWidth: 420 }}>
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, apiKey: value }))}
+                      placeholder="Paste the replacement API key"
+                      type="password"
+                      value={rotateForm.apiKey}
+                    />
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, defaultModel: value }))}
+                      placeholder="Default model"
+                      value={rotateForm.defaultModel}
+                    />
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, purpose: value }))}
+                      placeholder="Purpose"
+                      value={rotateForm.purpose}
+                    />
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, usageScope: value }))}
+                      placeholder="Usage scope"
+                      value={rotateForm.usageScope}
+                    />
+                    <textarea
+                      onChange={(event) => setRotateForm((current) => ({ ...current, allowedModels: event.target.value }))}
+                      placeholder="Optional allow-list update (comma or newline separated)"
+                      style={{
+                        width: "100%",
+                        minHeight: 72,
+                        padding: 10,
+                        border: "1px solid var(--rule-2)",
+                        borderRadius: 4,
+                        fontSize: 13,
+                        outline: "none",
+                        background: "var(--panel)",
+                        resize: "vertical",
+                      }}
+                      value={rotateForm.allowedModels}
+                    />
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, baseUrl: value }))}
+                      placeholder="Optional base URL override"
+                      type="url"
+                      value={rotateForm.baseUrl}
+                    />
+                    <TextInput
+                      onChange={(value) => setRotateForm((current) => ({ ...current, apiVersion: value }))}
+                      placeholder="Optional API version"
+                      value={rotateForm.apiVersion}
+                    />
+                    <div className="row" style={{ gap: 8, justifyContent: "flex-end" }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm"
+                        disabled={busyAction === `rotate:${rotatingConnection.aiConnectionUuid}`}
+                        onClick={() => {
+                          setRotateConnectionId(null);
+                          setRotateForm(createEmptyRotateAIConnectionForm());
+                        }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="btn btn-primary"
+                        disabled={busyAction === `rotate:${rotatingConnection.aiConnectionUuid}`}
+                      >
+                        {busyAction === `rotate:${rotatingConnection.aiConnectionUuid}` ? "Rotating…" : "Rotate secret"}
+                      </button>
+                    </div>
+                  </div>
+                </FormRow>
+              </form>
+            ) : null}
+            </table>
+          </div>
+        )}
       </SettingsPanel>
 
       <SettingsPanel title="Default model routing" sub="Execution and judging defaults used when a run does not override the provider.">
@@ -874,26 +1693,46 @@ function NotificationsSection({ settings }: { settings: WorkspaceNotificationSet
 }
 
 function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
+  const remainingSkills = settings.skillsIncluded != null
+    ? Math.max(settings.skillsIncluded - settings.activeSkills, 0)
+    : null;
+  const remainingSeats = Math.max(settings.includedSeats - settings.usedSeats, 0);
+  const hasUsageMetering = (
+    settings.evalRunsUsedMonthly != null ||
+    settings.distributionsMonthly != null ||
+    settings.storageGbUsed != null ||
+    settings.apiCallsMonthly != null
+  );
+
   return (
     <>
-      <SettingsPanel title="Plan" sub={`${settings.planName} · annual`}>
+      <SettingsPanel
+        title="Plan"
+        sub={[settings.planName, buildBillingCycleLabel(settings.billingCycle)].filter(Boolean).join(" · ") || settings.planName}
+      >
         <FormRow label="Current plan">
           <div className="row" style={{ gap: 10 }}>
             <span className="chip chip-ink">{settings.planName}</span>
             <span className="muted" style={{ fontSize: 12 }}>
-              Renews {settings.renewalDate}
+              {buildBillingStatusLabel(settings)}
             </span>
           </div>
         </FormRow>
         <FormRow label="Skills included" sub="Annual contract.">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="mono num" style={{ fontSize: 13 }}>
-              {settings.skillsIncluded}
-            </span>
+          {settings.skillsIncluded == null ? (
             <span className="muted" style={{ fontSize: 12 }}>
-              · {settings.activeSkills} active · {settings.skillsIncluded - settings.activeSkills} remaining
+              Contract skill cap is not sourced from live billing data yet. {settings.activeSkills} active skills are indexed today.
             </span>
-          </div>
+          ) : (
+            <div className="row" style={{ gap: 8 }}>
+              <span className="mono num" style={{ fontSize: 13 }}>
+                {settings.skillsIncluded}
+              </span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                · {settings.activeSkills} active · {remainingSkills} remaining
+              </span>
+            </div>
+          )}
         </FormRow>
         <FormRow label="Seats" sub="Members with edit / approve permissions.">
           <div className="row" style={{ gap: 8 }}>
@@ -901,59 +1740,81 @@ function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
               {settings.includedSeats}
             </span>
             <span className="muted" style={{ fontSize: 12 }}>
-              · {settings.usedSeats} in use · {settings.includedSeats - settings.usedSeats} remaining
+              · {settings.usedSeats} in use · {remainingSeats} remaining
             </span>
           </div>
         </FormRow>
         <FormRow label="Eval compute · monthly cap">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="mono num" style={{ fontSize: 13 }}>
-              {settings.evalRunCapMonthly.toLocaleString()}
-            </span>
+          {settings.evalRunCapMonthly == null || settings.evalRunsUsedMonthly == null ? (
             <span className="muted" style={{ fontSize: 12 }}>
-              runs · {settings.evalRunsUsedMonthly.toLocaleString()} used this month
+              Live monthly evaluation usage metering is not available yet.
             </span>
-          </div>
+          ) : (
+            <div className="row" style={{ gap: 8 }}>
+              <span className="mono num" style={{ fontSize: 13 }}>
+                {settings.evalRunCapMonthly.toLocaleString()}
+              </span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                runs · {settings.evalRunsUsedMonthly.toLocaleString()} used this month
+              </span>
+            </div>
+          )}
         </FormRow>
       </SettingsPanel>
 
       <SettingsPanel title="Usage · last 30 days" sub="Audit-visible activity counted toward plan limits.">
-        <div className="kpi-strip" style={{ borderRadius: 4 }}>
-          <div className="kpi">
-            <div className="kpi-label">Eval runs</div>
-            <div className="kpi-value num">
-              {(settings.evalRunsUsedMonthly / 1000).toFixed(2)}
-              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
-            </div>
-            <div className="kpi-trend">
-              {Math.round((settings.evalRunsUsedMonthly / settings.evalRunCapMonthly) * 100)}% of cap
+        {!hasUsageMetering ? (
+          <div className="note">
+            <span className="n-icon">ℹ️</span>
+            <div>
+              Live billing usage metering has not been wired for eval runs, distributions, storage, or API traffic yet,
+              so Savant now leaves those values unset instead of showing placeholder totals.
             </div>
           </div>
-          <div className="kpi">
-            <div className="kpi-label">Distributions</div>
-            <div className="kpi-value num">
-              {(settings.distributionsMonthly / 1000).toFixed(0)}
-              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+        ) : (
+          <div className="kpi-strip" style={{ borderRadius: 4 }}>
+            <div className="kpi">
+              <div className="kpi-label">Eval runs</div>
+              <div className="kpi-value num">
+                {formatOptionalMetricValue(settings.evalRunsUsedMonthly, { compactThousands: true, decimals: 2 })}
+              </div>
+              <div className="kpi-trend">
+                {settings.evalRunCapMonthly != null && settings.evalRunsUsedMonthly != null
+                  ? `${Math.round((settings.evalRunsUsedMonthly / settings.evalRunCapMonthly) * 100)}% of cap`
+                  : "Live cap unavailable"}
+              </div>
             </div>
-            <div className="kpi-trend">unlimited</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-label">Storage</div>
-            <div className="kpi-value num">
-              {settings.storageGbUsed}
-              <span style={{ fontSize: 16, color: "var(--muted)" }}>GB</span>
+            <div className="kpi">
+              <div className="kpi-label">Distributions</div>
+              <div className="kpi-value num">
+                {formatOptionalMetricValue(settings.distributionsMonthly, { compactThousands: true, decimals: 0 })}
+              </div>
+              <div className="kpi-trend">
+                {settings.distributionsMonthly != null ? "Live monthly total" : "Live metering unavailable"}
+              </div>
             </div>
-            <div className="kpi-trend">of {settings.storageGbCap} GB</div>
-          </div>
-          <div className="kpi">
-            <div className="kpi-label">API calls</div>
-            <div className="kpi-value num">
-              {(settings.apiCallsMonthly / 1000).toFixed(0)}
-              <span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
+            <div className="kpi">
+              <div className="kpi-label">Storage</div>
+              <div className="kpi-value num">
+                {formatOptionalMetricValue(settings.storageGbUsed, { suffix: "GB" })}
+              </div>
+              <div className="kpi-trend">
+                {settings.storageGbUsed != null && settings.storageGbCap != null
+                  ? `of ${settings.storageGbCap} GB`
+                  : "Live storage cap unavailable"}
+              </div>
             </div>
-            <div className="kpi-trend up">▲ {settings.apiCallsDeltaPct}%</div>
+            <div className="kpi">
+              <div className="kpi-label">API calls</div>
+              <div className="kpi-value num">
+                {formatOptionalMetricValue(settings.apiCallsMonthly, { compactThousands: true, decimals: 0 })}
+              </div>
+              <div className={`kpi-trend${settings.apiCallsDeltaPct != null && settings.apiCallsDeltaPct > 0 ? " up" : ""}`}>
+                {settings.apiCallsDeltaPct != null ? `▲ ${settings.apiCallsDeltaPct}%` : "Live trend unavailable"}
+              </div>
+            </div>
           </div>
-        </div>
+        )}
       </SettingsPanel>
     </>
   );

@@ -78,6 +78,7 @@ export const REGRESSIONS: Regression[] = [
 
 export type Skill = {
   id: string;
+  skillUuid: string;
   name: string;
   description: string;
   tier: 1 | 2 | 3;
@@ -102,7 +103,7 @@ export type Skill = {
 
 export const SKILLS: Skill[] = [
   {
-    id: "skl_ccr", name: "Contract Clause Reviewer",
+    id: "skl_ccr", skillUuid: "11111111-1111-4111-8111-111111111111", name: "Contract Clause Reviewer",
     description: "Reviews vendor contracts for non-standard clauses and flags departures from the master playbook.",
     tier: 1, owner: "ari.chen", team: "Legal Ops",
     repo: "wh/legal-skills", repoProvider: "github",
@@ -114,7 +115,7 @@ export const SKILLS: Skill[] = [
     status: "candidate-awaiting-approval",
   },
   {
-    id: "skl_prs", name: "PR Summarizer",
+    id: "skl_prs", skillUuid: "22222222-2222-4222-8222-222222222222", name: "PR Summarizer",
     description: "Summarizes pull requests with risk analysis, dependency notes, and reviewer suggestions.",
     tier: 2, owner: "kalia.b", team: "Developer Productivity",
     repo: "wh/skills", repoProvider: "github",
@@ -126,7 +127,7 @@ export const SKILLS: Skill[] = [
     status: "production",
   },
   {
-    id: "skl_itr", name: "Incident Triage",
+    id: "skl_itr", skillUuid: "33333333-3333-4333-8333-333333333333", name: "Incident Triage",
     description: "Triages alerts, suggests runbook steps, and drafts the customer-facing status update.",
     tier: 1, owner: "jdv", team: "SRE",
     repo: "platform/agent-skills", repoProvider: "azure",
@@ -138,7 +139,7 @@ export const SKILLS: Skill[] = [
     status: "candidate-running-evals",
   },
   {
-    id: "skl_rfp", name: "RFP Response Drafter",
+    id: "skl_rfp", skillUuid: "44444444-4444-4444-8444-444444444444", name: "RFP Response Drafter",
     description: "Drafts first-pass RFP responses using prior accepted bids and the security questionnaire library.",
     tier: 2, owner: "renata.m", team: "Sales Engineering",
     repo: "wh/skills", repoProvider: "github",
@@ -150,7 +151,7 @@ export const SKILLS: Skill[] = [
     status: "first-release",
   },
   {
-    id: "skl_soc", name: "SOC 2 Evidence Drafter",
+    id: "skl_soc", skillUuid: "55555555-5555-4555-8555-555555555555", name: "SOC 2 Evidence Drafter",
     description: "Drafts SOC 2 control evidence from system logs and policy documents.",
     tier: 1, owner: "sasha.gw", team: "Security & Compliance",
     repo: "wh/skills", repoProvider: "github",
@@ -162,7 +163,7 @@ export const SKILLS: Skill[] = [
     status: "staging",
   },
   {
-    id: "skl_qer", name: "Quarterly Earnings Summary",
+    id: "skl_qer", skillUuid: "66666666-6666-4666-8666-666666666666", name: "Quarterly Earnings Summary",
     description: "Generates internal pre-read summaries from earnings transcripts and KPI dashboards.",
     tier: 2, owner: "min.park", team: "Finance",
     repo: "wh/skills", repoProvider: "github",
@@ -174,7 +175,7 @@ export const SKILLS: Skill[] = [
     status: "candidate-running-evals",
   },
   {
-    id: "skl_erfc", name: "Engineering RFC Reviewer",
+    id: "skl_erfc", skillUuid: "77777777-7777-4777-8777-777777777777", name: "Engineering RFC Reviewer",
     description: "Reviews RFCs for missing risk sections, unstated dependencies, and rollout gaps.",
     tier: 1, owner: "ari.chen", team: "Engineering",
     repo: "wh/skills", repoProvider: "github",
@@ -186,7 +187,7 @@ export const SKILLS: Skill[] = [
     status: "production",
   },
   {
-    id: "skl_cet", name: "Customer Email Tone Pass",
+    id: "skl_cet", skillUuid: "88888888-8888-4888-8888-888888888888", name: "Customer Email Tone Pass",
     description: "Reviews outbound customer emails for tone, clarity, and policy compliance.",
     tier: 3, owner: "renata.m", team: "Customer Success",
     repo: "wh/skills", repoProvider: "github",
@@ -198,7 +199,7 @@ export const SKILLS: Skill[] = [
     status: "production",
   },
   {
-    id: "skl_von", name: "Vendor Onboarding Memo",
+    id: "skl_von", skillUuid: "99999999-9999-4999-8999-999999999999", name: "Vendor Onboarding Memo",
     description: "Drafts vendor onboarding memos covering data flows, SOC 2 scope, and renewal terms.",
     tier: 3, owner: "min.park", team: "Procurement",
     repo: "wh/legal-skills", repoProvider: "github",
@@ -302,6 +303,7 @@ export const EVAL_RUNS: EvalRun[] = [
   { id: "er_475", skill: "Vendor Onboarding Memo", ref: "v0.4.1", dataset: "vendor-corpus-v1", cases: 64, passed: 55, failed: 9, started: "1d ago", duration: "16s", delta: -0.4, status: "complete" },
   { id: "er_474", skill: "RFP Response Drafter", ref: "v0.9.0", dataset: "rfp-corpus-v1", cases: 72, passed: 62, failed: 10, started: "1d ago", duration: "29s", delta: null, status: "complete-baseline" },
   { id: "er_473", skill: "Contract Clause Reviewer", ref: "v2.3.7", dataset: "contract-corpus-v9", cases: 248, passed: 246, failed: 2, started: "6d ago", duration: "23s", delta: +0.4, status: "complete" },
+  { id: "er_472", skill: "Contract Clause Reviewer", ref: "v2.3.6", dataset: "contract-corpus-v9", cases: 244, passed: 238, failed: 6, started: "11d ago", duration: "26s", delta: -0.1, status: "complete" },
 ];
 
 export type Readiness = { label: string; ok: boolean | null; meta: string };

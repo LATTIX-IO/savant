@@ -14,7 +14,8 @@ import {
   type Auth0Env,
 } from "../../lib/auth0-config.ts";
 import { buildWorkspaceUrl } from "../../lib/workspace-url.ts";
-import { MEMBERS, ORG } from "../../lib/savant-data.ts";
+
+import { listAIConnectionSummariesForOrganization } from "./ai-connections.ts";
 
 import { formatRelativeControlPlaneTime } from "./read-model-db.ts";
 
@@ -51,6 +52,7 @@ type WorkspaceSkillCountRow = {
 
 type TenantWorkspaceSettingsSnapshot = {
   general: Partial<WorkspaceSettingsPayload["general"]>;
+  aiConnections: AIConnectionSummary[];
   members: MemberRecord[];
   billing: Partial<WorkspaceSettingsPayload["billing"]>;
 };
@@ -88,6 +90,11 @@ function slugifyWorkspaceName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "") || "workspace";
+}
+
+export function resolveDefaultWorkspaceName(env: Auth0Env = process.env): string {
+  const value = env.DEVELOPMENT_WORKSPACE_NAME;
+  return typeof value === "string" && value.trim() ? value.trim() : "Local Workspace";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -153,6 +160,53 @@ function resolveGeneralSettingsOverrides(settings: unknown): Partial<WorkspaceSe
   return overrides;
 }
 
+function resolveBillingSettingsOverrides(settings: unknown): Partial<WorkspaceSettingsPayload["billing"]> {
+  const billing = isRecord(settings) && isRecord(settings.billing) ? settings.billing : null;
+  if (!billing) {
+    return {};
+  }
+
+  const overrides: Partial<WorkspaceSettingsPayload["billing"]> = {};
+
+  const planName = readStringOverride(billing, "planName");
+  if (planName !== undefined) {
+    overrides.planName = planName;
+  }
+
+  const billingCycle = readStringOverride(billing, "billingCycle");
+  if (billingCycle !== undefined) {
+    overrides.billingCycle = billingCycle;
+  }
+
+  const renewalDate = readStringOverride(billing, "renewalDate");
+  if (renewalDate !== undefined) {
+    overrides.renewalDate = renewalDate;
+  }
+
+  const numericOverrideKeys = [
+    "skillsIncluded",
+    "activeSkills",
+    "includedSeats",
+    "usedSeats",
+    "evalRunCapMonthly",
+    "evalRunsUsedMonthly",
+    "distributionsMonthly",
+    "storageGbUsed",
+    "storageGbCap",
+    "apiCallsMonthly",
+    "apiCallsDeltaPct",
+  ] as const;
+
+  for (const key of numericOverrideKeys) {
+    const value = readNumberOverride(billing, key);
+    if (value !== undefined) {
+      overrides[key] = value;
+    }
+  }
+
+  return overrides;
+}
+
 function buildMemberRole(row: WorkspaceMemberRow): string {
   const groups = row.groups ?? [];
 
@@ -188,6 +242,7 @@ export function mergeTenantWorkspaceSettings(
       ...base.general,
       ...snapshot.general,
     },
+    aiConnections: snapshot.aiConnections,
     members: snapshot.members.length > 0 ? snapshot.members : base.members,
     billing: {
       ...base.billing,
@@ -223,70 +278,18 @@ export function buildPublicAuthSettings(env: Auth0Env = process.env): PublicAuth
 }
 
 function buildAiConnections(): AIConnectionSummary[] {
-  return [
-    {
-      aiConnectionUuid: "9f1bbfb0-7610-4c6b-a38d-92b2d5fbc101",
-      provider: "openai",
-      label: "OpenAI production evals",
-      defaultModel: "gpt-5.1",
-      purpose: "Primary execution provider for candidate and baseline eval runs.",
-      status: "active",
-      lastUsed: "12m ago",
-      lastRotated: "18d ago",
-      secretStore: "HashiCorp Vault · kv/team-savant/openai-prod",
-      usageScope: "Tier 2 and Tier 3 execution",
-      supportsExecution: true,
-      supportsJudging: false,
-      isDefaultExecution: true,
-      isDefaultJudge: false,
-    },
-    {
-      aiConnectionUuid: "d02d6300-8fd9-4055-8d66-11c5589a9f4f",
-      provider: "anthropic",
-      label: "Anthropic rubric judge",
-      defaultModel: "claude-sonnet-4-5",
-      purpose: "Secondary judge model for rubric scoring and recommendation generation.",
-      status: "active",
-      lastUsed: "31m ago",
-      lastRotated: "24d ago",
-      secretStore: "HashiCorp Vault · kv/team-savant/anthropic-judge",
-      usageScope: "Judging only · all tiers",
-      supportsExecution: false,
-      supportsJudging: true,
-      isDefaultExecution: false,
-      isDefaultJudge: true,
-    },
-    {
-      aiConnectionUuid: "d86e0c43-1d11-4ae9-a4e0-23f14f4b2f91",
-      provider: "azure-openai",
-      label: "Azure OpenAI regulated workloads",
-      defaultModel: "gpt-4.1",
-      purpose: "Reserved provider for regulated Tier 1 evaluations and customer-isolated workloads.",
-      status: "needs-rotation",
-      lastUsed: "2d ago",
-      lastRotated: "89d ago",
-      secretStore: "Azure Key Vault · savant-prod-tier1",
-      usageScope: "Tier 1 execution and judging",
-      supportsExecution: true,
-      supportsJudging: true,
-      isDefaultExecution: false,
-      isDefaultJudge: false,
-    },
-  ];
+  return [];
 }
 
 function buildMembers(): MemberRecord[] {
-  return MEMBERS.map((member) => ({
-    ...member,
-    groups: [...member.groups],
-  }));
+  return [];
 }
 
 export function buildWorkspaceSettingsPayload(
   env: Auth0Env = process.env,
   options?: { workspaceName?: string; workspaceSlug?: string },
 ): WorkspaceSettingsPayload {
-  const workspaceName = options?.workspaceName?.trim() || ORG.name;
+  const workspaceName = options?.workspaceName?.trim() || resolveDefaultWorkspaceName(env);
   const workspaceSlug = options?.workspaceSlug?.trim() || slugifyWorkspaceName(workspaceName);
   const workspaceUrl = buildWorkspaceUrl(workspaceSlug, env);
 
@@ -324,18 +327,19 @@ export function buildWorkspaceSettingsPayload(
     },
     billing: {
       planName: "Savant Seat",
-      renewalDate: "14 Mar 2027",
-      skillsIncluded: 500,
-      activeSkills: 218,
-      includedSeats: 50,
-      usedSeats: 38,
-      evalRunCapMonthly: 4000,
-      evalRunsUsedMonthly: 2841,
-      distributionsMonthly: 38000,
-      storageGbUsed: 12,
-      storageGbCap: 200,
-      apiCallsMonthly: 412000,
-      apiCallsDeltaPct: 18,
+      billingCycle: null,
+      renewalDate: "Awaiting billing data",
+      skillsIncluded: null,
+      activeSkills: 0,
+      includedSeats: 0,
+      usedSeats: 0,
+      evalRunCapMonthly: null,
+      evalRunsUsedMonthly: null,
+      distributionsMonthly: null,
+      storageGbUsed: null,
+      storageGbCap: null,
+      apiCallsMonthly: null,
+      apiCallsDeltaPct: null,
     },
   };
 }
@@ -359,7 +363,7 @@ async function loadTenantWorkspaceSettingsSnapshot(
 ): Promise<TenantWorkspaceSettingsSnapshot> {
   const sql = await loadControlPlaneDatabase();
 
-  const [settingsRows, memberRows, billingRows, skillCountRows] = await Promise.all([
+  const [settingsRows, memberRows, billingRows, skillCountRows, aiConnections] = await Promise.all([
     sql<WorkspaceSettingsRow[]>`
       select settings
       from workspace_settings
@@ -414,6 +418,7 @@ async function loadTenantWorkspaceSettingsSnapshot(
       from indexed_skills
       where organization_id = ${tenant.organizationId}
     `,
+    listAIConnectionSummariesForOrganization(tenant.organizationId),
   ]);
 
   const settings = settingsRows[0]?.settings;
@@ -423,14 +428,17 @@ async function loadTenantWorkspaceSettingsSnapshot(
 
   return {
     general: resolveGeneralSettingsOverrides(settings),
+    aiConnections,
     members: memberRows.map(mapWorkspaceMember),
     billing: {
+      ...resolveBillingSettingsOverrides(settings),
       activeSkills,
       includedSeats: billing?.seat_count ?? activeMembers,
       usedSeats: activeMembers,
+      billingCycle: billing?.billing_cycle ?? null,
       renewalDate: billing
         ? `Stripe sync ${formatRelativeControlPlaneTime(billing.updated_at)}`
-        : "Awaiting Stripe sync",
+        : "Awaiting billing sync",
       planName: "Savant Seat",
     },
   };

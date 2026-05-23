@@ -1,17 +1,66 @@
 "use client";
 
+import type {
+  ConnectorCategory,
+  ConnectorDashboardMetric,
+  ConnectorDashboardPayload,
+  ConnectorRecord,
+  ConnectorStatus,
+} from "@savant/types";
+import { useEffect, useState } from "react";
+
 import { Ic } from "@/components/savant/icons";
-import {
-  CONNECTORS,
-  POSSIBLE_CONNECTORS,
-  type Connector,
-} from "@/lib/savant-data";
+import { fetchConnectorDashboard } from "@/lib/control-plane-client";
+import { POSSIBLE_CONNECTORS } from "@/lib/savant-data";
 
 export function ConnectorsScreen() {
-  const local = CONNECTORS.filter((c) => c.category === "local");
-  const native = CONNECTORS.filter((c) => c.category === "native");
-  const notify = CONNECTORS.filter((c) => c.category === "notify");
-  const bundle = CONNECTORS.filter((c) => c.category === "bundle");
+  const [dashboard, setDashboard] = useState<ConnectorDashboardPayload | null>(null);
+  const [status, setStatus] = useState<"loading" | "error" | "success">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadDashboard() {
+      setStatus("loading");
+      setError(null);
+
+      try {
+        const response = await fetchConnectorDashboard({ signal: controller.signal });
+
+        if (active) {
+          setDashboard(response.data);
+          setStatus("success");
+        }
+      } catch (loadError) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setStatus("error");
+        setError(loadError instanceof Error ? loadError.message : "Could not load connectors.");
+      }
+    }
+
+    void loadDashboard();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [reloadToken]);
+
+  const retry = () => setReloadToken((value) => value + 1);
+  const connectors = dashboard?.connectors ?? [];
+  const kpis = dashboard?.kpis ?? [];
+  const local = connectors.filter((connector) => connector.category === "local");
+  const native = connectors.filter((connector) => connector.category === "native");
+  const notify = connectors.filter((connector) => connector.category === "notify");
+  const bundle = connectors.filter((connector) => connector.category === "bundle");
+  const initialLoading = status === "loading" && dashboard === null;
+  const showTransientError = status === "error" && dashboard !== null;
 
   return (
     <div className="page-inner">
@@ -26,7 +75,8 @@ export function ConnectorsScreen() {
           <div className="page-head-sub">
             Approved skills are distributed to downstream tools through three modes — managed sync
             agents for local environments, native integrations, and signed bundle exports for
-            restricted contexts.
+            restricted contexts. This screen now reflects live connector inventory and stays
+            read-only until connector mutation flows land.
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -34,106 +84,141 @@ export function ConnectorsScreen() {
             <Ic.ExternalLink className="b-icon" />
             Distribution guide
           </button>
-          <button type="button" className="btn btn-primary">
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled
+            title="Connector install and enable flows are read-only until live mutations exist."
+            style={{ opacity: 0.6, cursor: "not-allowed" }}
+          >
             <Ic.Plus className="b-icon" />
             Add connector
           </button>
         </div>
       </div>
 
-      <div className="kpi-strip" style={{ marginBottom: 24 }}>
-        <div className="kpi">
-          <div className="kpi-label">Active connectors</div>
-          <div className="kpi-value num">
-            {CONNECTORS.filter((c) => c.status !== "warning").length}
+      {showTransientError ? (
+        <div className="note blood" style={{ marginBottom: 16, justifyContent: "space-between", alignItems: "center" }}>
+          <div className="row" style={{ alignItems: "flex-start" }}>
+            <Ic.XCircle className="n-icon" />
+            <span>{error ?? "Could not refresh connectors."}</span>
           </div>
-          <div className="kpi-trend">{CONNECTORS.length} total</div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={retry}>
+            Retry
+          </button>
         </div>
-        <div className="kpi">
-          <div className="kpi-label">Agents deployed</div>
-          <div className="kpi-value num">559</div>
-          <div className="kpi-trend up">▲ 38 this week</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Distributions · 24h</div>
-          <div className="kpi-value num">
-            2.1<span style={{ fontSize: 16, color: "var(--muted)" }}>k</span>
-          </div>
-          <div className="kpi-trend up">↑ wh/skills</div>
-        </div>
-        <div className="kpi">
-          <div className="kpi-label">Issues</div>
-          <div className="kpi-value num" style={{ color: "var(--brass)" }}>
-            {CONNECTORS.filter((c) => c.status !== "healthy").length}
-          </div>
-          <div className="kpi-trend">1 stale · 1 degraded</div>
-        </div>
-      </div>
+      ) : null}
 
-      <ConnectorSection
-        eyebrow="Local sync agents"
-        sub="Managed agents that authenticate to Savant and pull approved skills into local developer environments."
-        connectors={local}
-      />
-      <ConnectorSection
-        eyebrow="Native integrations"
-        sub="Direct push to systems that accept Savant releases natively."
-        connectors={native}
-      />
-      <ConnectorSection
-        eyebrow="Notifications"
-        sub="Release events, approval requests, and rollbacks are surfaced where teams already work."
-        connectors={notify}
-      />
-      <ConnectorSection
-        eyebrow="Bundle export"
-        sub="Signed bundles for air-gapped customer environments and manual enterprise workflows."
-        connectors={bundle}
-      />
-
-      <div className="panel">
-        <div className="panel-hd">
-          <div className="panel-title">Available connectors</div>
-          <span className="subtle" style={{ fontSize: 11.5 }}>
-            Not yet enabled
-          </span>
+      {initialLoading ? (
+        <div className="panel" style={{ marginBottom: 24 }}>
+          <div className="panel-bd">
+            <div className="note">
+              <Ic.Spinner className="n-icon" />
+              <span>Loading connector inventory from the tenant control plane…</span>
+            </div>
+          </div>
         </div>
-        <div className="panel-bd">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-              gap: 8,
-            }}
-          >
-            {POSSIBLE_CONNECTORS.map((name) => (
-              <div
-                key={name}
-                style={{
-                  padding: "10px 12px",
-                  border: "1px dashed var(--rule-2)",
-                  borderRadius: 5,
-                  background: "var(--linen)",
-                  fontSize: 12.5,
-                  color: "var(--ink-3)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span>{name}</span>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  style={{ height: 22, padding: "0 7px", fontSize: 11 }}
-                >
-                  Enable
-                </button>
+      ) : status === "error" && dashboard === null ? (
+        <div className="panel" style={{ marginBottom: 24 }}>
+          <div className="panel-bd">
+            <div className="note blood" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <div className="row" style={{ alignItems: "flex-start" }}>
+                <Ic.XCircle className="n-icon" />
+                <span>{error ?? "Could not load connectors."}</span>
               </div>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={retry}>
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="kpi-strip" style={{ marginBottom: 24 }}>
+            {kpis.map((metric) => (
+              <ConnectorMetricCard key={metric.key} metric={metric} />
             ))}
           </div>
-        </div>
-      </div>
+
+          <ConnectorSection
+            eyebrow="Local sync agents"
+            sub="Managed agents that authenticate to Savant and pull approved skills into local developer environments."
+            category="local"
+            connectors={local}
+          />
+          <ConnectorSection
+            eyebrow="Native integrations"
+            sub="Direct push to systems that accept Savant releases natively."
+            category="native"
+            connectors={native}
+          />
+          <ConnectorSection
+            eyebrow="Notifications"
+            sub="Release events, approval requests, and rollbacks are surfaced where teams already work."
+            category="notify"
+            connectors={notify}
+          />
+          <ConnectorSection
+            eyebrow="Bundle export"
+            sub="Signed bundles for air-gapped customer environments and manual enterprise workflows."
+            category="bundle"
+            connectors={bundle}
+          />
+
+          <div className="panel">
+            <div className="panel-hd">
+              <div className="panel-title">Available connectors</div>
+              <span className="subtle" style={{ fontSize: 11.5 }}>
+                Not yet enabled
+              </span>
+            </div>
+            <div className="panel-bd">
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+                  gap: 8,
+                }}
+              >
+                {POSSIBLE_CONNECTORS.map((name) => (
+                  <div
+                    key={name}
+                    style={{
+                      padding: "10px 12px",
+                      border: "1px dashed var(--rule-2)",
+                      borderRadius: 5,
+                      background: "var(--linen)",
+                      fontSize: 12.5,
+                      color: "var(--ink-3)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                    }}
+                  >
+                    <span>{name}</span>
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      disabled
+                      title="Connector enablement is read-only until live install flows exist."
+                      style={{ height: 22, padding: "0 7px", fontSize: 11, opacity: 0.6, cursor: "not-allowed" }}
+                    >
+                      Enable
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="note" style={{ marginTop: 16 }}>
+            <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
+            <span style={{ fontSize: 11.5 }}>
+              Connector install, configuration, and log actions stay disabled until the live mutation and log endpoints are implemented.
+            </span>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -141,11 +226,13 @@ export function ConnectorsScreen() {
 function ConnectorSection({
   eyebrow,
   sub,
+  category,
   connectors,
 }: {
   eyebrow: string;
   sub: string;
-  connectors: Connector[];
+  category: ConnectorCategory;
+  connectors: ConnectorRecord[];
 }) {
   return (
     <div style={{ marginBottom: 28 }}>
@@ -159,42 +246,53 @@ function ConnectorSection({
           </div>
         </div>
         <span className="subtle" style={{ fontSize: 11.5 }}>
-          {connectors.length} active
+          {connectors.length} configured
         </span>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: 12,
-        }}
-      >
-        {connectors.map((c) => (
-          <ConnectorCard key={c.id} c={c} />
-        ))}
-      </div>
+      {connectors.length > 0 ? (
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: 12,
+          }}
+        >
+          {connectors.map((connector) => (
+            <ConnectorCard key={connector.id} connector={connector} />
+          ))}
+        </div>
+      ) : (
+        <div className="panel">
+          <div className="panel-bd">
+            <div className="note brass">
+              <Ic.Warn className="n-icon" />
+              <span>No {category} connectors are configured for this workspace yet.</span>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ConnectorCard({ c }: { c: Connector }) {
+function ConnectorCard({ connector }: { connector: ConnectorRecord }) {
   return (
     <div className="panel" style={{ padding: 0 }}>
       <div style={{ padding: 16, borderBottom: "1px solid var(--rule)" }}>
         <div className="row between" style={{ alignItems: "flex-start", marginBottom: 8 }}>
           <div className="col" style={{ gap: 4, minWidth: 0 }}>
             <div className="skill-name" style={{ fontSize: 14 }}>
-              {c.name}
+              {connector.name}
             </div>
             <div className="muted mono" style={{ fontSize: 11 }}>
-              {c.kind}
+              {connector.kind}
             </div>
           </div>
-          <ConnectorStatusChip status={c.status} />
+          <ConnectorStatusChip status={connector.status} />
         </div>
         <div className="muted" style={{ fontSize: 11.5, marginTop: 6 }}>
-          {c.scope}
+          {connector.scope}
         </div>
       </div>
       <div
@@ -205,10 +303,10 @@ function ConnectorCard({ c }: { c: Connector }) {
           gap: "8px 16px",
         }}
       >
-        <ConnStat label="Skills" value={c.skills} />
-        <ConnStat label="Users" value={c.users} />
-        <ConnStat label="Version" value={c.version} />
-        <ConnStat label="Last sync" value={c.lastSync} />
+        <ConnStat label="Skills" value={connector.skills} />
+        <ConnStat label="Users" value={connector.users} />
+        <ConnStat label="Version" value={connector.version} />
+        <ConnStat label="Last sync" value={connector.lastSync} />
       </div>
       <div
         style={{
@@ -223,14 +321,16 @@ function ConnectorCard({ c }: { c: Connector }) {
         <button
           type="button"
           className="btn btn-sm"
-          style={{ background: "transparent", border: 0, padding: 0, color: "var(--ink-3)" }}
+          disabled
+          style={{ background: "transparent", border: 0, padding: 0, color: "var(--ink-3)", opacity: 0.6, cursor: "not-allowed" }}
         >
           Configure
         </button>
         <button
           type="button"
           className="btn btn-sm"
-          style={{ background: "transparent", border: 0, padding: 0, color: "var(--muted)" }}
+          disabled
+          style={{ background: "transparent", border: 0, padding: 0, color: "var(--muted)", opacity: 0.6, cursor: "not-allowed" }}
         >
           <Ic.ExternalLink className="b-icon" />
           Logs
@@ -240,7 +340,7 @@ function ConnectorCard({ c }: { c: Connector }) {
   );
 }
 
-function ConnectorStatusChip({ status }: { status: Connector["status"] }) {
+function ConnectorStatusChip({ status }: { status: ConnectorStatus }) {
   if (status === "healthy")
     return (
       <span className="chip chip-moss">
@@ -278,6 +378,18 @@ function ConnStat({ label, value }: { label: string; value: string | number }) {
       </div>
       <div className="mono num" style={{ fontSize: 12.5, color: "var(--ink-2)" }}>
         {value === "—" ? <span className="subtle">—</span> : value}
+      </div>
+    </div>
+  );
+}
+
+function ConnectorMetricCard({ metric }: { metric: ConnectorDashboardMetric }) {
+  return (
+    <div className="kpi">
+      <div className="kpi-label">{metric.label}</div>
+      <div className="kpi-value num">{Intl.NumberFormat("en-US").format(metric.value)}</div>
+      <div className={metric.trend === "flat" ? "kpi-trend" : `kpi-trend ${metric.trend}`}>
+        {metric.trendLabel}
       </div>
     </div>
   );

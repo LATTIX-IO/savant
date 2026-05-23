@@ -6,15 +6,36 @@ type OnboardingContextValue = {
   open: boolean;
   show: () => void;
   hide: () => void;
+  latestConnectedRepository: {
+    id: string;
+    at: number;
+  } | null;
+  reportRepositoryConnected: (id: string) => void;
 };
 
 const Ctx = createContext<OnboardingContextValue | null>(null);
 
 export function OnboardingProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [latestConnectedRepository, setLatestConnectedRepository] = useState<{
+    id: string;
+    at: number;
+  } | null>(null);
   const show = useCallback(() => setOpen(true), []);
   const hide = useCallback(() => setOpen(false), []);
-  const value = useMemo(() => ({ open, show, hide }), [open, show, hide]);
+  const reportRepositoryConnected = useCallback((id: string) => {
+    setLatestConnectedRepository({ id, at: Date.now() });
+  }, []);
+  const value = useMemo(
+    () => ({
+      open,
+      show,
+      hide,
+      latestConnectedRepository,
+      reportRepositoryConnected,
+    }),
+    [hide, latestConnectedRepository, open, reportRepositoryConnected, show],
+  );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

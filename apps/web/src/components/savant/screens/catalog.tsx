@@ -2,15 +2,15 @@
 
 import type { Route } from "next";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 
 import type { SkillListItem } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
 import { SkillCreateModal } from "@/components/savant/skill-create-modal";
 import { fetchSkillList } from "@/lib/control-plane-client";
-import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
+import { buildSkillDetailPath } from "@/lib/skill-paths";
 import {
   BranchRef,
   CommitRef,
@@ -24,8 +24,22 @@ import {
 type TierFilter = "all" | "1" | "2" | "3";
 type StatusFilter = "all" | "production" | "staging" | "draft" | "candidate";
 
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement
+    && Boolean(target.closest("a, button, input, textarea, select, summary, [role='button'], [role='link']"));
+}
+
+function isPlainLeftClick(event: MouseEvent<HTMLTableRowElement>): boolean {
+  return event.button === 0
+    && !event.altKey
+    && !event.ctrlKey
+    && !event.metaKey
+    && !event.shiftKey;
+}
+
 export function CatalogScreen() {
   const pathname = usePathname() || "/";
+  const router = useRouter();
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [query, setQuery] = useState("");
@@ -242,16 +256,34 @@ export function CatalogScreen() {
                     </tr>
                   </thead>
                   <tbody>
-                    {filtered.map((s) => (
-                      <tr
-                        key={s.id}
-                        className={s.id === activeFocusId ? "selected" : ""}
-                        onClick={() => setFocusId(s.id)}
-                      >
+                    {filtered.map((s) => {
+                      const skillHref = buildSkillDetailPath(pathname, s) as Route;
+
+                      return (
+                        <tr
+                          key={s.id}
+                          className={s.id === activeFocusId ? "selected" : ""}
+                          onClick={(event) => {
+                            setFocusId(s.id);
+
+                            if (!isPlainLeftClick(event) || isInteractiveTarget(event.target)) {
+                              return;
+                            }
+
+                            router.push(skillHref);
+                          }}
+                          style={{ cursor: "pointer" }}
+                        >
                         <td>
                           <div className="tbl-name">
                             <div className="tbl-name-text">
-                              <span className="pri">{s.name}</span>
+                              <Link
+                                href={skillHref}
+                                onClick={() => setFocusId(s.id)}
+                                style={{ color: "inherit", textDecoration: "none" }}
+                              >
+                                <span className="pri">{s.name}</span>
+                              </Link>
                               <span className="sec">{s.team}</span>
                             </div>
                           </div>
@@ -283,8 +315,9 @@ export function CatalogScreen() {
                         <td style={{ textAlign: "right" }}>
                           <Sparkline data={s.trend} />
                         </td>
-                      </tr>
-                    ))}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               )}
@@ -295,13 +328,17 @@ export function CatalogScreen() {
         {selected ? <CatalogPreview skill={selected} pathname={pathname} /> : null}
       </div>
 
-      <SkillCreateModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <SkillCreateModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onApplied={() => setReloadToken((value) => value + 1)}
+      />
     </div>
   );
 }
 
 function CatalogPreview({ skill, pathname }: { skill: SkillListItem; pathname: string }) {
-  const skillHref = buildTenantAwareAppPath(pathname, `/skills/${skill.id}`) as Route;
+  const skillHref = buildSkillDetailPath(pathname, skill) as Route;
 
   return (
     <div className="panel" style={{ position: "sticky", top: 0 }}>

@@ -29,10 +29,10 @@ The design should not assume GitHub specifically. The storage layer should be bu
 
 The Git environment should be the source of truth for **tenant-authored repository content**, such as:
 
-- skill definitions and prompt/content files
-- repository-local metadata manifests
-- datasets, rubrics, baselines, and finalized comparison artifacts that are safe and appropriate to store as files
-- supporting references and packaged source assets
+- skill package files such as `SKILL.md`, `metadata.yaml`, `agents/`, and package-local `eval/`
+- registry files used for discovery, ownership, dependencies, and routing
+- retained repo-level baselines, datasets, fixtures, rubrics, and finalized comparison artifacts that are safe and appropriate to store as files
+- supporting docs, templates, and packaged source traceability assets
 
 Savant-managed services should remain the source of truth for **platform governance and operational state**, such as:
 
@@ -128,7 +128,7 @@ The exact repo can evolve, but Savant should validate against a machine-readable
 - `registry/*.yaml`
 - tiered skill packages under `tier1/`, `tier2/`, and `tier3/`
 - skill package files such as `SKILL.md`, `metadata.yaml`, `agents/*`, and `eval/*`
-- repo-level authored evaluation assets under `evals/`
+- repo-level authored evaluation assets under `evals/`, including retained baselines, datasets, fixtures, rubrics, and runs
 - references, templates, and legacy migration traceability files
 
 ### Canonical in Savant-managed services

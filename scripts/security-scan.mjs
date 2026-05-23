@@ -245,7 +245,17 @@ const candidateFiles = getCandidateFiles();
 
 for (const relativeFilePath of candidateFiles) {
   const absoluteFilePath = path.join(ROOT_DIR, relativeFilePath);
-  const fileBuffer = await readFile(absoluteFilePath);
+  let fileBuffer;
+
+  try {
+    fileBuffer = await readFile(absoluteFilePath);
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") {
+      continue;
+    }
+
+    throw error;
+  }
 
   if (!isLikelyText(fileBuffer)) {
     continue;

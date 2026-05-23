@@ -293,10 +293,10 @@ This spec assumes the model documented in tenant-skill-storage.md:
 
 #### External Git stores
 
-- skill files
-- repo-local manifests
-- safe datasets/rubrics kept as files
-- references/source assets
+- tiered skill packages and their authored commit history
+- registry files and repo-local manifests
+- safe baselines, datasets, fixtures, and rubrics kept as files
+- templates, docs, and source-traceability assets
 - authored commit history and branches
 
 #### Savant stores

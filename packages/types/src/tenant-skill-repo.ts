@@ -1,8 +1,13 @@
 import type {
   ControlPlaneResponseMeta,
   GitProvider,
+  RepositoryListItem,
   ResourceResponse,
 } from "./control-plane";
+import type {
+  RepositoryProviderReadiness,
+  RepositoryValidationSource,
+} from "./repository-provider-readiness";
 
 export interface RepoContractSection {
   key: string;
@@ -63,6 +68,8 @@ export interface RepoContractValidationSummary {
 
 export interface RepoContractValidationPayload {
   ready: boolean;
+  providerReadiness: RepositoryProviderReadiness;
+  validationSource: RepositoryValidationSource;
   checks: RepoContractValidationCheck[];
   missingTopLevelDirectories: string[];
   missingRegistryFiles: string[];
@@ -72,6 +79,52 @@ export interface RepoContractValidationPayload {
 }
 
 export type RepoContractValidationResponse = ResourceResponse<RepoContractValidationPayload>;
+
+export interface RepoConnectRequest {
+  provider: GitProvider;
+  repoUrl: string;
+  defaultBranch: string;
+  displayName: string;
+  connectionId?: string | undefined;
+  syncMode?: RepositorySyncMode | undefined;
+  observedPaths?: string[] | undefined;
+}
+
+export interface RepoConnectPayload {
+  created: boolean;
+  repository: RepositoryListItem;
+  warnings: string[];
+}
+
+export type RepoConnectResponse = ResourceResponse<RepoConnectPayload>;
+
+export interface RepositoryWriteCommitSummary {
+  sha: string;
+  committedAt: string;
+  url: string | null;
+  changedPaths: string[];
+}
+
+export type RepositoryVisibility = "private" | "internal" | "public";
+
+export type RepoSyncReason = "manual" | "initial_connect";
+
+export interface RepoSyncRequest {
+  reason?: RepoSyncReason | undefined;
+}
+
+export interface RepoSyncPayload {
+  accepted: boolean;
+  repository: RepositoryListItem;
+  syncMode: RepositorySyncMode;
+  requestedAt: string;
+  nextPollAt: string | null;
+  indexedSkillCount: number;
+  warnings: string[];
+  message: string;
+}
+
+export type RepoSyncResponse = ResourceResponse<RepoSyncPayload>;
 
 export interface RepoScaffoldDirectory {
   path: string;
@@ -111,6 +164,20 @@ export interface RepoBootstrapTemplatePayload {
 
 export type RepoBootstrapTemplateResponse = ResourceResponse<RepoBootstrapTemplatePayload>;
 
+export interface RepoProvisionRequest extends RepoBootstrapTemplateRequest {
+  connectionId?: string | undefined;
+  visibility?: RepositoryVisibility | undefined;
+}
+
+export interface RepoProvisionPayload {
+  repository: RepositoryListItem;
+  commit: RepositoryWriteCommitSummary;
+  indexedSkillCount: number;
+  warnings: string[];
+}
+
+export type RepoProvisionResponse = ResourceResponse<RepoProvisionPayload>;
+
 export type SkillTierKey = "tier1" | "tier2" | "tier3";
 export type SkillLifecycleStatus = "draft" | "active" | "deprecated";
 export type Tier3Kind = "personal" | "workflow";
@@ -148,3 +215,20 @@ export interface SkillScaffoldPayload {
 }
 
 export type SkillScaffoldResponse = ResourceResponse<SkillScaffoldPayload>;
+
+export interface SkillScaffoldApplyRequest extends SkillScaffoldRequest {
+  repositoryId: string;
+  connectionId?: string | undefined;
+}
+
+export interface SkillScaffoldApplyPayload {
+  repository: RepositoryListItem;
+  skillUuid: string;
+  skillId: string;
+  packagePath: string;
+  commit: RepositoryWriteCommitSummary;
+  indexedSkillCount: number;
+  warnings: string[];
+}
+
+export type SkillScaffoldApplyResponse = ResourceResponse<SkillScaffoldApplyPayload>;

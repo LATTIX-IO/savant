@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { createApiErrorResponse } from "@/server/control-plane/control-plane-response";
-import { createNotFoundResponse, getRepositoryDetailResponse } from "@/server/control-plane/read-model";
+import {
+  createNotFoundResponse,
+  getRepositoryDetailResponse,
+  ReadModelUnavailableError,
+} from "@/server/control-plane/read-model";
 import { authorizeTenantRequest, TenantContextError } from "@/server/control-plane/tenant-context";
 
 export async function GET(
@@ -23,6 +27,12 @@ export async function GET(
     return NextResponse.json(response);
   } catch (error) {
     if (error instanceof TenantContextError) {
+      return NextResponse.json(createApiErrorResponse(error.code, error.message), {
+        status: error.status,
+      });
+    }
+
+    if (error instanceof ReadModelUnavailableError) {
       return NextResponse.json(createApiErrorResponse(error.code, error.message), {
         status: error.status,
       });

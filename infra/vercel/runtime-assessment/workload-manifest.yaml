@@ -1,0 +1,163 @@
+schema_version: 1
+assessment_name: vercel-runtime-evaluation
+reference_repo_shape: ../../docs/architecture/tenant-skill-storage.md
+beta_delivery_boundary: ../../docs/architecture/adr-0001-beta-runtime-boundary.md
+
+provider_scope:
+  primary_beta_provider: github
+  future_providers:
+    - gitlab
+    - azure-devops
+    - bitbucket
+
+common_environment:
+  vercel_plan: same-for-all-runs
+  region: same-for-all-runs
+  auth_mode: tenant-authorized server-side requests
+  notes:
+    - Use the same tenant fixture and repository shape for every runtime candidate.
+    - Keep the same deploy and warm-up strategy when recording cold and warm results.
+
+fixture_profiles:
+  small:
+    repo_tree_entries: 180
+    skill_packages: 8
+    registry_files: 4
+    eval_assets: 12
+    archive_size_mb: 2
+  medium:
+    repo_tree_entries: 1200
+    skill_packages: 45
+    registry_files: 4
+    eval_assets: 70
+    archive_size_mb: 12
+  large:
+    repo_tree_entries: 4200
+    skill_packages: 160
+    registry_files: 4
+    eval_assets: 220
+    archive_size_mb: 48
+
+scenarios:
+  - id: repo-connect-validate
+    fixture: medium
+    description: Validate provider access, inspect the repository tree, run the Savant contract validation, and persist repository metadata.
+    operations:
+      - validate-provider-access
+      - fetch-repository-metadata
+      - fetch-repository-tree
+      - validate-savant-contract
+      - persist-repository-record
+    expected_outputs:
+      - repository_uuid
+      - provider_type
+      - default_branch
+      - validation_summary
+      - sync_state_seeded
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - memory_mb
+      - response_payload_kb
+      - error_rate
+
+  - id: repo-provision-bootstrap
+    fixture: small
+    description: Create a new tenant repository from the Savant bootstrap template and commit the initial content.
+    operations:
+      - create-repository
+      - render-bootstrap-template
+      - commit-initial-files
+      - persist-repository-record
+      - seed-sync-state
+    expected_outputs:
+      - repository_uuid
+      - initial_commit_sha
+      - bootstrap_summary
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - memory_mb
+      - provider_api_calls
+      - error_rate
+
+  - id: skill-create-apply
+    fixture: medium
+    description: Generate a new skill package, update registry files, write the commit, and return the new durable skill identity.
+    operations:
+      - generate-skill-uuid
+      - render-skill-files
+      - update-registry
+      - create-commit
+      - emit-audit-event
+    expected_outputs:
+      - skill_uuid
+      - commit_sha
+      - package_path
+      - registry_updates
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - memory_mb
+      - commit_payload_kb
+      - error_rate
+
+  - id: index-repo-refresh
+    fixture: large
+    description: Read a repository snapshot at a known ref, parse registry and manifests, and upsert minimal indexed control-plane projections.
+    operations:
+      - fetch-snapshot-or-archive
+      - parse-registry-files
+      - parse-skill-manifests
+      - upsert-indexed-records
+      - update-sync-state
+    expected_outputs:
+      - indexed_skill_count
+      - indexed_eval_asset_count
+      - last_indexed_commit_sha
+      - sync_completed
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - throughput_records_per_second
+      - memory_mb
+      - retry_count
+
+  - id: webhook-sync-trigger
+    fixture: medium
+    description: Verify a provider webhook, mark repository sync state, and enqueue or start a refresh path without leaking secrets.
+    operations:
+      - verify-webhook-signature
+      - resolve-repository
+      - update-sync-state
+      - enqueue-refresh
+      - emit-audit-event
+    expected_outputs:
+      - webhook_accepted
+      - repository_uuid
+      - operation_id
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - memory_mb
+      - webhook_verification_failures
+      - error_rate
+
+  - id: release-preview-bundle
+    fixture: medium
+    description: Resolve a Git ref plus indexed metadata and prepare a release-preview bundle manifest for review.
+    operations:
+      - resolve-git-ref
+      - load-indexed-skill-metadata
+      - assemble-release-preview
+      - persist-release-record
+    expected_outputs:
+      - release_uuid
+      - resolved_ref
+      - bundle_manifest_summary
+    measurements:
+      - cold_start_ms
+      - warm_p95_ms
+      - memory_mb
+      - response_payload_kb
+      - error_rate

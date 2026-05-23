@@ -1,12 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import type {
+  AuditCategory,
+  AuditEventRange,
+  AuditEventRecord,
+} from "@savant/types";
+import { useEffect, useMemo, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
-import { AUDIT_FULL, type AuditCategory, type AuditEvent } from "@/lib/savant-data";
+import { fetchAuditEvents } from "@/lib/control-plane-client";
 
 type Cat = "all" | AuditCategory;
-type Range = "24h" | "7d" | "30d" | "90d" | "all";
+type Range = AuditEventRange;
 
 const CATEGORIES: { id: Cat; label: string }[] = [
   { id: "all", label: "All events" },
@@ -32,34 +37,85 @@ export function AuditScreen() {
   const [cat, setCat] = useState<Cat>("all");
   const [range, setRange] = useState<Range>("7d");
   const [query, setQuery] = useState("");
+  const [actorQuery, setActorQuery] = useState("");
+  const [events, setEvents] = useState<AuditEventRecord[]>([]);
+  const [status, setStatus] = useState<"loading" | "error" | "success">("loading");
+  const [error, setError] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadEvents() {
+      setStatus("loading");
+      setError(null);
+
+      try {
+        const response = await fetchAuditEvents({ range }, { signal: controller.signal });
+
+        if (active) {
+          setEvents(response.data);
+          setStatus("success");
+        }
+      } catch (loadError) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setStatus("error");
+        setError(loadError instanceof Error ? loadError.message : "Could not load audit events.");
+      }
+    }
+
+    void loadEvents();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [range, reloadToken]);
 
   const filtered = useMemo(
     () =>
-      AUDIT_FULL.filter((e) => {
+      events.filter((e) => {
         if (cat !== "all" && e.category !== cat) return false;
         if (query && !(e.who + e.action + e.target).toLowerCase().includes(query.toLowerCase()))
           return false;
+        if (actorQuery && !e.who.toLowerCase().includes(actorQuery.toLowerCase()))
+          return false;
         return true;
       }),
-    [cat, query],
+    [actorQuery, cat, events, query],
   );
 
-  const groups: Record<string, AuditEvent[]> = {};
-  filtered.forEach((e) => {
-    const isToday =
-      e.when.includes("m ago") ||
-      e.when.includes("h ago") ||
-      e.when === "Now" ||
-      e.when === "5h ago" ||
-      e.when === "6h ago" ||
-      e.when === "9h ago";
-    const key = isToday ? "Today" : e.when.includes("1d") ? "Yesterday" : "Earlier";
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(e);
-  });
+  const groups = useMemo(() => {
+    const grouped = new Map<string, AuditEventRecord[]>();
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfYesterday = new Date(startOfToday);
+    startOfYesterday.setDate(startOfYesterday.getDate() - 1);
+
+    for (const event of filtered) {
+      const occurredAt = new Date(event.occurredAt);
+      const key = occurredAt >= startOfToday
+        ? "Today"
+        : occurredAt >= startOfYesterday
+          ? "Yesterday"
+          : "Earlier";
+
+      const bucket = grouped.get(key) ?? [];
+      bucket.push(event);
+      grouped.set(key, bucket);
+    }
+
+    return Array.from(grouped.entries());
+  }, [filtered]);
 
   const catCount = (id: Cat) =>
-    id === "all" ? AUDIT_FULL.length : AUDIT_FULL.filter((e) => e.category === id).length;
+    id === "all" ? events.length : events.filter((e) => e.category === id).length;
+
+  const retry = () => setReloadToken((value) => value + 1);
 
   return (
     <div className="page-inner">
@@ -110,7 +166,7 @@ export function AuditScreen() {
                     fontSize: 12.5,
                     fontWeight: cat === c.id ? 500 : 450,
                     color: cat === c.id ? "var(--ink)" : "var(--ink-3)",
-                    cursor: "default",
+                    cursor: "pointer",
                     transition: "background 100ms var(--ease)",
                   }}
                 >
@@ -142,7 +198,7 @@ export function AuditScreen() {
                     fontSize: 12.5,
                     fontWeight: range === r.id ? 500 : 450,
                     color: range === r.id ? "var(--ink)" : "var(--ink-3)",
-                    cursor: "default",
+                    cursor: "pointer",
                   }}
                 >
                   {r.label}
@@ -157,6 +213,8 @@ export function AuditScreen() {
             </div>
             <div className="panel-bd" style={{ padding: "8px 10px" }}>
               <input
+                value={actorQuery}
+                onChange={(event) => setActorQuery(event.target.value)}
                 placeholder="user@…"
                 style={{
                   width: "100%",
@@ -187,6 +245,11 @@ export function AuditScreen() {
               <span className="subtle" style={{ fontSize: 11.5 }}>
                 {filtered.length} matching
               </span>
+              {status === "loading" ? (
+                <span className="subtle" style={{ fontSize: 11.5 }}>
+                  refreshing…
+                </span>
+              ) : null}
             </div>
             <div className="row" style={{ gap: 6 }}>
               <div style={{ position: "relative" }}>
@@ -220,55 +283,83 @@ export function AuditScreen() {
             </div>
           </div>
           <div className="panel-bd" style={{ padding: 0 }}>
-            {Object.keys(groups).map((g, gi) => {
-              const events = groups[g] ?? [];
-              return (
-              <div key={g}>
-                <div
-                  style={{
-                    padding: "10px 20px",
-                    background: "var(--linen)",
-                    borderBottom: "1px solid var(--rule)",
-                    borderTop: gi === 0 ? "none" : "1px solid var(--rule)",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                  }}
-                >
-                  <span className="eyebrow" style={{ fontSize: 10 }}>
-                    {g}
-                  </span>
-                  <span className="subtle num mono" style={{ fontSize: 10.5 }}>
-                    {events.length} events
-                  </span>
-                </div>
-                <div className="audit-events">
-                  {events.map((e, i) => (
-                    <div key={i} className="audit-event">
-                      <div className="audit-time">
-                        <span className="mono num" style={{ fontSize: 11, color: "var(--ink-3)" }}>
-                          {e.time}
-                        </span>
-                        <span className="subtle" style={{ fontSize: 11 }}>
-                          {e.when}
-                        </span>
-                      </div>
-                      <div className={`audit-node tl-node ${e.node}`} />
-                      <div>
-                        <div style={{ fontSize: 13, color: "var(--ink)" }}>
-                          <b style={{ fontWeight: 500 }}>{e.who}</b>{" "}
-                          <span className="muted">{e.action.toLowerCase()}</span> {e.target}
-                        </div>
-                      </div>
-                      <span className="chip chip-paper" style={{ marginLeft: "auto" }}>
-                        {e.category}
-                      </span>
-                    </div>
-                  ))}
+            {status === "loading" && events.length === 0 ? (
+              <div className="panel-bd">
+                <div className="note">
+                  <Ic.Spinner className="n-icon" />
+                  <span>Loading audit events from the tenant control plane…</span>
                 </div>
               </div>
-              );
-            })}
+            ) : status === "error" && events.length === 0 ? (
+              <div className="panel-bd">
+                <div className="note blood" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                  <div className="row" style={{ alignItems: "flex-start" }}>
+                    <Ic.XCircle className="n-icon" />
+                    <span>{error ?? "Could not load audit events."}</span>
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={retry}>
+                    Retry
+                  </button>
+                </div>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="panel-bd">
+                <div className="note brass">
+                  <Ic.Warn className="n-icon" />
+                  <span>No audit events match the current filters.</span>
+                </div>
+              </div>
+            ) : (
+              groups.map(([groupLabel, groupEvents], groupIndex) => (
+                <div key={groupLabel}>
+                  <div
+                    style={{
+                      padding: "10px 20px",
+                      background: "var(--linen)",
+                      borderBottom: "1px solid var(--rule)",
+                      borderTop: groupIndex === 0 ? "none" : "1px solid var(--rule)",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <span className="eyebrow" style={{ fontSize: 10 }}>
+                      {groupLabel}
+                    </span>
+                    <span className="subtle num mono" style={{ fontSize: 10.5 }}>
+                      {groupEvents.length} events
+                    </span>
+                  </div>
+                  <div className="audit-events">
+                    {groupEvents.map((event, index) => (
+                      <div
+                        key={`${event.occurredAt}:${event.action}:${event.target}:${index}`}
+                        className="audit-event"
+                      >
+                        <div className="audit-time">
+                          <span className="mono num" style={{ fontSize: 11, color: "var(--ink-3)" }}>
+                            {event.time}
+                          </span>
+                          <span className="subtle" style={{ fontSize: 11 }}>
+                            {event.when}
+                          </span>
+                        </div>
+                        <div className={`audit-node tl-node ${event.node}`} />
+                        <div>
+                          <div style={{ fontSize: 13, color: "var(--ink)" }}>
+                            <b style={{ fontWeight: 500 }}>{event.who}</b>{" "}
+                            <span className="muted">{event.action.toLowerCase()}</span> {event.target}
+                          </div>
+                        </div>
+                        <span className="chip chip-paper" style={{ marginLeft: "auto" }}>
+                          {event.category}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

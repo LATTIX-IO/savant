@@ -2,28 +2,38 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import {
+  getPreferredRepositorySyncMode,
+  getRepositoryProviderReadiness,
+  supportsRepositorySyncMode,
+} from "@savant/types";
 import type {
   ApiErrorResponse,
   RepoBootstrapTemplateResponse,
+  RepoConnectResponse,
   RepoContractValidationCheck,
   RepoContractValidationResponse,
+  RepoProvisionResponse,
   RepositorySyncMode,
 } from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
 import { useOnboarding } from "@/components/savant/onboarding-context";
-import { buildTenantScopedControlPlanePath } from "@/lib/control-plane-client";
+import {
+  buildTenantScopedControlPlanePath,
+  provisionRepository,
+} from "@/lib/control-plane-client";
 
 type Path = "connect" | "provision";
 type ProviderId = "github" | "gitlab" | "azure" | "bitbucket" | "selfhosted" | "more";
 
-const PROVIDERS: { id: ProviderId; name: string; meta: string }[] = [
-  { id: "github", name: "GitHub", meta: "Cloud or Enterprise" },
-  { id: "gitlab", name: "GitLab", meta: "Cloud or self-managed" },
-  { id: "azure", name: "Azure DevOps", meta: "Microsoft Entra ID" },
-  { id: "bitbucket", name: "Bitbucket", meta: "Cloud or Data Center" },
-  { id: "selfhosted", name: "Self-hosted Git", meta: "SSH or HTTPS endpoint" },
-  { id: "more", name: "Other provider", meta: "Generic Git protocol" },
+const PROVIDERS: { id: ProviderId; name: string; meta: string; disabled?: boolean | undefined }[] = [
+  { id: "github", name: "GitHub", meta: "Connect + provision ready" },
+  { id: "gitlab", name: "GitLab", meta: "Connect + index ready" },
+  { id: "azure", name: "Azure DevOps", meta: "Manual preview only" },
+  { id: "bitbucket", name: "Bitbucket", meta: "Manual preview only" },
+  { id: "selfhosted", name: "Self-hosted Git", meta: "Manual preview only" },
+  { id: "more", name: "Other provider", meta: "Coming soon", disabled: true },
 ];
 
 const STEPS = [
@@ -42,6 +52,16 @@ type ConnectValidationState =
   | { status: "idle" | "loading" }
   | { status: "error"; message: string }
   | { status: "success"; data: RepoContractValidationResponse["data"] };
+
+type ConnectPersistState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: RepoConnectResponse["data"] };
+
+type ProvisionPersistState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: RepoProvisionResponse["data"] };
 
 const EXAMPLE_CONNECT_SNAPSHOT = [
   "docs/README.md",
@@ -86,15 +106,37 @@ function getValidationTone(checks: readonly RepoContractValidationCheck[]): "mos
   return "moss";
 }
 
+function providerDisplayName(provider: ProviderId): string {
+  return PROVIDERS.find((candidate) => candidate.id === provider)?.name ?? provider;
+}
+
+function providerRepositoryExample(provider: ProviderId): string {
+  switch (provider) {
+    case "gitlab":
+      return "gitlab.com/your-group/your-repo";
+    case "azure":
+      return "dev.azure.com/your-org/your-project/_git/your-repo";
+    case "bitbucket":
+      return "bitbucket.org/your-workspace/your-repo";
+    case "selfhosted":
+      return "git.example.com/team/your-repo";
+    case "more":
+      return "your-provider.example.com/team/your-repo";
+    case "github":
+    default:
+      return "github.com/your-org/your-repo";
+  }
+}
+
 export function OnboardingModal() {
-  const { open, hide } = useOnboarding();
+  const { open, hide, reportRepositoryConnected } = useOnboarding();
   const [step, setStep] = useState(0);
   const [path, setPath] = useState<Path>("connect");
   const [provider, setProvider] = useState<ProviderId>("github");
   const [repoUrl, setRepoUrl] = useState("github.com/wexler-hahn/finance-skills");
   const [branch, setBranch] = useState("main");
   const [name, setName] = useState("Finance Skills");
-  const [syncMode, setSyncMode] = useState<RepositorySyncMode>("webhook");
+  const [syncMode, setSyncMode] = useState<RepositorySyncMode>(() => getPreferredRepositorySyncMode("github"));
   const [repoTreeSnapshot, setRepoTreeSnapshot] = useState("");
   const [provisionPreview, setProvisionPreview] = useState<ProvisionPreviewState>({
     status: "idle",
@@ -102,7 +144,26 @@ export function OnboardingModal() {
   const [connectValidation, setConnectValidation] = useState<ConnectValidationState>({
     status: "idle",
   });
+  const [connectPersist, setConnectPersist] = useState<ConnectPersistState>({
+    status: "idle",
+  });
+  const [provisionPersist, setProvisionPersist] = useState<ProvisionPersistState>({
+    status: "idle",
+  });
+  const selectedProviderReadiness = useMemo(() => getRepositoryProviderReadiness(provider), [provider]);
   const snapshotPaths = useMemo(() => parseSnapshotPaths(repoTreeSnapshot), [repoTreeSnapshot]);
+  const supportsWebhookSync = supportsRepositorySyncMode(selectedProviderReadiness, "webhook");
+  const supportsLivePreview = selectedProviderReadiness.supportsLiveTreePreview;
+
+  function selectProvider(nextProvider: ProviderId) {
+    setProvider(nextProvider);
+
+    const nextReadiness = getRepositoryProviderReadiness(nextProvider);
+
+    if (!supportsRepositorySyncMode(nextReadiness, syncMode)) {
+      setSyncMode(getPreferredRepositorySyncMode(nextReadiness));
+    }
+  }
 
   useEffect(() => {
     if (!open || step !== 3 || path !== "provision") {
@@ -113,6 +174,7 @@ export function OnboardingModal() {
     let active = true;
 
     async function loadPreview() {
+      setProvisionPersist({ status: "idle" });
       setProvisionPreview({ status: "loading" });
 
       try {
@@ -178,6 +240,7 @@ export function OnboardingModal() {
     let active = true;
 
     async function loadValidation() {
+      setConnectPersist({ status: "idle" });
       setConnectValidation({ status: "loading" });
 
       try {
@@ -245,8 +308,85 @@ export function OnboardingModal() {
     hide();
     setStep(0);
     setConnectValidation({ status: "idle" });
+    setConnectPersist({ status: "idle" });
     setProvisionPreview({ status: "idle" });
+    setProvisionPersist({ status: "idle" });
   };
+
+  async function submitProvisionedRepository() {
+    if (provisionPersist.status === "loading") {
+      return;
+    }
+
+    setProvisionPersist({ status: "loading" });
+
+    try {
+      const payload = await provisionRepository({
+        defaultBranch: branch,
+        displayName: name,
+        provider,
+        repoUrl,
+        syncMode,
+      });
+
+      reportRepositoryConnected(payload.data.repository.id);
+      setProvisionPersist({ status: "success", data: payload.data });
+    } catch (error) {
+      setProvisionPersist({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not provision the repository.",
+      });
+    }
+  }
+
+  async function submitConnectedRepository() {
+    if (connectPersist.status === "loading") {
+      return;
+    }
+
+    setConnectPersist({ status: "loading" });
+
+    try {
+      const response = await fetch(buildTenantScopedControlPlanePath("/api/repositories/connect"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          defaultBranch: branch,
+          displayName: name,
+          observedPaths: snapshotPaths.length > 0 ? snapshotPaths : undefined,
+          provider,
+          repoUrl,
+          syncMode,
+        }),
+      });
+
+      const payload = (await response.json()) as RepoConnectResponse | ApiErrorResponse;
+
+      if (!response.ok || isApiErrorResponse(payload)) {
+        throw new Error(
+          isApiErrorResponse(payload)
+            ? payload.error.message
+            : "Could not connect the repository.",
+        );
+      }
+
+      reportRepositoryConnected(payload.data.repository.id);
+      setConnectPersist({ status: "success", data: payload.data });
+    } catch (error) {
+      setConnectPersist({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not connect the repository.",
+      });
+    }
+  }
 
   const connectTone =
     connectValidation.status === "success"
@@ -254,6 +394,16 @@ export function OnboardingModal() {
       : connectValidation.status === "error"
         ? "blood"
         : "brass";
+  const effectiveProviderReadiness = connectValidation.status === "success"
+    ? connectValidation.data.providerReadiness
+    : selectedProviderReadiness;
+  const canSubmitConnect =
+    path === "connect"
+    && connectValidation.status === "success"
+    && connectValidation.data.ready
+    && effectiveProviderReadiness.indexingSupported;
+  const canSubmitProvision = path === "provision" && provisionPreview.status === "success";
+  const isSubmitting = connectPersist.status === "loading" || provisionPersist.status === "loading";
 
   return (
     <div
@@ -300,7 +450,7 @@ export function OnboardingModal() {
             <div className="note">
               <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
               <div style={{ fontSize: 11.5 }}>
-                Savant only reads from your repository. Skill content stays in your Git environment.
+                Savant keeps skill content in your Git environment. In the secure MVP, GitHub writes only happen when you explicitly provision or commit a scaffold in-flow.
               </div>
             </div>
           </div>
@@ -350,14 +500,17 @@ export function OnboardingModal() {
                   </div>
                   <div className="row" style={{ gap: 6, marginTop: "auto" }}>
                     <span className="chip chip-paper">read-only</span>
-                    <span className="chip chip-paper">webhook sync</span>
+                    <span className="chip chip-paper">poll/manual sync</span>
                   </div>
                 </button>
 
                 <button
                   type="button"
                   className={`choice ${path === "provision" ? "selected" : ""}`}
-                  onClick={() => setPath("provision")}
+                  onClick={() => {
+                    setPath("provision");
+                    selectProvider("github");
+                  }}
                 >
                   <div className="choice-icon">
                     <svg
@@ -380,7 +533,7 @@ export function OnboardingModal() {
                     with manifests, eval scaffolding, and example tier‑1 skills.
                   </div>
                   <div className="row" style={{ gap: 6, marginTop: "auto" }}>
-                    <span className="chip chip-paper">tier-1 template</span>
+                    <span className="chip chip-paper">GitHub-first</span>
                     <span className="chip chip-paper">eval scaffolding</span>
                   </div>
                 </button>
@@ -398,7 +551,9 @@ export function OnboardingModal() {
                   Where does your repository live?
                 </div>
                 <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 480 }}>
-                  Savant is provider-agnostic. Pick where your skill repository is hosted.
+                  {path === "provision"
+                    ? "Provider-backed provisioning is GitHub-first in the current secure MVP. Other providers can still be connected where read support exists."
+                    : "Pick the provider that currently hosts your repository. Live preview and indexing vary by provider."}
                 </div>
               </div>
 
@@ -408,7 +563,8 @@ export function OnboardingModal() {
                     key={p.id}
                     type="button"
                     className={`provider ${provider === p.id ? "selected" : ""}`}
-                    onClick={() => setProvider(p.id)}
+                    disabled={p.disabled || (path === "provision" && p.id !== "github")}
+                    onClick={() => selectProvider(p.id)}
                   >
                     <ProviderIcon p={p.id} size={20} />
                     <div className="col" style={{ gap: 1 }}>
@@ -419,6 +575,14 @@ export function OnboardingModal() {
                       <Ic.CheckCircle
                         style={{ marginLeft: "auto", color: "var(--moss)", width: 14, height: 14 }}
                       />
+                    ) : p.disabled ? (
+                      <span className="chip chip-paper" style={{ marginLeft: "auto", opacity: 0.75 }}>
+                        soon
+                      </span>
+                    ) : path === "provision" && p.id !== "github" ? (
+                      <span className="chip chip-paper" style={{ marginLeft: "auto", opacity: 0.75 }}>
+                        connect only
+                      </span>
                     ) : null}
                   </button>
                 ))}
@@ -445,8 +609,10 @@ export function OnboardingModal() {
                 </div>
                 <div className="muted" style={{ fontSize: 13, marginTop: 6, maxWidth: 480 }}>
                   {path === "connect"
-                    ? "Use the full URL of an existing repository. Savant will resolve the default branch and look for a skill manifest."
-                    : "Savant will create this repository in your environment using the tier-1 starter template."}
+                    ? supportsLivePreview
+                      ? `Use the full URL of an existing repository. Savant attempts a live ${providerDisplayName(provider)} tree preview for supported public repositories, indexes supported repositories immediately after connect, and still accepts a pasted snapshot override for private repositories or troubleshooting.`
+                      : "Use the full URL of an existing repository. Savant accepts a pasted repository snapshot for manual pre-flight validation while live provider previews are unavailable for this provider."
+                    : "Savant will create this repository in GitHub using the tier-1 starter template."}
                 </div>
               </div>
 
@@ -455,7 +621,7 @@ export function OnboardingModal() {
                   <div className="field-label">Repository URL</div>
                   <input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} />
                   <div className="field-help">
-                    Example: <span className="mono">github.com/your-org/your-repo</span>
+                    Example: <span className="mono">{providerRepositoryExample(provider)}</span>
                   </div>
                 </div>
 
@@ -487,6 +653,7 @@ export function OnboardingModal() {
                   <div className="row" style={{ gap: 8 }}>
                     <label className="row" style={{ gap: 6, fontSize: 12.5 }}>
                       <input
+                        disabled={!supportsRepositorySyncMode(selectedProviderReadiness, "webhook")}
                         checked={syncMode === "webhook"}
                         name="sync"
                         type="radio"
@@ -496,6 +663,7 @@ export function OnboardingModal() {
                     </label>
                     <label className="row" style={{ gap: 6, fontSize: 12.5, color: "var(--muted)" }}>
                       <input
+                        disabled={!supportsRepositorySyncMode(selectedProviderReadiness, "poll")}
                         checked={syncMode === "poll"}
                         name="sync"
                         type="radio"
@@ -503,13 +671,28 @@ export function OnboardingModal() {
                       />{" "}
                       Polled (every 5 min)
                     </label>
+                    <label className="row" style={{ gap: 6, fontSize: 12.5, color: "var(--muted)" }}>
+                      <input
+                        disabled={!supportsRepositorySyncMode(selectedProviderReadiness, "manual")}
+                        checked={syncMode === "manual"}
+                        name="sync"
+                        type="radio"
+                        onChange={() => setSyncMode("manual")}
+                      />{" "}
+                      Manual (operator-triggered)
+                    </label>
+                  </div>
+                  <div className="field-help">
+                    {supportsWebhookSync
+                      ? "Webhook sync is available for this provider. Poll and manual remain available for staged rollout or troubleshooting."
+                      : selectedProviderReadiness.webhookRegistration.message}
                   </div>
                 </div>
 
                 {path === "connect" && (
                   <div className="field">
                     <div className="row between" style={{ alignItems: "center", gap: 10 }}>
-                      <div className="field-label" style={{ marginBottom: 0 }}>Repository tree snapshot</div>
+                      <div className="field-label" style={{ marginBottom: 0 }}>Repository tree snapshot override</div>
                       <div className="row" style={{ gap: 8 }}>
                         <button
                           type="button"
@@ -533,11 +716,15 @@ export function OnboardingModal() {
                       rows={8}
                       value={repoTreeSnapshot}
                       onChange={(e) => setRepoTreeSnapshot(e.target.value)}
-                      placeholder="Paste one repository path per line to preview the contract check before live provider tree fetch is wired."
+                      placeholder={supportsLivePreview
+                        ? "Optional fallback. Paste one repository path per line to override the live preview or validate a private repository manually."
+                        : "Required for now. Paste one repository path per line to validate this provider before live provider reads land."}
                       style={{ minHeight: 148, resize: "vertical" }}
                     />
                     <div className="field-help">
-                      Optional for this slice. Paste a path list from a provider tree export to run a real contract check now, or leave it blank to see the pending pre-flight state.
+                      {supportsLivePreview
+                        ? `Leave this blank to let Savant try a live ${providerDisplayName(provider)} tree preview for supported public repositories. Paste a path list only when you want to override the preview or validate a private repository manually.`
+                        : "Paste a path list to validate this provider before live provider tree reads land."}
                     </div>
                   </div>
                 )}
@@ -616,9 +803,31 @@ export function OnboardingModal() {
                   <div style={{ fontSize: 12 }}>
                     {provisionPreview.status === "success"
                       ? `The generated scaffold includes ${provisionPreview.data.summary.directoryCount} directories and ${provisionPreview.data.summary.fileCount} files, including registry manifests and evaluation roots.`
-                      : "Savant is preparing the repository scaffold preview. Once provider write operations land, this plan will be committed directly to your tenant-owned repository."}
+                      : "Savant is preparing the repository scaffold preview before committing it into your tenant-owned repository."}
                   </div>
                 </div>
+
+                {provisionPersist.status === "error" && (
+                  <div className="note blood" style={{ marginTop: 12 }}>
+                    <Ic.XCircle className="n-icon" style={{ color: "var(--oxblood)" }} />
+                    <div style={{ fontSize: 12 }}>{provisionPersist.message}</div>
+                  </div>
+                )}
+
+                {provisionPersist.status === "success" && (
+                  <div className="note" style={{ marginTop: 12 }}>
+                    <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                    <div style={{ fontSize: 12 }}>
+                      Created <span className="mono">{provisionPersist.data.repository.name}</span> and committed the bootstrap scaffold at <span className="mono">{provisionPersist.data.commit.sha.slice(0, 7)}</span>.
+                      {provisionPersist.data.indexedSkillCount > 0
+                        ? ` Indexed ${provisionPersist.data.indexedSkillCount} skills immediately.`
+                        : " The repository is now connected and ready for follow-on syncs."}
+                      {provisionPersist.data.warnings.length > 0
+                        ? ` ${provisionPersist.data.warnings.join(" ")}`
+                        : ""}
+                    </div>
+                  </div>
+                )}
               </>
             ) : (
               <>
@@ -664,7 +873,9 @@ export function OnboardingModal() {
                         meta={
                           snapshotPaths.length > 0
                             ? `Inspecting ${snapshotPaths.length} provided repository paths`
-                            : "Waiting for a provider tree fetch or a pasted repository path snapshot"
+                            : supportsLivePreview
+                              ? `Resolving the live ${providerDisplayName(provider)} repository tree preview`
+                              : selectedProviderReadiness.liveTreePreview.message
                         }
                       />
                     )}
@@ -694,10 +905,39 @@ export function OnboardingModal() {
                     )}
                     <div style={{ fontSize: 12 }}>
                       {connectValidation.data.ready
-                        ? `The provided snapshot matched the Savant contract. ${connectValidation.data.summary.discoveredSkillPackageCount} skill package roots were discovered and can be indexed in a later slice.`
+                        ? connectValidation.data.providerReadiness.indexingSupported
+                          ? connectValidation.data.validationSource === "provider-live-preview"
+                            ? `The live ${providerDisplayName(provider)} preview matched the Savant contract. ${connectValidation.data.summary.discoveredSkillPackageCount} skill package roots were discovered and ${providerDisplayName(provider)} repositories will be indexed immediately after connect.`
+                            : `The provided snapshot matched the Savant contract. ${connectValidation.data.summary.discoveredSkillPackageCount} skill package roots were discovered and ${providerDisplayName(provider)} repositories will be indexed immediately after connect.`
+                          : connectValidation.data.providerReadiness.immediateIndexing.message
                         : connectValidation.data.summary.observedPathCount === 0
-                          ? "No repository tree snapshot was provided yet, so Savant is holding the contract check at pre-flight. Paste a path list or wait for live provider tree fetch integration to complete the validation."
+                          ? connectValidation.data.providerReadiness.supportsLiveTreePreview
+                            ? `${providerDisplayName(provider)} could not produce a live repository preview from the current locator. Paste a path list to keep validating while private-repository auth is still being wired.`
+                            : connectValidation.data.providerReadiness.liveTreePreview.message
                           : connectValidation.data.nextSteps.join(" ")}
+                    </div>
+                  </div>
+                )}
+
+                {connectPersist.status === "error" && (
+                  <div className="note blood" style={{ marginTop: 12 }}>
+                    <Ic.XCircle className="n-icon" style={{ color: "var(--oxblood)" }} />
+                    <div style={{ fontSize: 12 }}>{connectPersist.message}</div>
+                  </div>
+                )}
+
+                {connectPersist.status === "success" && (
+                  <div className="note" style={{ marginTop: 12 }}>
+                    <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                    <div style={{ fontSize: 12 }}>
+                      {connectPersist.data.created
+                        ? connectPersist.data.repository.providerReadiness.indexingSupported
+                          ? `Connected ${connectPersist.data.repository.name}. Savant will now trigger the initial repository sync so the tenant-scoped repository record can populate with indexed skills.`
+                          : `Connected ${connectPersist.data.repository.name}. ${connectPersist.data.repository.providerReadiness.immediateIndexing.message}`
+                        : `Updated the existing control-plane connection for ${connectPersist.data.repository.name}. The repository list will refresh with the latest sync settings.`}
+                      {connectPersist.data.warnings.length > 0
+                        ? ` ${connectPersist.data.warnings.join(" ")}`
+                        : ""}
                     </div>
                   </div>
                 )}
@@ -721,10 +961,63 @@ export function OnboardingModal() {
                   <Ic.ChevR className="b-icon" />
                 </button>
               ) : (
-                <button type="button" className="btn btn-brass" onClick={close}>
-                  <Ic.Check className="b-icon" />
+                <button
+                  type="button"
+                  className={(path === "connect" && canSubmitConnect && connectPersist.status !== "success")
+                    || (path === "provision" && canSubmitProvision && provisionPersist.status !== "success")
+                    ? "btn btn-primary"
+                    : "btn btn-brass"}
+                  disabled={isSubmitting}
+                  onClick={() => {
+                    if (path === "provision") {
+                      if (provisionPersist.status === "success") {
+                        close();
+                        return;
+                      }
+
+                      if (canSubmitProvision) {
+                        void submitProvisionedRepository();
+                        return;
+                      }
+
+                      close();
+                      return;
+                    }
+
+                    if (connectPersist.status === "success") {
+                      close();
+                      return;
+                    }
+
+                    if (canSubmitConnect) {
+                      void submitConnectedRepository();
+                      return;
+                    }
+
+                    close();
+                  }}
+                >
+                  {isSubmitting ? (
+                    <Ic.Spinner className="b-icon" />
+                  ) : (
+                    <Ic.Check className="b-icon" />
+                  )}
                   <span>
-                    {path === "provision" ? "Finish — review bootstrap plan" : "Finish — review validation"}
+                    {path === "provision"
+                      ? provisionPersist.status === "success"
+                        ? "Done"
+                        : provisionPersist.status === "loading"
+                          ? "Provisioning repository…"
+                          : canSubmitProvision
+                            ? "Create repository"
+                            : "Close"
+                      : connectPersist.status === "success"
+                        ? "Done"
+                        : connectPersist.status === "loading"
+                          ? "Connecting repository…"
+                          : canSubmitConnect
+                            ? "Connect repository"
+                            : "Close"}
                   </span>
                 </button>
               )}

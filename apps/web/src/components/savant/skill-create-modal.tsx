@@ -4,24 +4,40 @@ import { useEffect, useMemo, useState } from "react";
 
 import type {
   ApiErrorResponse,
+  RepositoryListResponse,
+  SkillScaffoldApplyResponse,
   SkillScaffoldResponse,
   SkillTierKey,
   Tier3Kind,
 } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
-import { buildTenantScopedControlPlanePath } from "@/lib/control-plane-client";
-import { REPOS } from "@/lib/savant-data";
+import {
+  applySkillScaffold,
+  buildTenantScopedControlPlanePath,
+  fetchRepositoryList,
+} from "@/lib/control-plane-client";
 
 type SkillCreateModalProps = {
   open: boolean;
   onClose: () => void;
+  onApplied?: (() => void) | undefined;
 };
 
 type PreviewState =
   | { status: "idle" | "loading" }
   | { status: "error"; message: string }
   | { status: "success"; data: SkillScaffoldResponse["data"] };
+
+type RepositoryOptionsState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: RepositoryListResponse["data"] };
+
+type ApplyState =
+  | { status: "idle" | "loading" }
+  | { status: "error"; message: string }
+  | { status: "success"; data: SkillScaffoldApplyResponse["data"] };
 
 const STEPS = [
   { title: "Choose target", sub: "Repository and tier placement" },
@@ -40,9 +56,9 @@ function parseDependencies(value: string): string[] {
     .filter(Boolean))];
 }
 
-export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
+export function SkillCreateModal({ open, onClose, onApplied }: SkillCreateModalProps) {
   const [step, setStep] = useState(0);
-  const [repositoryId, setRepositoryId] = useState(REPOS[0]?.id ?? "");
+  const [repositoryId, setRepositoryId] = useState("");
   const [tier, setTier] = useState<SkillTierKey>("tier2");
   const [displayName, setDisplayName] = useState("Contract Review Assistant");
   const [owner, setOwner] = useState("ari.chen");
@@ -57,14 +73,74 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
   const [packagePath, setPackagePath] = useState("");
   const [dependenciesInput, setDependenciesInput] = useState("shared/legal-style\nshared/risk-taxonomy");
   const [preview, setPreview] = useState<PreviewState>({ status: "idle" });
+  const [repositoryOptions, setRepositoryOptions] = useState<RepositoryOptionsState>({ status: "idle" });
+  const [applyState, setApplyState] = useState<ApplyState>({ status: "idle" });
 
-  const selectedRepository = REPOS.find((repo) => repo.id === repositoryId) ?? REPOS[0] ?? null;
+  const repositories = useMemo(
+    () => (repositoryOptions.status === "success" ? repositoryOptions.data : []),
+    [repositoryOptions],
+  );
+  const writableRepositories = useMemo(
+    () => repositories.filter((repo) => repo.providerReadiness.supportsProvisioningWrites),
+    [repositories],
+  );
+  const selectedRepository = writableRepositories.find((repo) => repo.id === repositoryId)
+    ?? writableRepositories[0]
+    ?? null;
   const dependencies = useMemo(() => parseDependencies(dependenciesInput), [dependenciesInput]);
   const canAdvanceDetails =
     displayName.trim().length > 0 &&
     owner.trim().length > 0 &&
     summary.trim().length > 0 &&
     repositoryId.trim().length > 0;
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadRepositories() {
+      setRepositoryOptions({ status: "loading" });
+
+      try {
+        const response = await fetchRepositoryList({ signal: controller.signal });
+
+        if (!active) {
+          return;
+        }
+
+        setRepositoryOptions({ status: "success", data: response.data });
+        setRepositoryId((current) => {
+          const writable = response.data.filter((repo) => repo.providerReadiness.supportsProvisioningWrites);
+
+          if (writable.some((repo) => repo.id === current)) {
+            return current;
+          }
+
+          return writable[0]?.id ?? "";
+        });
+      } catch (error) {
+        if (controller.signal.aborted || !active) {
+          return;
+        }
+
+        setRepositoryOptions({
+          status: "error",
+          message: error instanceof Error ? error.message : "Could not load repositories.",
+        });
+      }
+    }
+
+    void loadRepositories();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!open || step !== 2 || !canAdvanceDetails) {
@@ -75,6 +151,7 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
     let active = true;
 
     async function loadPreview() {
+      setApplyState({ status: "idle" });
       setPreview({ status: "loading" });
 
       try {
@@ -157,8 +234,47 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
   const close = () => {
     setStep(0);
     setPreview({ status: "idle" });
+    setApplyState({ status: "idle" });
     onClose();
   };
+
+  async function submitSkillScaffold() {
+    if (applyState.status === "loading" || !selectedRepository) {
+      return;
+    }
+
+    setApplyState({ status: "loading" });
+
+    try {
+      const payload = await applySkillScaffold({
+        repositoryId: selectedRepository.id,
+        displayName,
+        tier,
+        owner,
+        summary,
+        ...(domain.trim() ? { domain: domain.trim() } : {}),
+        ...(category.trim() ? { category: category.trim() } : {}),
+        ...(packagePath.trim() ? { packagePath: packagePath.trim() } : {}),
+        ...(tier === "tier3" ? { tier3Kind } : {}),
+        ...(tier === "tier3" && tier3Kind === "personal" && personSlug.trim()
+          ? { personSlug: personSlug.trim() }
+          : {}),
+        ...(status ? { status } : {}),
+        ...(dependencies.length > 0 ? { dependencies } : {}),
+      });
+
+      setApplyState({ status: "success", data: payload.data });
+      onApplied?.();
+    } catch (error) {
+      setApplyState({
+        status: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Could not apply the skill scaffold.",
+      });
+    }
+  }
 
   const next = () => {
     if (step === 1 && !canAdvanceDetails) {
@@ -217,8 +333,7 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
             <div className="note">
               <Ic.Lock className="n-icon" style={{ color: "var(--moss)" }} />
               <div style={{ fontSize: 11.5 }}>
-                This slice previews the Git changes needed for skill creation. Direct commit,
-                registry writeback, and re-indexing land in the next backend pass.
+                This flow previews the Git changes and then commits them into GitHub-backed repositories in the current secure MVP.
               </div>
             </div>
           </div>
@@ -242,18 +357,55 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
 
               <div className="field">
                 <div className="field-label">Repository target</div>
-                <select value={repositoryId} onChange={(event) => setRepositoryId(event.target.value)}>
-                  {REPOS.map((repo) => (
+                <select
+                  value={repositoryId}
+                  onChange={(event) => setRepositoryId(event.target.value)}
+                  disabled={repositoryOptions.status !== "success" || writableRepositories.length === 0}
+                >
+                  {repositoryOptions.status === "loading" && (
+                    <option value="">Loading repositories…</option>
+                  )}
+                  {repositoryOptions.status === "error" && (
+                    <option value="">Could not load repositories</option>
+                  )}
+                  {repositoryOptions.status === "success" && writableRepositories.length === 0 && (
+                    <option value="">No GitHub write-enabled repositories yet</option>
+                  )}
+                  {writableRepositories.map((repo) => (
                     <option key={repo.id} value={repo.id}>
                       {repo.name} · {repo.provider} · {repo.branch}
                     </option>
                   ))}
                 </select>
                 <div className="field-help">
-                  Skills are scaffolded into the selected tenant-owned repository and later indexed
-                  back into Savant.
+                  Skills are scaffolded into a write-enabled tenant repository and then indexed back into Savant.
                 </div>
               </div>
+
+              {repositoryOptions.status === "error" && (
+                <div className="note blood" style={{ marginTop: 14 }}>
+                  <Ic.XCircle className="n-icon" />
+                  <div style={{ fontSize: 12 }}>{repositoryOptions.message}</div>
+                </div>
+              )}
+
+              {repositoryOptions.status === "success" && repositories.length === 0 && (
+                <div className="note brass" style={{ marginTop: 14 }}>
+                  <Ic.Warn className="n-icon" />
+                  <div style={{ fontSize: 12 }}>
+                    Connect or provision a repository first, then return here to commit a new skill scaffold.
+                  </div>
+                </div>
+              )}
+
+              {repositoryOptions.status === "success" && repositories.length > 0 && writableRepositories.length === 0 && (
+                <div className="note brass" style={{ marginTop: 14 }}>
+                  <Ic.Warn className="n-icon" />
+                  <div style={{ fontSize: 12 }}>
+                    GitHub is the only write-enabled repository target in the current secure MVP. Connect or provision a GitHub repository to commit scaffold changes from Savant.
+                  </div>
+                </div>
+              )}
 
               <div className="choice-grid">
                 <TierChoice
@@ -518,11 +670,32 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
               <div className="note">
                 <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
                 <div style={{ fontSize: 12 }}>
-                  This preview now covers both the generated skill package and the registry files
-                  that must change for indexing. The next slice will persist those writes into the
-                  tenant-owned Git repository and trigger re-indexing.
+                  This preview covers both the generated skill package and the registry files that
+                  Savant will update in the selected tenant-owned repository.
                 </div>
               </div>
+
+                {applyState.status === "error" && (
+                  <div className="note blood" style={{ marginTop: 12 }}>
+                    <Ic.XCircle className="n-icon" />
+                    <div style={{ fontSize: 12 }}>{applyState.message}</div>
+                  </div>
+                )}
+
+                {applyState.status === "success" && (
+                  <div className="note" style={{ marginTop: 12 }}>
+                    <Ic.CheckCircle className="n-icon" style={{ color: "var(--moss)" }} />
+                    <div style={{ fontSize: 12 }}>
+                      Committed <span className="mono">{applyState.data.skillId}</span> to <span className="mono">{applyState.data.repository.name}</span> at <span className="mono">{applyState.data.commit.sha.slice(0, 7)}</span>.
+                      {applyState.data.indexedSkillCount > 0
+                        ? ` Indexed ${applyState.data.indexedSkillCount} skills immediately.`
+                        : " The repository refresh will catch up on the next successful index."}
+                      {applyState.data.warnings.length > 0
+                        ? ` ${applyState.data.warnings.join(" ")}`
+                        : ""}
+                    </div>
+                  </div>
+                )}
             </>
           )}
 
@@ -540,17 +713,50 @@ export function SkillCreateModal({ open, onClose }: SkillCreateModalProps) {
                 <button
                   type="button"
                   className="btn btn-primary"
-                  disabled={step === 1 && !canAdvanceDetails}
+                  disabled={(step === 0 && !selectedRepository) || (step === 1 && !canAdvanceDetails)}
                   onClick={next}
-                  style={step === 1 && !canAdvanceDetails ? { opacity: 0.6 } : undefined}
+                  style={(step === 0 && !selectedRepository) || (step === 1 && !canAdvanceDetails)
+                    ? { opacity: 0.6 }
+                    : undefined}
                 >
                   <span>{step === 1 ? "Generate preview" : "Continue"}</span>
                   <Ic.ChevR className="b-icon" />
                 </button>
               ) : (
-                <button type="button" className="btn btn-brass" onClick={close}>
-                  <Ic.Check className="b-icon" />
-                  <span>Finish — close preview</span>
+                <button
+                  type="button"
+                  className={preview.status === "success" && applyState.status !== "success"
+                    ? "btn btn-primary"
+                    : "btn btn-brass"}
+                  disabled={applyState.status === "loading"}
+                  onClick={() => {
+                    if (applyState.status === "success") {
+                      close();
+                      return;
+                    }
+
+                    if (preview.status === "success") {
+                      void submitSkillScaffold();
+                      return;
+                    }
+
+                    close();
+                  }}
+                >
+                  {applyState.status === "loading" ? (
+                    <Ic.Spinner className="b-icon" />
+                  ) : (
+                    <Ic.Check className="b-icon" />
+                  )}
+                  <span>
+                    {applyState.status === "success"
+                      ? "Done"
+                      : applyState.status === "loading"
+                        ? "Applying scaffold…"
+                        : preview.status === "success"
+                          ? "Commit scaffold"
+                          : "Close"}
+                  </span>
                 </button>
               )}
             </div>

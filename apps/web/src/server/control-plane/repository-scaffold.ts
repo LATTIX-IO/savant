@@ -1,6 +1,10 @@
 import { tenantSkillRepoContract } from "@savant/schemas/tenant-skill-repo-contract";
+import {
+  getPreferredRepositorySyncMode,
+  getRepositoryProviderReadiness,
+  supportsRepositorySyncMode,
+} from "@savant/types";
 import type {
-  GitProvider,
   RepoBootstrapTemplatePayload,
   RepoBootstrapTemplateRequest,
   RepoContractCheckStatus,
@@ -9,6 +13,7 @@ import type {
   RepoContractValidationRequest,
   RepoScaffoldDirectory,
   RepoScaffoldFile,
+  RepositoryValidationSource,
 } from "@savant/types";
 
 const DIRECTORY_PURPOSES: RepoScaffoldDirectory[] = [
@@ -121,13 +126,36 @@ function createCheck(
   return { key, label, status, meta };
 }
 
-function checkProviderSupport(provider: GitProvider, syncMode: string): RepoContractValidationCheck {
-  if (provider === "selfhosted" || provider === "more") {
+function checkProviderSupport(request: RepoContractValidationRequest): RepoContractValidationCheck {
+  const readiness = getRepositoryProviderReadiness(request.provider);
+  const syncMode = request.syncMode ?? getPreferredRepositorySyncMode(readiness);
+
+  if (request.path === "provision" && !readiness.supportsProvisioningWrites) {
+    return createCheck(
+      "provider-support",
+      "Provider capabilities",
+      "fail",
+      readiness.provisioningWrites.message,
+    );
+  }
+
+  if (!supportsRepositorySyncMode(readiness, syncMode)) {
+    return createCheck(
+      "provider-support",
+      "Provider capabilities",
+      "fail",
+      syncMode === "webhook"
+        ? readiness.webhookRegistration.message
+        : readiness.immediateIndexing.message,
+    );
+  }
+
+  if (request.path === "connect" && !readiness.supportsLiveTreePreview) {
     return createCheck(
       "provider-support",
       "Provider capabilities",
       "warn",
-      `${provider} may require manual provisioning and ${syncMode} confirmation`,
+      readiness.liveTreePreview.message,
     );
   }
 
@@ -135,7 +163,9 @@ function checkProviderSupport(provider: GitProvider, syncMode: string): RepoCont
     "provider-support",
     "Provider capabilities",
     "ok",
-    `${provider} selected for ${syncMode} repository management`,
+    request.path === "provision"
+      ? `${request.provider} selected for provider-backed provisioning with ${syncMode} sync`
+      : `${request.provider} selected for ${syncMode} repository management`,
   );
 }
 
@@ -281,11 +311,15 @@ function buildSnapshotCheck(
   }
 
   if (observedPaths.length === 0) {
+    const readiness = getRepositoryProviderReadiness(request.provider);
+
     return createCheck(
       "repository-snapshot",
       "Repository snapshot",
       "pending",
-      "Provider handshake and tree fetch are required before full remote validation",
+      readiness.supportsLiveTreePreview
+        ? "Provider handshake and tree fetch are required before full remote validation"
+        : readiness.liveTreePreview.message,
     );
   }
 
@@ -305,9 +339,19 @@ function buildNextSteps(
   missingRegistryFiles: readonly string[],
 ): string[] {
   if (request.path === "provision") {
+    const readiness = getRepositoryProviderReadiness(request.provider);
+    const syncMode = request.syncMode ?? getPreferredRepositorySyncMode(readiness);
+
+    if (!readiness.supportsProvisioningWrites) {
+      return [
+        "Use GitHub for provider-backed repository provisioning and scaffold/apply writes in the current secure MVP.",
+        "Or create the repository in your Git provider first, then connect it with poll or manual sync.",
+      ];
+    }
+
     return [
       "Create the repository in the selected provider using the generated scaffold.",
-      `Commit bootstrap files to ${request.defaultBranch} and register webhook or polling sync.`,
+      `Commit bootstrap files to ${request.defaultBranch} and keep the repository on ${syncMode} sync.`,
       "Create the first skill package from Savant once the repository is connected.",
     ];
   }
@@ -436,6 +480,9 @@ function buildBootstrapFiles(request: RepoBootstrapTemplateRequest): RepoScaffol
 
 export function validateTenantSkillRepoContract(
   request: RepoContractValidationRequest,
+  options?: {
+    validationSource?: RepositoryValidationSource | undefined;
+  },
 ): RepoContractValidationPayload {
   const observedPaths =
     request.path === "provision"
@@ -461,10 +508,16 @@ export function validateTenantSkillRepoContract(
     ? registryPaths.filter((path) => !observedPathSet.has(normalizePath(path)))
     : [];
   const discoveredSkillPackageRoots = inferSkillPackageRoots(observedPaths);
-  const syncMode = request.syncMode ?? "webhook";
+  const providerReadiness = getRepositoryProviderReadiness(request.provider);
+  const validationSource = options?.validationSource
+    ?? (request.path === "provision"
+      ? "bootstrap-template"
+      : hasObservedSnapshot
+        ? "snapshot-override"
+        : "awaiting-provider-preview");
 
   const checks: RepoContractValidationCheck[] = [
-    checkProviderSupport(request.provider, syncMode),
+    checkProviderSupport(request),
     checkBranch(request.defaultBranch),
     buildSnapshotCheck(request, observedPaths),
     hasObservedSnapshot
@@ -484,6 +537,8 @@ export function validateTenantSkillRepoContract(
 
   return {
     ready,
+    providerReadiness,
+    validationSource,
     checks,
     missingTopLevelDirectories,
     missingRegistryFiles,

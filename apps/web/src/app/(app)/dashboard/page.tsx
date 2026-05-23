@@ -18,6 +18,10 @@ export default async function DashboardPage() {
     redirect(tenantPath as Route);
   }
 
+  if (process.env.NODE_ENV !== "development") {
+    redirect("/auth-status" as Route);
+  }
+
   const auth = buildAuthOverview(session?.user);
   const authStatus = buildPublicAuthSettings().status;
   const overview = await getOverviewResponse();

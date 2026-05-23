@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { Route } from "next";
-import { Fragment, type ReactNode } from "react";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
 import { OnboardingProvider } from "@/components/savant/onboarding-context";
@@ -12,33 +12,19 @@ import { SavantLogo } from "@/components/savant/savant-logo";
 import { TweaksProvider, useTweaks } from "@/components/savant/tweaks-context";
 import { TweaksPanel } from "@/components/savant/tweaks-panel";
 import type { AuthViewer } from "@/lib/auth0-session";
+import { fetchSkillDetail } from "@/lib/control-plane-client";
+import {
+  buildSavantShellBreadcrumbs,
+  EMPTY_SAVANT_SHELL_DATA,
+  type SavantShellData,
+} from "@/lib/shell-state";
+import { isGovernanceFeatureEnabled } from "@/lib/workspace-features";
 import {
   buildTenantAppPath,
   extractWorkspaceSlugFromPathname,
   stripTenantPathPrefix,
 } from "@/lib/tenant-paths";
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
-import {
-  ORG,
-  SKILLS,
-  REPOS,
-  EVAL_RUNS,
-  RELEASES,
-  POLICIES,
-  CONNECTORS,
-} from "@/lib/savant-data";
-
-const TITLE_BY_PATH: Record<string, { group: string; title: string }> = {
-  "/dashboard": { group: "Workspace", title: "Overview" },
-  "/skills": { group: "Workspace", title: "Skills" },
-  "/repositories": { group: "Workspace", title: "Repositories" },
-  "/evaluations": { group: "Workspace", title: "Evaluations" },
-  "/releases": { group: "Workspace", title: "Releases" },
-  "/policies": { group: "Governance", title: "Policies" },
-  "/audit": { group: "Governance", title: "Audit" },
-  "/connectors": { group: "Governance", title: "Connectors" },
-  "/settings": { group: "System", title: "Settings" },
-};
 
 type WorkspaceSummary = {
   name: string;
@@ -55,11 +41,13 @@ type WorkspaceMembershipSummary = WorkspaceSummary & {
 export function SavantShell({
   children,
   viewer,
+  shellData,
   workspace,
   memberships,
 }: {
   children: ReactNode;
   viewer: AuthViewer;
+  shellData?: SavantShellData;
   workspace?: WorkspaceSummary;
   memberships?: WorkspaceMembershipSummary[];
 }) {
@@ -67,7 +55,7 @@ export function SavantShell({
     <TweaksProvider>
       <OnboardingProvider>
         <div className="app">
-          <Sidebar viewer={viewer} />
+          <Sidebar viewer={viewer} {...(shellData ? { shellData } : {})} />
           <TopBar viewer={viewer} {...(workspace ? { workspace } : {})} {...(memberships ? { memberships } : {})} />
           <div className="page">{children}</div>
           <OnboardingModal />
@@ -78,10 +66,11 @@ export function SavantShell({
   );
 }
 
-function Sidebar({ viewer }: { viewer: AuthViewer }) {
+function Sidebar({ viewer, shellData }: { viewer: AuthViewer; shellData?: SavantShellData }) {
   const pathname = usePathname() || "/";
   const workspaceSlug = extractWorkspaceSlugFromPathname(pathname);
   const appPath = stripTenantPathPrefix(pathname);
+  const counts = shellData?.counts ?? EMPTY_SAVANT_SHELL_DATA.counts;
 
   type Item = {
     href: Route;
@@ -93,16 +82,17 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
 
   const workspaceItems: Item[] = [
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/dashboard") : "/dashboard") as Route, label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/dashboard" },
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/skills") : "/skills") as Route, label: "Skills", icon: Ic.Skills, count: SKILLS.length, match: (p) => p.startsWith("/skills") },
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/repositories") : "/repositories") as Route, label: "Repositories", icon: Ic.Repo, count: REPOS.length, match: (p) => p.startsWith("/repositories") },
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/evaluations") : "/evaluations") as Route, label: "Evaluations", icon: Ic.Eval, count: EVAL_RUNS.filter((r) => r.status === "running").length || EVAL_RUNS.length, match: (p) => p.startsWith("/evaluations") },
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/releases") : "/releases") as Route, label: "Releases", icon: Ic.Release, count: RELEASES.length, match: (p) => p.startsWith("/releases") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/skills") : "/skills") as Route, label: "Skills", icon: Ic.Skills, count: counts.skills, match: (p) => p.startsWith("/skills") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/repositories") : "/repositories") as Route, label: "Repositories", icon: Ic.Repo, count: counts.repositories, match: (p) => p.startsWith("/repositories") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/evaluations") : "/evaluations") as Route, label: "Evaluations", icon: Ic.Eval, count: counts.evaluations, match: (p) => p.startsWith("/evaluations") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/releases") : "/releases") as Route, label: "Releases", icon: Ic.Release, count: counts.releases, match: (p) => p.startsWith("/releases") },
   ];
   const govItems: Item[] = [
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/policies") : "/policies") as Route, label: "Policies", icon: Ic.Policy, count: POLICIES.filter((p) => p.state === "active").length, match: (p) => p.startsWith("/policies") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/policies") : "/policies") as Route, label: "Policies", icon: Ic.Policy, count: counts.policies, match: (p) => p.startsWith("/policies") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/audit") : "/audit") as Route, label: "Audit", icon: Ic.Audit, count: null, match: (p) => p.startsWith("/audit") },
-    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/connectors") : "/connectors") as Route, label: "Connectors", icon: Ic.Connectors, count: CONNECTORS.length, match: (p) => p.startsWith("/connectors") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/connectors") : "/connectors") as Route, label: "Connectors", icon: Ic.Connectors, count: counts.connectors, match: (p) => p.startsWith("/connectors") },
   ];
+  const showGovernanceNavigation = isGovernanceFeatureEnabled();
 
   const renderItem = (it: Item) => {
     const Icon = it.icon;
@@ -131,10 +121,12 @@ function Sidebar({ viewer }: { viewer: AuthViewer }) {
           <div className="nav-group-label">Workspace</div>
           {workspaceItems.map(renderItem)}
         </div>
-        <div className="nav-group">
-          <div className="nav-group-label">Governance</div>
-          {govItems.map(renderItem)}
-        </div>
+        {showGovernanceNavigation ? (
+          <div className="nav-group">
+            <div className="nav-group-label">Governance</div>
+            {govItems.map(renderItem)}
+          </div>
+        ) : null}
       </nav>
 
       <div className="nav-pinned">
@@ -168,33 +160,69 @@ function TopBar({
   memberships?: WorkspaceMembershipSummary[];
 }) {
   const pathname = usePathname() || "/";
+  const workspaceSlug = extractWorkspaceSlugFromPathname(pathname);
   const appPath = stripTenantPathPrefix(pathname);
   const { resolvedTheme, set } = useTweaks();
   const themeToggle = buildBinaryThemeToggleState(resolvedTheme);
+  const [resolvedSkillTitle, setResolvedSkillTitle] = useState<{
+    skillId: string;
+    title: string | null;
+  } | null>(null);
   const currentWorkspace = workspace ?? {
-    name: ORG.name,
-    short: ORG.short,
-    env: ORG.env,
-    slug: "default",
+    name: "Workspace",
+    short: "SV",
+    env: "development",
+    slug: "workspace",
   };
   const currentAppPath = appPath === "/" ? "/dashboard" : appPath;
   const workspaceOptions = memberships ?? [];
+  const activeSkillId = appPath.startsWith("/skills/") && appPath !== "/skills"
+    ? appPath.split("/")[2]?.trim() ?? ""
+    : "";
+  const skillTitle = activeSkillId && resolvedSkillTitle?.skillId === activeSkillId
+    ? resolvedSkillTitle.title
+    : null;
 
-  type Crumb = readonly [label: string, target: Route | null | "current"];
-  let crumbs: Crumb[];
+  useEffect(() => {
+    if (!activeSkillId) {
+      return;
+    }
 
-  if (appPath.startsWith("/skills/") && appPath !== "/skills") {
-    const slug = appPath.split("/")[2] ?? "";
-    const skill = SKILLS.find((s) => s.id === slug);
-    crumbs = [
-      ["Workspace", null],
-      ["Skills", "/skills"],
-      [skill?.name || "Skill", "current"],
-    ];
-  } else {
-    const info = TITLE_BY_PATH[appPath] ?? { group: "Workspace", title: "Overview" };
-    crumbs = [[info.group, null], [info.title, "current"]];
-  }
+    const controller = new AbortController();
+    let active = true;
+
+    async function loadSkillTitle() {
+      try {
+        const response = await fetchSkillDetail(activeSkillId, {
+          ...(workspaceSlug ? { workspaceSlug } : {}),
+          signal: controller.signal,
+        });
+
+        if (active) {
+          setResolvedSkillTitle({
+            skillId: activeSkillId,
+            title: response.data.skill.name,
+          });
+        }
+      } catch {
+        if (active && !controller.signal.aborted) {
+          setResolvedSkillTitle({
+            skillId: activeSkillId,
+            title: null,
+          });
+        }
+      }
+    }
+
+    void loadSkillTitle();
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [activeSkillId, workspaceSlug]);
+
+  const crumbs = buildSavantShellBreadcrumbs(appPath, { skillTitle });
 
   return (
     <header className="topbar">

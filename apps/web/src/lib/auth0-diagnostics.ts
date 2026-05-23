@@ -1,7 +1,9 @@
 import {
   hasAuth0EnvConfig,
   isConfiguredAuth0Value,
+  isQuotedConfiguredEnvValue,
   isLocalDevHostname,
+  readConfiguredEnvValue,
   resolveAuth0AppBaseUrl,
   resolveAuth0ClientId,
   resolveAuth0Domain,
@@ -33,7 +35,9 @@ export type Auth0Diagnostics = {
   clientId: string | null;
   clientIdStatus: DiagnosticEnvStatus;
   clientSecretStatus: DiagnosticEnvStatus;
+  clientSecretWrappedInQuotes: boolean | null;
   sessionSecretStatus: DiagnosticEnvStatus;
+  sessionSecretWrappedInQuotes: boolean | null;
   sessionSecretMatchesRecommendedHex64: boolean | null;
   appBaseUrl: string | null;
   appBaseUrlStatus: DiagnosticEnvStatus;
@@ -64,8 +68,15 @@ function classifyEnvValue(value: string | undefined): DiagnosticEnvStatus {
 }
 
 function readConfiguredValue(env: AuthDiagnosticsEnv, key: string): string | null {
-  const value = env[key];
-  return typeof value === "string" && isConfiguredAuth0Value(value) ? value.trim() : null;
+  return readConfiguredEnvValue(env[key]);
+}
+
+function readQuotedEnvValueStatus(value: string | undefined): boolean | null {
+  if (typeof value !== "string" || !value.trim()) {
+    return null;
+  }
+
+  return isQuotedConfiguredEnvValue(value);
 }
 
 function normalizeOrigin(value: string): string | null {
@@ -281,7 +292,9 @@ export function buildAuth0Diagnostics(env: AuthDiagnosticsEnv = process.env): Om
   const clientId = resolveAuth0ClientId(env);
   const clientIdStatus = clientIdEnvStatus(env);
   const clientSecretStatus = classifyEnvValue(env.AUTH0_CLIENT_SECRET);
+  const clientSecretWrappedInQuotes = readQuotedEnvValueStatus(env.AUTH0_CLIENT_SECRET);
   const sessionSecretStatus = classifyEnvValue(env.AUTH0_SECRET);
+  const sessionSecretWrappedInQuotes = readQuotedEnvValueStatus(env.AUTH0_SECRET);
   const appBaseUrlStatus = appBaseUrlEnvStatus(env, appBaseUrl);
   const databaseStatus = classifyEnvValue(env.DATABASE_URL);
   const stripeSecretStatus = classifyEnvValue(env.STRIPE_SECRET_KEY);
@@ -313,7 +326,9 @@ export function buildAuth0Diagnostics(env: AuthDiagnosticsEnv = process.env): Om
     clientId,
     clientIdStatus,
     clientSecretStatus,
+    clientSecretWrappedInQuotes,
     sessionSecretStatus,
+    sessionSecretWrappedInQuotes,
     sessionSecretMatchesRecommendedHex64: rawSessionSecret ? /^[0-9a-f]{64}$/i.test(rawSessionSecret) : null,
     appBaseUrl,
     appBaseUrlStatus,

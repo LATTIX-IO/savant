@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const PADDED_HEX_TEST_VALUE =
-  "  0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  ";
+  '  "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"  ';
 
 const MANAGED_ENV_KEYS = [
   "APP_BASE_URL",
@@ -43,13 +43,13 @@ async function importAuth0Module() {
   return import(`./auth0.ts?case=${Date.now()}-${Math.random().toString(16).slice(2)}`);
 }
 
-test("auth0 module trims configured secrets before creating the SDK client", async () => {
+test("auth0 module trims and dequotes configured secrets before creating the SDK client", async () => {
   const envSnapshot = snapshotEnv();
   const env = getMutableEnv();
 
   env.APP_BASE_URL = "https://savantrepo.com";
   env.AUTH0_CLIENT_ID = "client-id";
-  env.AUTH0_CLIENT_SECRET = "  client-secret\n";
+  env.AUTH0_CLIENT_SECRET = '  "client-secret"\n';
   env.AUTH0_DOMAIN = "dev-tenant.us.auth0.com";
   env.AUTH0_SECRET = PADDED_HEX_TEST_VALUE;
 

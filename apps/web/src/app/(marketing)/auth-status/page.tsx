@@ -349,7 +349,14 @@ export default async function AuthStatusPage({
             <DiagnosticRow
               label="Client secret"
               sub="Must be present server-side for the OAuth code exchange."
-              value={<EnvStatusChip status={diagnostics.clientSecretStatus} />}
+              value={
+                <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <EnvStatusChip status={diagnostics.clientSecretStatus} />
+                  {diagnostics.clientSecretWrappedInQuotes ? (
+                    <span className="chip chip-brass">wrapped in quotes</span>
+                  ) : null}
+                </div>
+              }
             />
             <DiagnosticRow
               label="Session secret"
@@ -357,6 +364,9 @@ export default async function AuthStatusPage({
               value={
                 <div className="row" style={{ gap: 10, flexWrap: "wrap", alignItems: "center" }}>
                   <EnvStatusChip status={diagnostics.sessionSecretStatus} />
+                  {diagnostics.sessionSecretWrappedInQuotes ? (
+                    <span className="chip chip-brass">wrapped in quotes</span>
+                  ) : null}
                   {diagnostics.sessionSecretMatchesRecommendedHex64 === null ? null : diagnostics.sessionSecretMatchesRecommendedHex64 ? (
                     <span className="chip chip-paper">64-char hex · yes</span>
                   ) : (

@@ -88,7 +88,19 @@ Then set `DATABASE_URL` for `apps/web`.
 5. Add `STRIPE_WEBHOOK_SECRET` once you register a webhook endpoint for `/api/billing/webhook`.
 6. Set `STRIPE_PRICE_ID_MONTHLY` and `STRIPE_PRICE_ID_YEARLY` to the recurring prices for the single `Savant Seat` product (`$1 / seat / month`, `$10 / seat / year`). If they are omitted, Savant falls back to the same inline recurring pricing.
 
+### Applying the control-plane schema
+
+Once `DATABASE_URL` is available in the environment, apply every SQL schema file under `db/schema/` in order with:
+
+```bash
+pnpm db:migrate
+```
+
+For the current Vercel production deployment, `DATABASE_URL` can be injected by a Marketplace Postgres integration such as Neon. The app expects the base control-plane schema plus onboarding, multitenancy, and AI connection tables, so `pnpm db:migrate` applies `0001_control_plane.sql` through `0004_ai_connections.sql` sequentially.
+
 The hardened onboarding flow now persists drafts, requires Auth0 identity correlation at checkout, provisions the tenant from Stripe webhooks, and syncs the internal tenant id back into Stripe customer/subscription metadata.
+
+If production auth is green but onboarding still shows blocked on `/auth-status`, the remaining missing pieces are usually `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, not the database itself.
 
 For the first production multi-tenant rollout, protected product routes resolve under `https://savantrepo.com/o/{workspaceSlug}`. Root product URLs such as `/dashboard` and `/settings` now act as authenticated entry points that redirect into the user\'s preferred workspace when a tenant membership is available.
 

@@ -9,6 +9,7 @@
   "scripts": {
     "build": "turbo run build",
     "check": "pnpm lint && pnpm typecheck && pnpm build",
+    "db:migrate": "pnpm --filter @savant/web run db:migrate",
     "dev": "pnpm --filter @savant/web dev",
     "dev:web": "pnpm --filter @savant/web dev",
     "lint": "turbo run lint",

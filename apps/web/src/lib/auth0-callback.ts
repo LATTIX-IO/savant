@@ -116,7 +116,7 @@ export function getAuthCallbackFailureHint(failure: AuthCallbackFailure | null):
     failure.sdkErrorCode === "authorization_code_grant_error"
     && failure.oauthErrorCode === "invalid_request"
   ) {
-    return "Auth0 rejected Savant's token request as malformed. Re-save AUTH0_CLIENT_SECRET in the deployment without extra whitespace, then verify the Auth0 application is a Regular Web Application using client_secret_post before redeploying.";
+    return "Auth0 rejected Savant's token request as malformed. Re-save AUTH0_CLIENT_SECRET in the deployment as the raw secret value with no quotes or extra whitespace, then verify the Auth0 application is a Regular Web Application using client_secret_post before redeploying.";
   }
 
   if (failure.sdkErrorCode === "invalid_state" || failure.sdkErrorCode === "missing_state") {

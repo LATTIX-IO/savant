@@ -59,6 +59,22 @@ test("buildAuth0Diagnostics accepts public Auth0 aliases used in some deployment
   assert.equal(result.onboardingFlowStatus, "ready");
 });
 
+test("buildAuth0Diagnostics treats quoted placeholders as placeholders and exposes quote-format flags", () => {
+  const result = buildAuth0Diagnostics({
+    AUTH0_DOMAIN: "tenant.example.com",
+    AUTH0_CLIENT_ID: "client-id",
+    AUTH0_CLIENT_SECRET: '"<AUTH0_CLIENT_SECRET>"',
+    AUTH0_SECRET: '"<AUTH0_SECRET>"',
+    APP_BASE_URL: "https://savantrepo.com",
+  });
+
+  assert.equal(result.clientSecretStatus, "placeholder");
+  assert.equal(result.clientSecretWrappedInQuotes, true);
+  assert.equal(result.sessionSecretStatus, "placeholder");
+  assert.equal(result.sessionSecretWrappedInQuotes, true);
+  assert.equal(result.authFlowStatus, "blocked");
+});
+
 test("loadAuth0Discovery reports reachable tenant metadata when discovery succeeds", async () => {
   const fetchMock = (async () => new Response(JSON.stringify({
     issuer: "https://tenant.example.com/",

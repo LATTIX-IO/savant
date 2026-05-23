@@ -43,14 +43,46 @@ export type AuthStatusSource = "signin" | "signup" | "onboarding" | "unavailable
 
 const LOCAL_DEV_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
 
+function normalizeConfiguredAuth0Value(value: string): {
+  normalized: string;
+  hadWrappingQuotes: boolean;
+} {
+  const trimmed = value.trim();
+
+  if (trimmed.length >= 2) {
+    const firstChar = trimmed[0];
+    const lastChar = trimmed.at(-1);
+
+    if ((firstChar === '"' || firstChar === "'") && lastChar === firstChar) {
+      return {
+        normalized: trimmed.slice(1, -1).trim(),
+        hadWrappingQuotes: true,
+      };
+    }
+  }
+
+  return {
+    normalized: trimmed,
+    hadWrappingQuotes: false,
+  };
+}
+
+export function isQuotedConfiguredEnvValue(value: string | undefined): boolean {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  return normalizeConfiguredAuth0Value(value).hadWrappingQuotes;
+}
+
 export function readConfiguredEnvValue(value: string | undefined): string | null {
   if (typeof value !== "string") {
     return null;
   }
 
-  const trimmed = value.trim();
+  const { normalized } = normalizeConfiguredAuth0Value(value);
 
-  return isConfiguredAuth0Value(trimmed) ? trimmed : null;
+  return isConfiguredAuth0Value(normalized) ? normalized : null;
 }
 
 export function resolveAuth0ClientId(env: Auth0Env): string | null {
@@ -83,7 +115,8 @@ export function isConfiguredAuth0Value(value: string | undefined): boolean {
     return false;
   }
 
-  const trimmed = value.trim();
+  const { normalized: trimmed } = normalizeConfiguredAuth0Value(value);
+
   if (!trimmed) {
     return false;
   }

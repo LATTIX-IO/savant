@@ -9,6 +9,7 @@ import {
   hasAuth0EnvConfig,
   isAuthRoute,
   isConfiguredAuth0Value,
+  isQuotedConfiguredEnvValue,
   isLegacyAuthApiRoute,
   isLocalDevAuthBypass,
   isLocalDevHostname,
@@ -25,14 +26,20 @@ test("isConfiguredAuth0Value rejects empty and placeholder values", () => {
   assert.equal(isConfiguredAuth0Value(""), false);
   assert.equal(isConfiguredAuth0Value("   "), false);
   assert.equal(isConfiguredAuth0Value("<AUTH0_DOMAIN>"), false);
+  assert.equal(isConfiguredAuth0Value('"<AUTH0_DOMAIN>"'), false);
   assert.equal(isConfiguredAuth0Value("placeholder-local-secret"), false);
+  assert.equal(isConfiguredAuth0Value('"REPLACE_ME"'), false);
   assert.equal(isConfiguredAuth0Value("REPLACE_ME"), false);
   assert.equal(isConfiguredAuth0Value("dev-tenant.us.auth0.com"), true);
 });
 
-test("readConfiguredEnvValue trims surrounding whitespace from configured values", () => {
+test("readConfiguredEnvValue trims surrounding whitespace and surrounding quotes", () => {
   assert.equal(readConfiguredEnvValue("  client-secret\n"), "client-secret");
+  assert.equal(readConfiguredEnvValue('  "client-secret"\n'), "client-secret");
   assert.equal(readConfiguredEnvValue("   <AUTH0_CLIENT_SECRET>   "), null);
+  assert.equal(readConfiguredEnvValue('"<AUTH0_CLIENT_SECRET>"'), null);
+  assert.equal(isQuotedConfiguredEnvValue('  "client-secret"  '), true);
+  assert.equal(isQuotedConfiguredEnvValue("client-secret"), false);
 });
 
 test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {

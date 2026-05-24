@@ -10,7 +10,7 @@ import {
   shouldRedirectOnboardingToAuthStatus,
   shouldRedirectOnboardingToSignup,
 } from "@/lib/onboarding-runtime";
-import { normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
+import { buildOnboardingSuccessPath, normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { OnboardingWizard } from "@/components/marketing/onboarding-wizard";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
@@ -78,10 +78,12 @@ export default async function OnboardingPage({
       !wasCancelled
       && onboardingState.currentSession
       && shouldResumeOnboardingCheckout(onboardingState.currentSession.status)
-      && onboardingState.currentSession.stripeCheckoutSessionId
     ) {
       redirect(
-        `/onboarding/success?session_id=${encodeURIComponent(onboardingState.currentSession.stripeCheckoutSessionId)}` as Route,
+        buildOnboardingSuccessPath({
+          sessionId: onboardingState.currentSession.stripeCheckoutSessionId,
+          onboardingSessionId: onboardingState.currentSession.id,
+        }) as Route,
       );
     }
 

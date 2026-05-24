@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildOnboardingStatusPath,
   buildOnboardingStatusView,
+  buildOnboardingSuccessPath,
   buildStripeTenantMetadata,
   extractProvisionTenantInput,
   normalizeWorkspaceSlug,
@@ -77,6 +79,26 @@ test("buildOnboardingStatusView marks a ready session as terminal and dashboard-
   assert.equal(result.isTerminal, true);
   assert.equal(result.canEnterDashboard, true);
   assert.match(result.heading, /workspace ready/i);
+});
+
+test("buildOnboardingSuccessPath preserves Stripe placeholders and fallback lookup ids", () => {
+  assert.equal(
+    buildOnboardingSuccessPath({
+      sessionId: "{CHECKOUT_SESSION_ID}",
+      onboardingSessionId: "onb_123",
+      sandbox: true,
+      workspaceName: "Savant Ops",
+      workspaceSlug: "savant-ops",
+    }),
+    "/onboarding/success?session_id={CHECKOUT_SESSION_ID}&onboarding_session_id=onb_123&sandbox=1&workspace_name=Savant%20Ops&workspace_slug=savant-ops",
+  );
+});
+
+test("buildOnboardingStatusPath can recover with only an onboarding session id", () => {
+  assert.equal(
+    buildOnboardingStatusPath({ onboardingSessionId: "onb_123" }),
+    "/api/onboarding/status?onboarding_session_id=onb_123",
+  );
 });
 
 test("buildStripeTenantMetadata creates a stable Auth0-Stripe correlation payload", () => {

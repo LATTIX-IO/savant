@@ -8,7 +8,10 @@ import {
   createControlPlaneMeta,
 } from "@/server/control-plane/control-plane-response";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
-import { getOnboardingSessionForSubjectByCheckoutSessionId } from "@/server/control-plane/onboarding-store";
+import {
+  getOnboardingSessionForSubjectByCheckoutSessionId,
+  getOnboardingSessionForSubjectById,
+} from "@/server/control-plane/onboarding-store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,16 +39,28 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const stripeCheckoutSessionId = url.searchParams.get("session_id")?.trim();
-  if (!stripeCheckoutSessionId) {
+  const onboardingSessionId = url.searchParams.get("onboarding_session_id")?.trim();
+  if (!stripeCheckoutSessionId && !onboardingSessionId) {
     return NextResponse.json(
-      createApiErrorResponse("session_id_required", "Query parameter 'session_id' is required."),
+      createApiErrorResponse(
+        "onboarding_lookup_required",
+        "Query parameter 'session_id' or 'onboarding_session_id' is required.",
+      ),
       { status: 400 },
     );
   }
 
-  const onboardingSession = await getOnboardingSessionForSubjectByCheckoutSessionId(
-    identity.subject,
-    stripeCheckoutSessionId,
+  const onboardingSession = (
+    stripeCheckoutSessionId
+      ? await getOnboardingSessionForSubjectByCheckoutSessionId(
+          identity.subject,
+          stripeCheckoutSessionId,
+        )
+      : null
+  ) ?? (
+    onboardingSessionId
+      ? await getOnboardingSessionForSubjectById(identity.subject, onboardingSessionId)
+      : null
   );
 
   if (!onboardingSession) {

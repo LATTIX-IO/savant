@@ -4,19 +4,23 @@ import { redirect } from "next/navigation";
 import { OnboardingSuccessState } from "@/components/marketing/onboarding-success-state";
 import { Ic } from "@/components/savant/icons";
 import { auth0 } from "@/lib/auth0";
-import { buildOnboardingStatusView } from "@/lib/onboarding";
+import { buildOnboardingStatusView, buildOnboardingSuccessPath } from "@/lib/onboarding";
 import { resolveOnboardingRuntimeAccess } from "@/lib/onboarding-runtime";
 import { isStripeConfigured, stripe } from "@/lib/stripe";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
-import { getOnboardingSessionForSubjectByCheckoutSessionId } from "@/server/control-plane/onboarding-store";
+import {
+  getOnboardingSessionForSubjectByCheckoutSessionId,
+  getOnboardingSessionForSubjectById,
+} from "@/server/control-plane/onboarding-store";
 
 export const metadata = { title: "Welcome to Savant" };
 export const dynamic = "force-dynamic";
 
 type SuccessSearchParams = {
   session_id?: string;
+  onboarding_session_id?: string;
   sandbox?: string;
   workspace_name?: string;
   workspace_slug?: string;
@@ -27,9 +31,11 @@ export default async function OnboardingSuccessPage({
 }: {
   searchParams: Promise<SuccessSearchParams>;
 }) {
-  const { session_id, sandbox, workspace_name, workspace_slug } = await searchParams;
+  const { session_id, onboarding_session_id, sandbox, workspace_name, workspace_slug } = await searchParams;
+  const sessionId = session_id?.trim() ?? null;
+  const onboardingSessionId = onboarding_session_id?.trim() ?? null;
 
-  if (!session_id) {
+  if (!sessionId && !onboardingSessionId) {
     redirect("/onboarding" as Route);
   }
 
@@ -40,14 +46,25 @@ export default async function OnboardingSuccessPage({
 
     if (!identity) {
       const params = new URLSearchParams({
-        returnTo: `/onboarding/success?session_id=${encodeURIComponent(session_id)}`,
+        returnTo: buildOnboardingSuccessPath({
+          sessionId,
+          onboardingSessionId,
+          sandbox: sandbox === "1",
+          workspaceName: workspace_name ?? null,
+          workspaceSlug: workspace_slug ?? null,
+        }),
       });
       redirect(`/signin?${params.toString()}` as Route);
     }
 
-    const onboardingSession = await getOnboardingSessionForSubjectByCheckoutSessionId(
-      identity.subject,
-      session_id,
+    const onboardingSession = (
+      sessionId
+        ? await getOnboardingSessionForSubjectByCheckoutSessionId(identity.subject, sessionId)
+        : null
+    ) ?? (
+      onboardingSessionId
+        ? await getOnboardingSessionForSubjectById(identity.subject, onboardingSessionId)
+        : null
     );
 
     if (!onboardingSession) {
@@ -58,9 +75,14 @@ export default async function OnboardingSuccessPage({
       <OnboardingSuccessState
         initialStatus={buildOnboardingStatusView(onboardingSession)}
         isSandbox={runtimeAccess.isSandbox}
-        sessionId={session_id}
+        sessionId={sessionId}
+        onboardingSessionId={onboardingSession.id}
       />
     );
+  }
+
+  if (!sessionId) {
+    redirect("/onboarding" as Route);
   }
 
   const runtimeAccess = resolveOnboardingRuntimeAccess(null);
@@ -73,7 +95,7 @@ export default async function OnboardingSuccessPage({
   let workspaceSlug: string | null = sandboxMode ? workspace_slug?.trim() ?? null : null;
   if (!sandboxMode && isStripeConfigured && stripe) {
     try {
-      const session = await stripe.checkout.sessions.retrieve(session_id);
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
       workspaceName = (session.metadata?.workspaceName as string | undefined) ?? null;
       workspaceSlug = (session.metadata?.workspaceSlug as string | undefined) ?? null;
     } catch (error) {

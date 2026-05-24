@@ -221,7 +221,7 @@ export function OnboardingWizard({
           <div className="note" style={{ marginTop: "auto" }}>
             <Ic.Clock className="n-icon" style={{ color: "var(--moss)" }} />
             <span style={{ fontSize: 11.5 }}>
-              Local sandbox mode is on. Auth0 and Stripe are simulated so you can click through onboarding without external calls.
+              Local sandbox mode is on. Login and checkout are simulated so you can click through onboarding without external calls.
             </span>
           </div>
         ) : (

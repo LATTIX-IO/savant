@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import type { OnboardingStatusView } from "@/lib/onboarding";
+import { buildOnboardingStatusPath, type OnboardingStatusView } from "@/lib/onboarding";
 import { Ic } from "@/components/savant/icons";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
@@ -11,24 +11,30 @@ export function OnboardingSuccessState({
   initialStatus,
   isSandbox,
   sessionId,
+  onboardingSessionId,
 }: {
   initialStatus: OnboardingStatusView;
   isSandbox: boolean;
-  sessionId: string;
+  sessionId: string | null;
+  onboardingSessionId?: string | null;
 }) {
   const [status, setStatus] = useState(initialStatus);
   const [loadingNote, setLoadingNote] = useState<string | null>(null);
 
   useEffect(() => {
-    if (status.isTerminal) {
+    if (status.isTerminal || (!sessionId && !onboardingSessionId)) {
       return undefined;
     }
 
     let cancelled = false;
+    const statusPath = buildOnboardingStatusPath({
+      sessionId,
+      ...(onboardingSessionId === undefined ? {} : { onboardingSessionId }),
+    });
 
     const refreshStatus = async () => {
       try {
-        const response = await fetch(`/api/onboarding/status?session_id=${encodeURIComponent(sessionId)}`, {
+        const response = await fetch(statusPath, {
           cache: "no-store",
         });
 
@@ -55,7 +61,7 @@ export function OnboardingSuccessState({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [sessionId, status.isTerminal]);
+  }, [onboardingSessionId, sessionId, status.isTerminal]);
 
   const icon = status.status === "ready"
     ? <Ic.Check style={{ width: 22, height: 22 }} />

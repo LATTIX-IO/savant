@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
-import { validateOnboardingDraftInput } from "@/lib/onboarding";
+import { buildOnboardingSuccessPath, validateOnboardingDraftInput } from "@/lib/onboarding";
 import {
   createSandboxCheckoutSessionId,
   resolveOnboardingRuntimeAccess,
@@ -30,6 +30,29 @@ import { readJsonObject } from "@/server/control-plane/request-validation";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+function summarizeCheckoutError(error: unknown): string {
+  if (error instanceof OnboardingStoreError) {
+    return error.code;
+  }
+
+  return error instanceof Error ? error.name : "unknown_error";
+}
+
+async function safeRecordCheckoutFailure(
+  onboardingSessionId: string,
+  errorCode: string,
+  errorMessage: string,
+): Promise<void> {
+  try {
+    await recordCheckoutFailure(onboardingSessionId, errorCode, errorMessage);
+  } catch (error) {
+    console.error(
+      "[billing/checkout] failed to persist checkout failure:",
+      summarizeCheckoutError(error),
+    );
+  }
+}
 
 export async function POST(request: Request) {
   const body = await readJsonObject(request);
@@ -145,13 +168,19 @@ export async function POST(request: Request) {
       }
 
       return NextResponse.json({
-        url: `${baseUrl}/onboarding/success?session_id=${encodeURIComponent(sandboxSessionId)}&sandbox=1&workspace_name=${encodeURIComponent(validatedDraft.value.workspaceName)}&workspace_slug=${encodeURIComponent(validatedDraft.value.workspaceSlug)}`,
+        url: `${baseUrl}${buildOnboardingSuccessPath({
+          sessionId: sandboxSessionId,
+          onboardingSessionId: onboardingSession?.id ?? null,
+          sandbox: true,
+          workspaceName: validatedDraft.value.workspaceName,
+          workspaceSlug: validatedDraft.value.workspaceSlug,
+        })}`,
       });
     } catch (error) {
-      console.error("[billing/checkout] sandbox flow failed:", error);
+      console.error("[billing/checkout] sandbox flow failed:", summarizeCheckoutError(error));
 
       if (onboardingSession) {
-        await recordCheckoutFailure(
+        await safeRecordCheckoutFailure(
           onboardingSession.id,
           "sandbox_checkout_failed",
           "Unable to complete the local onboarding sandbox right now.",
@@ -179,6 +208,10 @@ export async function POST(request: Request) {
   }
 
   try {
+    const successUrl = `${baseUrl}${buildOnboardingSuccessPath({
+      sessionId: "{CHECKOUT_SESSION_ID}",
+      onboardingSessionId: onboardingSession?.id ?? null,
+    })}`;
     const correlatedMetadata = {
       workspaceName: validatedDraft.value.workspaceName,
       workspaceSlug: validatedDraft.value.workspaceSlug,
@@ -200,7 +233,7 @@ export async function POST(request: Request) {
       allow_promotion_codes: true,
       customer_email: identity.email,
       client_reference_id: identity.subject,
-      success_url: `${baseUrl}/onboarding/success?session_id={CHECKOUT_SESSION_ID}`,
+      success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {
         ...correlatedMetadata,
@@ -216,7 +249,7 @@ export async function POST(request: Request) {
 
     if (!checkout.url || !checkout.id) {
       if (onboardingSession) {
-        await recordCheckoutFailure(
+        await safeRecordCheckoutFailure(
           onboardingSession.id,
           "stripe_checkout_failed",
           "Unable to start checkout right now.",
@@ -233,15 +266,22 @@ export async function POST(request: Request) {
     }
 
     if (onboardingSession) {
-      await attachStripeCheckoutSession(onboardingSession.id, checkout.id);
+      try {
+        await attachStripeCheckoutSession(onboardingSession.id, checkout.id);
+      } catch (error) {
+        console.error(
+          "[billing/checkout] attach checkout session failed:",
+          summarizeCheckoutError(error),
+        );
+      }
     }
 
     return NextResponse.json({ url: checkout.url });
   } catch (error) {
-    console.error("[billing/checkout] failed:", error);
+    console.error("[billing/checkout] failed:", summarizeCheckoutError(error));
 
     if (onboardingSession) {
-      await recordCheckoutFailure(
+      await safeRecordCheckoutFailure(
         onboardingSession.id,
         "stripe_checkout_failed",
         "Unable to start checkout right now.",

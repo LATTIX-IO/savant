@@ -54,6 +54,11 @@ export type OnboardingStatusView = OnboardingSessionSummary & {
   isTerminal: boolean;
 };
 
+export type OnboardingLookupInput = {
+  sessionId?: string | null;
+  onboardingSessionId?: string | null;
+};
+
 export type ProvisionTenantInput = {
   onboardingSessionId: string | null;
   checkoutSessionId: string;
@@ -233,6 +238,71 @@ export function buildOnboardingStatusView(
         isTerminal: false,
       };
   }
+}
+
+function buildOnboardingQueryEntries(
+  input: OnboardingLookupInput,
+): Array<readonly [string, string]> {
+  const entries: Array<readonly [string, string]> = [];
+  const sessionId = readNormalizedString(input.sessionId);
+  if (sessionId) {
+    entries.push(["session_id", sessionId]);
+  }
+
+  const onboardingSessionId = readNormalizedString(input.onboardingSessionId);
+  if (onboardingSessionId) {
+    entries.push(["onboarding_session_id", onboardingSessionId]);
+  }
+
+  return entries;
+}
+
+function buildOnboardingQueryString(
+  entries: Array<readonly [string, string]>,
+): string {
+  return entries
+    .map(([key, value]) => {
+      if (key === "session_id" && value === "{CHECKOUT_SESSION_ID}") {
+        return `${key}=${value}`;
+      }
+
+      return `${key}=${encodeURIComponent(value)}`;
+    })
+    .join("&");
+}
+
+export function buildOnboardingSuccessPath(
+  input: OnboardingLookupInput & {
+    sandbox?: boolean;
+    workspaceName?: string | null;
+    workspaceSlug?: string | null;
+  },
+): string {
+  const entries = buildOnboardingQueryEntries(input);
+
+  if (input.sandbox) {
+    entries.push(["sandbox", "1"]);
+  }
+
+  const workspaceName = readNormalizedString(input.workspaceName);
+  if (workspaceName) {
+    entries.push(["workspace_name", workspaceName]);
+  }
+
+  const workspaceSlug = readNormalizedString(input.workspaceSlug);
+  if (workspaceSlug) {
+    entries.push(["workspace_slug", workspaceSlug]);
+  }
+
+  const query = buildOnboardingQueryString(entries);
+  return query ? `/onboarding/success?${query}` : "/onboarding/success";
+}
+
+export function buildOnboardingStatusPath(
+  input: OnboardingLookupInput,
+): string {
+  const query = buildOnboardingQueryString(buildOnboardingQueryEntries(input));
+  return query ? `/api/onboarding/status?${query}` : "/api/onboarding/status";
 }
 
 export function buildStripeTenantMetadata(input: {

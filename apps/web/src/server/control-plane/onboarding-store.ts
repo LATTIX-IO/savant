@@ -527,6 +527,41 @@ export async function getOnboardingSessionForSubjectByCheckoutSessionId(
   return rows[0] ? mapOnboardingRow(rows[0]) : null;
 }
 
+export async function getOnboardingSessionForSubjectById(
+  auth0Subject: string,
+  onboardingSessionId: string,
+): Promise<OnboardingSessionRecord | null> {
+  const sql = ensureOnboardingPersistenceConfigured();
+  const rows = await sql<OnboardingRow[]>`
+    select
+      id,
+      auth0_subject,
+      auth0_email,
+      auth0_display_name,
+      workspace_name,
+      workspace_slug,
+      billing_cycle,
+      seat_count,
+      status,
+      stripe_mode,
+      checkout_idempotency_key,
+      stripe_checkout_session_id,
+      stripe_customer_id,
+      stripe_subscription_id,
+      organization_id,
+      error_code,
+      error_message,
+      created_at,
+      updated_at
+    from onboarding_sessions
+    where auth0_subject = ${auth0Subject}
+      and id = ${onboardingSessionId}
+    limit 1
+  `;
+
+  return rows[0] ? mapOnboardingRow(rows[0]) : null;
+}
+
 export async function claimWebhookEvent(
   stripeEventId: string,
   eventType: string,

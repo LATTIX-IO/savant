@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
-import { buildOnboardingSuccessPath, validateOnboardingDraftInput } from "@/lib/onboarding";
+import {
+  buildCheckoutClientReferenceId,
+  buildOnboardingSuccessPath,
+  validateOnboardingDraftInput,
+} from "@/lib/onboarding";
 import {
   createSandboxCheckoutSessionId,
   resolveOnboardingRuntimeAccess,
@@ -212,6 +216,10 @@ export async function POST(request: Request) {
       sessionId: "{CHECKOUT_SESSION_ID}",
       onboardingSessionId: onboardingSession?.id ?? null,
     })}`;
+    const clientReferenceId = buildCheckoutClientReferenceId({
+      authSubject: identity.subject,
+      onboardingSessionId: onboardingSession?.id ?? null,
+    });
     const correlatedMetadata = {
       workspaceName: validatedDraft.value.workspaceName,
       workspaceSlug: validatedDraft.value.workspaceSlug,
@@ -232,7 +240,7 @@ export async function POST(request: Request) {
       // Allow promo codes; never hurts conversion.
       allow_promotion_codes: true,
       customer_email: identity.email,
-      client_reference_id: identity.subject,
+      ...(clientReferenceId ? { client_reference_id: clientReferenceId } : {}),
       success_url: successUrl,
       cancel_url: cancelUrl,
       metadata: {

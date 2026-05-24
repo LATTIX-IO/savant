@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCheckoutClientReferenceId,
   buildOnboardingStatusPath,
   buildOnboardingStatusView,
   buildOnboardingSuccessPath,
@@ -98,6 +99,30 @@ test("buildOnboardingStatusPath can recover with only an onboarding session id",
   assert.equal(
     buildOnboardingStatusPath({ onboardingSessionId: "onb_123" }),
     "/api/onboarding/status?onboarding_session_id=onb_123",
+  );
+});
+
+test("buildCheckoutClientReferenceId keeps short auth subjects intact", () => {
+  assert.equal(
+    buildCheckoutClientReferenceId({ authSubject: "auth0|abc123", onboardingSessionId: "onb_123" }),
+    "auth0|abc123",
+  );
+});
+
+test("buildCheckoutClientReferenceId falls back to onboarding session id for long subjects", () => {
+  assert.equal(
+    buildCheckoutClientReferenceId({
+      authSubject: `auth0|${"x".repeat(260)}`,
+      onboardingSessionId: "onb_123",
+    }),
+    "onb_123",
+  );
+});
+
+test("buildCheckoutClientReferenceId omits the field when no safe fallback exists", () => {
+  assert.equal(
+    buildCheckoutClientReferenceId({ authSubject: `auth0|${"x".repeat(260)}` }),
+    undefined,
   );
 });
 

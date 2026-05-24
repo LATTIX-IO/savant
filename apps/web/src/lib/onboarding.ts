@@ -77,6 +77,7 @@ export type ProvisionTenantInput = {
 const WORKSPACE_NAME_MAX_LENGTH = 80;
 const WORKSPACE_SLUG_MAX_LENGTH = 48;
 const WORKSPACE_SLUG_MIN_LENGTH = 3;
+const CHECKOUT_CLIENT_REFERENCE_ID_MAX_LENGTH = 200;
 const DEFAULT_SEATS = 5;
 const MAX_SEATS = 500;
 const WORKSPACE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -303,6 +304,23 @@ export function buildOnboardingStatusPath(
 ): string {
   const query = buildOnboardingQueryString(buildOnboardingQueryEntries(input));
   return query ? `/api/onboarding/status?${query}` : "/api/onboarding/status";
+}
+
+export function buildCheckoutClientReferenceId(input: {
+  authSubject: string;
+  onboardingSessionId?: string | null;
+}): string | undefined {
+  const authSubject = readNormalizedString(input.authSubject);
+  if (!authSubject) {
+    return undefined;
+  }
+
+  if (authSubject.length <= CHECKOUT_CLIENT_REFERENCE_ID_MAX_LENGTH) {
+    return authSubject;
+  }
+
+  const onboardingSessionId = readNormalizedString(input.onboardingSessionId);
+  return onboardingSessionId ?? undefined;
 }
 
 export function buildStripeTenantMetadata(input: {

@@ -10,6 +10,7 @@ import {
   extractOnboardingSessionIdFromCheckoutSession,
   extractProvisionTenantInput,
   normalizeWorkspaceSlug,
+  shouldAutoRedirectToOnboardingDashboard,
   shouldResumeOnboardingCheckout,
   validateOnboardingDraftInput,
 } from "./onboarding.ts";
@@ -81,6 +82,32 @@ test("buildOnboardingStatusView marks a ready session as terminal and dashboard-
   assert.equal(result.isTerminal, true);
   assert.equal(result.canEnterDashboard, true);
   assert.match(result.heading, /workspace ready/i);
+});
+
+test("shouldAutoRedirectToOnboardingDashboard only redirects ready dashboard-safe states", () => {
+  assert.equal(
+    shouldAutoRedirectToOnboardingDashboard({
+      status: "ready",
+      canEnterDashboard: true,
+    }),
+    true,
+  );
+
+  assert.equal(
+    shouldAutoRedirectToOnboardingDashboard({
+      status: "ready",
+      canEnterDashboard: false,
+    }),
+    false,
+  );
+
+  assert.equal(
+    shouldAutoRedirectToOnboardingDashboard({
+      status: "provisioning",
+      canEnterDashboard: false,
+    }),
+    false,
+  );
 });
 
 test("buildOnboardingSuccessPath preserves Stripe placeholders and fallback lookup ids", () => {

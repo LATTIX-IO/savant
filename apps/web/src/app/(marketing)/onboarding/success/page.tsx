@@ -8,6 +8,7 @@ import {
   buildOnboardingStatusView,
   buildOnboardingSuccessPath,
   extractOnboardingSessionIdFromCheckoutSession,
+  shouldAutoRedirectToOnboardingDashboard,
 } from "@/lib/onboarding";
 import { resolveOnboardingRuntimeAccess } from "@/lib/onboarding-runtime";
 import { isStripeConfigured, stripe } from "@/lib/stripe";
@@ -87,9 +88,14 @@ export default async function OnboardingSuccessPage({
       redirect("/onboarding" as Route);
     }
 
+    const initialStatus = buildOnboardingStatusView(onboardingSession);
+    if (!runtimeAccess.isSandbox && shouldAutoRedirectToOnboardingDashboard(initialStatus)) {
+      redirect(buildTenantAppPath(onboardingSession.workspaceSlug, "/dashboard") as Route);
+    }
+
     return (
       <OnboardingSuccessState
-        initialStatus={buildOnboardingStatusView(onboardingSession)}
+        initialStatus={initialStatus}
         isSandbox={runtimeAccess.isSandbox}
         sessionId={sessionId}
         onboardingSessionId={onboardingSession.id}

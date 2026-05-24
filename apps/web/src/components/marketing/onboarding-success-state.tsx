@@ -2,7 +2,11 @@
 
 import { useEffect, useState } from "react";
 
-import { buildOnboardingStatusPath, type OnboardingStatusView } from "@/lib/onboarding";
+import {
+  buildOnboardingStatusPath,
+  shouldAutoRedirectToOnboardingDashboard,
+  type OnboardingStatusView,
+} from "@/lib/onboarding";
 import { Ic } from "@/components/savant/icons";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
@@ -63,6 +67,24 @@ export function OnboardingSuccessState({
     };
   }, [onboardingSessionId, sessionId, status.isTerminal]);
 
+  const workspaceUrl = formatWorkspaceUrlForDisplay(status.workspaceSlug);
+  const dashboardHref = buildTenantAppPath(status.workspaceSlug, "/dashboard");
+  const shouldAutoRedirect = !isSandbox && shouldAutoRedirectToOnboardingDashboard(status);
+
+  useEffect(() => {
+    if (!shouldAutoRedirect) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      window.location.replace(dashboardHref);
+    }, 900);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [dashboardHref, shouldAutoRedirect]);
+
   const icon = status.status === "ready"
     ? <Ic.Check style={{ width: 22, height: 22 }} />
     : status.status === "failed" || status.status === "canceled"
@@ -80,8 +102,6 @@ export function OnboardingSuccessState({
     : status.status === "failed" || status.status === "canceled"
       ? "var(--oxblood)"
       : "var(--ink-2)";
-  const workspaceUrl = formatWorkspaceUrlForDisplay(status.workspaceSlug);
-  const dashboardHref = buildTenantAppPath(status.workspaceSlug, "/dashboard");
 
   return (
     <div className="signup-redirect">
@@ -127,9 +147,16 @@ export function OnboardingSuccessState({
           </div>
         ) : null}
 
+        {shouldAutoRedirect ? (
+          <div className="note" style={{ maxWidth: 440 }}>
+            <Ic.Check className="n-icon" />
+            <span>Provisioning is complete. Redirecting you to your workspace dashboard…</span>
+          </div>
+        ) : null}
+
         {status.canEnterDashboard ? (
           <a href={dashboardHref} className="btn btn-primary btn-lg" style={{ marginTop: 6 }}>
-            Open dashboard
+            Open dashboard now
             <Ic.ChevR className="b-icon" />
           </a>
         ) : (

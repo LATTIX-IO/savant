@@ -247,6 +247,12 @@ export function buildOnboardingStatusView(
   }
 }
 
+export function shouldAutoRedirectToOnboardingDashboard(
+  status: Pick<OnboardingStatusView, "status" | "canEnterDashboard">,
+): boolean {
+  return status.status === "ready" && status.canEnterDashboard;
+}
+
 function buildOnboardingQueryEntries(
   input: OnboardingLookupInput,
 ): Array<readonly [string, string]> {

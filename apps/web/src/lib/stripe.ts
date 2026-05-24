@@ -80,34 +80,11 @@ function normalizeStripeUrlCandidate(value: string): string {
 }
 
 export function isConfiguredStripeValue(value: string | undefined): boolean {
-  if (!value) {
-    return false;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return false;
-  }
-
-  if (trimmed.startsWith("<") || trimmed.includes("REPLACE") || trimmed.startsWith("placeholder-")) {
-    return false;
-  }
-
-  return true;
+  return Boolean(readConfiguredEnvValue(value));
 }
 
 export function readConfiguredStripeEnvValue(env: StripeEnv, key: string): string | null {
-  const value = env[key];
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  if (!isConfiguredStripeValue(value)) {
-    return null;
-  }
-
-  return value.trim();
+  return readConfiguredEnvValue(env[key]);
 }
 
 export function stripePublishableKey(env: StripeEnv = process.env): string | null {

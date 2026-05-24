@@ -7,6 +7,7 @@ import {
   isStripePricingTableConfigured,
   isConfiguredStripeValue,
   priceIdFor,
+  readConfiguredStripeEnvValue,
   resolveCheckoutBaseUrl,
   stripePricingTableId,
   stripeMode,
@@ -22,11 +23,24 @@ test("isConfiguredStripeValue rejects empty and placeholder values", () => {
   assert.equal(isConfiguredStripeValue("placeholder-local-secret"), false);
   assert.equal(isConfiguredStripeValue("REPLACE_ME"), false);
   assert.equal(isConfiguredStripeValue("sk_test_example"), true);
+  assert.equal(isConfiguredStripeValue('  "sk_test_example"\n'), true);
+});
+
+test("readConfiguredStripeEnvValue trims surrounding whitespace and quotes", () => {
+  assert.equal(
+    readConfiguredStripeEnvValue({ STRIPE_SECRET_KEY: '  "sk_test_example"\n' }, "STRIPE_SECRET_KEY"),
+    "sk_test_example",
+  );
+  assert.equal(
+    readConfiguredStripeEnvValue({ STRIPE_WEBHOOK_SECRET: "  'whsec_example'\r\n" }, "STRIPE_WEBHOOK_SECRET"),
+    "whsec_example",
+  );
 });
 
 test("stripeMode detects configured test and live environments", () => {
   assert.equal(stripeMode({ STRIPE_SECRET_KEY: "sk_test_example" }), "test");
   assert.equal(stripeMode({ STRIPE_SECRET_KEY: "sk_live_example" }), "live");
+  assert.equal(stripeMode({ STRIPE_SECRET_KEY: '  "sk_test_example"\n' }), "test");
   assert.equal(
     stripeMode({ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_example" }),
     "test",
@@ -44,7 +58,15 @@ test("stripePublishableKey and stripeWebhookSecret ignore placeholders", () => {
     stripePublishableKey({ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_example" }),
     "pk_test_example",
   );
+  assert.equal(
+    stripePublishableKey({ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: '  "pk_test_example"\n' }),
+    "pk_test_example",
+  );
   assert.equal(stripeWebhookSecret({ STRIPE_WEBHOOK_SECRET: "whsec_example" }), "whsec_example");
+  assert.equal(
+    stripeWebhookSecret({ STRIPE_WEBHOOK_SECRET: "  'whsec_example'\r\n" }),
+    "whsec_example",
+  );
 });
 
 test("stripePricingTableId prefers public config and requires a publishable key", () => {

@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   appUrl,
   checkoutLineItemFor,
+  isStripePricingTableConfigured,
   isConfiguredStripeValue,
   priceIdFor,
   resolveCheckoutBaseUrl,
+  stripePricingTableId,
   stripeMode,
   stripePublishableKey,
   stripeWebhookSecret,
@@ -43,6 +45,32 @@ test("stripePublishableKey and stripeWebhookSecret ignore placeholders", () => {
     "pk_test_example",
   );
   assert.equal(stripeWebhookSecret({ STRIPE_WEBHOOK_SECRET: "whsec_example" }), "whsec_example");
+});
+
+test("stripePricingTableId prefers public config and requires a publishable key", () => {
+  assert.equal(
+    stripePricingTableId({ NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID: "prctbl_123" }),
+    "prctbl_123",
+  );
+  assert.equal(
+    stripePricingTableId({ STRIPE_PRICING_TABLE_ID: "prctbl_server_only" }),
+    "prctbl_server_only",
+  );
+  assert.equal(
+    stripePricingTableId({ NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID: "<NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID>" }),
+    null,
+  );
+  assert.equal(
+    isStripePricingTableConfigured({
+      NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_example",
+      NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID: "prctbl_123",
+    }),
+    true,
+  );
+  assert.equal(
+    isStripePricingTableConfigured({ NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID: "prctbl_123" }),
+    false,
+  );
 });
 
 test("priceIdFor returns configured recurring catalog ids", () => {

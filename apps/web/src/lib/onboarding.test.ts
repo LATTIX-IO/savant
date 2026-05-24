@@ -7,6 +7,7 @@ import {
   buildOnboardingStatusView,
   buildOnboardingSuccessPath,
   buildStripeTenantMetadata,
+  extractOnboardingSessionIdFromCheckoutSession,
   extractProvisionTenantInput,
   normalizeWorkspaceSlug,
   shouldResumeOnboardingCheckout,
@@ -126,6 +127,26 @@ test("buildCheckoutClientReferenceId omits the field when no safe fallback exist
   );
 });
 
+test("extractOnboardingSessionIdFromCheckoutSession prefers metadata and falls back to client reference id", () => {
+  assert.equal(
+    extractOnboardingSessionIdFromCheckoutSession({
+      id: "cs_test_123",
+      metadata: { onboardingSessionId: "onb_meta_123" },
+      client_reference_id: "onb_client_ref_123",
+    } as unknown as import("stripe").Stripe.Checkout.Session),
+    "onb_meta_123",
+  );
+
+  assert.equal(
+    extractOnboardingSessionIdFromCheckoutSession({
+      id: "cs_test_123",
+      metadata: {},
+      client_reference_id: "onb_client_ref_123",
+    } as unknown as import("stripe").Stripe.Checkout.Session),
+    "onb_client_ref_123",
+  );
+});
+
 test("buildStripeTenantMetadata creates a stable Auth0-Stripe correlation payload", () => {
   assert.deepEqual(
     buildStripeTenantMetadata({
@@ -183,5 +204,67 @@ test("extractProvisionTenantInput reads the Stripe checkout correlation metadata
     paymentEnvironment: "test",
     stripeCustomerId: "cus_123",
     stripeSubscriptionId: "sub_123",
+  });
+});
+
+test("extractProvisionTenantInput can fall back to a saved onboarding session for pricing table checkouts", () => {
+  const result = extractProvisionTenantInput(
+    {
+      id: "cs_test_456",
+      client_reference_id: "onb_456",
+      customer: "cus_456",
+      customer_details: {
+        email: "owner@savant.app",
+        name: "Savant Owner",
+      },
+      customer_email: "owner@savant.app",
+      livemode: false,
+      metadata: {},
+      subscription: "sub_456",
+    } as unknown as import("stripe").Stripe.Checkout.Session,
+    {
+      onboardingSession: {
+        id: "onb_456",
+        auth0Subject: "auth0|fallback123",
+        auth0Email: "owner@savant.app",
+        auth0DisplayName: "Savant Owner",
+        workspaceName: "Fallback Workspace",
+        workspaceSlug: "fallback-workspace",
+        cycle: "annual",
+        seats: 7,
+        status: "draft",
+        paymentEnvironment: "test",
+        checkoutIdempotencyKey: "idem_123",
+        stripeCheckoutSessionId: null,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        organizationId: null,
+        errorCode: null,
+        errorMessage: null,
+        updatedAt: new Date("2026-05-23T12:00:00Z").toISOString(),
+      },
+      cycle: "monthly",
+      seats: 11,
+    },
+  );
+
+  assert.equal(result.ok, true);
+  if (!result.ok) {
+    assert.fail("expected pricing table checkout extraction to succeed");
+  }
+
+  assert.deepEqual(result.value, {
+    onboardingSessionId: "onb_456",
+    checkoutSessionId: "cs_test_456",
+    auth0Subject: "auth0|fallback123",
+    auth0Email: "owner@savant.app",
+    auth0DisplayName: "Savant Owner",
+    workspaceName: "Fallback Workspace",
+    workspaceSlug: "fallback-workspace",
+    cycle: "monthly",
+    seats: 11,
+    paymentEnvironment: "test",
+    stripeCustomerId: "cus_456",
+    stripeSubscriptionId: "sub_456",
   });
 });

@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { OnboardingSuccessState } from "@/components/marketing/onboarding-success-state";
 import { Ic } from "@/components/savant/icons";
 import { auth0 } from "@/lib/auth0";
-import { buildOnboardingStatusView, buildOnboardingSuccessPath } from "@/lib/onboarding";
+import {
+  buildOnboardingStatusView,
+  buildOnboardingSuccessPath,
+  extractOnboardingSessionIdFromCheckoutSession,
+} from "@/lib/onboarding";
 import { resolveOnboardingRuntimeAccess } from "@/lib/onboarding-runtime";
 import { isStripeConfigured, stripe } from "@/lib/stripe";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
@@ -57,7 +61,7 @@ export default async function OnboardingSuccessPage({
       redirect(`/signin?${params.toString()}` as Route);
     }
 
-    const onboardingSession = (
+    let onboardingSession = (
       sessionId
         ? await getOnboardingSessionForSubjectByCheckoutSessionId(identity.subject, sessionId)
         : null
@@ -66,6 +70,18 @@ export default async function OnboardingSuccessPage({
         ? await getOnboardingSessionForSubjectById(identity.subject, onboardingSessionId)
         : null
     );
+
+    if (!onboardingSession && sessionId && isStripeConfigured && stripe) {
+      try {
+        const stripeSession = await stripe.checkout.sessions.retrieve(sessionId);
+        const recoveredOnboardingSessionId = extractOnboardingSessionIdFromCheckoutSession(stripeSession);
+        onboardingSession = recoveredOnboardingSessionId
+          ? await getOnboardingSessionForSubjectById(identity.subject, recoveredOnboardingSessionId)
+          : null;
+      } catch (error) {
+        console.error("[onboarding/success] pricing table recovery failed:", error);
+      }
+    }
 
     if (!onboardingSession) {
       redirect("/onboarding" as Route);

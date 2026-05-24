@@ -9,6 +9,7 @@ import { readConfiguredEnvValue, type Auth0Env } from "./auth0-config.ts";
  * Required env vars (set in apps/web/.env.local or your deployment env):
  *   STRIPE_SECRET_KEY                  — required for hosted checkout session creation
  *   NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY — optional today, ready for future client-side Stripe.js
+ *   NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID — optional fast-path for the native Stripe pricing table embed
  *   STRIPE_WEBHOOK_SECRET              — required for /api/billing/webhook signature verification
  *
  * Optional catalog env vars:
@@ -111,6 +112,15 @@ export function readConfiguredStripeEnvValue(env: StripeEnv, key: string): strin
 
 export function stripePublishableKey(env: StripeEnv = process.env): string | null {
   return readConfiguredStripeEnvValue(env, "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY");
+}
+
+export function stripePricingTableId(env: StripeEnv = process.env): string | null {
+  return readConfiguredStripeEnvValue(env, "NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID")
+    ?? readConfiguredStripeEnvValue(env, "STRIPE_PRICING_TABLE_ID");
+}
+
+export function isStripePricingTableConfigured(env: StripeEnv = process.env): boolean {
+  return Boolean(stripePublishableKey(env) && stripePricingTableId(env));
 }
 
 export function stripeWebhookSecret(env: StripeEnv = process.env): string | null {

@@ -59,6 +59,12 @@ export type OnboardingLookupInput = {
   onboardingSessionId?: string | null;
 };
 
+export type ProvisionTenantFallback = {
+  onboardingSession?: OnboardingSessionRecord | null;
+  cycle?: BillingCycle | null;
+  seats?: number | null;
+};
+
 export type ProvisionTenantInput = {
   onboardingSessionId: string | null;
   checkoutSessionId: string;
@@ -323,6 +329,18 @@ export function buildCheckoutClientReferenceId(input: {
   return onboardingSessionId ?? undefined;
 }
 
+export function extractOnboardingSessionIdFromCheckoutSession(
+  session: Stripe.Checkout.Session,
+): string | null {
+  return readNormalizedString(session.metadata?.onboardingSessionId)
+    ?? readNormalizedString(session.client_reference_id);
+}
+
+function normalizeOptionalBillingCycle(value: unknown): BillingCycle | null {
+  const normalized = readNormalizedString(typeof value === "string" ? value : null);
+  return normalized ? normalizeBillingCycle(normalized) : null;
+}
+
 export function buildStripeTenantMetadata(input: {
   organizationId: string;
   workspaceSlug: string;
@@ -339,8 +357,13 @@ export function buildStripeTenantMetadata(input: {
 
 export function extractProvisionTenantInput(
   session: Stripe.Checkout.Session,
+  fallback: ProvisionTenantFallback = {},
 ): ValidationResult<ProvisionTenantInput> {
-  const workspaceName = normalizeWorkspaceName(session.metadata?.workspaceName);
+  const onboardingSession = fallback.onboardingSession ?? null;
+
+  const workspaceName = normalizeWorkspaceName(session.metadata?.workspaceName)
+    ?? onboardingSession?.workspaceName
+    ?? null;
   if (!workspaceName) {
     return {
       ok: false,
@@ -349,7 +372,9 @@ export function extractProvisionTenantInput(
     };
   }
 
-  const workspaceSlug = normalizeWorkspaceSlug(session.metadata?.workspaceSlug);
+  const workspaceSlug = normalizeWorkspaceSlug(session.metadata?.workspaceSlug)
+    ?? onboardingSession?.workspaceSlug
+    ?? null;
   if (!workspaceSlug) {
     return {
       ok: false,
@@ -359,6 +384,7 @@ export function extractProvisionTenantInput(
   }
 
   const auth0Subject = readNormalizedString(session.metadata?.authSub)
+    ?? readNormalizedString(onboardingSession?.auth0Subject)
     ?? readNormalizedString(session.client_reference_id)
     ?? null;
   if (!auth0Subject) {
@@ -371,6 +397,7 @@ export function extractProvisionTenantInput(
 
   const auth0Email = readNormalizedString(session.customer_email)
     ?? readNormalizedString(session.customer_details?.email)
+    ?? readNormalizedString(onboardingSession?.auth0Email)
     ?? null;
   if (!auth0Email) {
     return {
@@ -380,7 +407,8 @@ export function extractProvisionTenantInput(
     };
   }
 
-  const seats = normalizeSeatCount(session.metadata?.seats, 0);
+  const fallbackSeats = fallback.seats ?? onboardingSession?.seats ?? 0;
+  const seats = normalizeSeatCount(session.metadata?.seats ?? fallbackSeats, 0);
   if (seats < 1) {
     return {
       ok: false,
@@ -392,16 +420,23 @@ export function extractProvisionTenantInput(
   return {
     ok: true,
     value: {
-      onboardingSessionId: readNormalizedString(session.metadata?.onboardingSessionId),
+      onboardingSessionId: extractOnboardingSessionIdFromCheckoutSession(session)
+        ?? readNormalizedString(onboardingSession?.id),
       checkoutSessionId: session.id,
       auth0Subject,
       auth0Email,
       auth0DisplayName:
         readNormalizedString(session.customer_details?.name)
-        ?? readNormalizedString(session.customer_details?.email),
+        ?? readNormalizedString(session.customer_details?.email)
+        ?? readNormalizedString(onboardingSession?.auth0DisplayName)
+        ?? readNormalizedString(onboardingSession?.auth0Email)
+        ?? auth0Email,
       workspaceName,
       workspaceSlug,
-      cycle: normalizeBillingCycle(session.metadata?.cycle),
+      cycle: normalizeOptionalBillingCycle(session.metadata?.cycle)
+        ?? fallback.cycle
+        ?? onboardingSession?.cycle
+        ?? "annual",
       seats,
       paymentEnvironment: session.livemode ? "live" : "test",
       stripeCustomerId:

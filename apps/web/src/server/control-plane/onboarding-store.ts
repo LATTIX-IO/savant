@@ -562,6 +562,39 @@ export async function getOnboardingSessionForSubjectById(
   return rows[0] ? mapOnboardingRow(rows[0]) : null;
 }
 
+export async function getOnboardingSessionById(
+  onboardingSessionId: string,
+): Promise<OnboardingSessionRecord | null> {
+  const sql = ensureOnboardingPersistenceConfigured();
+  const rows = await sql<OnboardingRow[]>`
+    select
+      id,
+      auth0_subject,
+      auth0_email,
+      auth0_display_name,
+      workspace_name,
+      workspace_slug,
+      billing_cycle,
+      seat_count,
+      status,
+      stripe_mode,
+      checkout_idempotency_key,
+      stripe_checkout_session_id,
+      stripe_customer_id,
+      stripe_subscription_id,
+      organization_id,
+      error_code,
+      error_message,
+      created_at,
+      updated_at
+    from onboarding_sessions
+    where id = ${onboardingSessionId}
+    limit 1
+  `;
+
+  return rows[0] ? mapOnboardingRow(rows[0]) : null;
+}
+
 export async function claimWebhookEvent(
   stripeEventId: string,
   eventType: string,
@@ -986,6 +1019,24 @@ export async function markOnboardingFailureByCheckoutSessionId(
       error_message = ${errorMessage},
       updated_at = now()
     where stripe_checkout_session_id = ${stripeCheckoutSessionId}
+  `;
+}
+
+export async function markOnboardingFailureById(
+  onboardingSessionId: string,
+  errorCode: string,
+  errorMessage: string,
+): Promise<void> {
+  const sql = ensureOnboardingPersistenceConfigured();
+
+  await sql`
+    update onboarding_sessions
+    set
+      status = 'failed',
+      error_code = ${errorCode},
+      error_message = ${errorMessage},
+      updated_at = now()
+    where id = ${onboardingSessionId}
   `;
 }
 

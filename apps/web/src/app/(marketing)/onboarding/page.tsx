@@ -11,6 +11,7 @@ import {
   shouldRedirectOnboardingToSignup,
 } from "@/lib/onboarding-runtime";
 import { buildOnboardingSuccessPath, normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
+import { stripePricingTableId, stripePublishableKey } from "@/lib/stripe";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { OnboardingWizard } from "@/components/marketing/onboarding-wizard";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
@@ -109,6 +110,8 @@ export default async function OnboardingPage({
     ?? (viewer.isAuthenticated
       ? normalizeWorkspaceSlug(viewer.displayName) ?? "workspace"
       : "");
+  const publishableKey = stripePublishableKey();
+  const pricingTableId = stripePricingTableId();
 
   return (
     <OnboardingWizard
@@ -116,10 +119,14 @@ export default async function OnboardingPage({
       initialSeats={initialSeats}
       initialWorkspaceName={initialWorkspaceName}
       initialWorkspaceSlug={initialWorkspaceSlug}
+      initialOnboardingSessionId={restoredDraft?.id ?? null}
       canPersistDraft={Boolean(identity && isControlPlaneDatabaseConfigured)}
       hasPersistedDraft={Boolean(restoredDraft)}
       isSandbox={runtimeAccess.isSandbox}
       wasCancelled={wasCancelled}
+      viewerEmail={viewer.email}
+      stripePricingTableId={pricingTableId}
+      stripePublishableKey={publishableKey}
     />
   );
 }

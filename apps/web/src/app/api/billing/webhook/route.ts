@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 
 import {
   buildStripeTenantMetadata,
+  extractOnboardingSessionIdFromCheckoutSession,
   extractProvisionTenantInput,
   normalizeSeatCount,
 } from "@/lib/onboarding";
@@ -13,6 +14,8 @@ import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/databas
 import {
   claimWebhookEvent,
   finalizeCheckoutProvisioning,
+  getOnboardingSessionById,
+  markOnboardingFailureById,
   markOnboardingFailureByCheckoutSessionId,
   markOnboardingReady,
   markWebhookEventFailed,
@@ -141,11 +144,19 @@ export async function POST(request: Request) {
     }
 
     if (event.type === "checkout.session.completed") {
+      const onboardingSessionId = extractOnboardingSessionIdFromCheckoutSession(event.data.object);
       await markOnboardingFailureByCheckoutSessionId(
         event.data.object.id,
         ONBOARDING_FAILURE_CODE,
         ONBOARDING_FAILURE_MESSAGE,
       ).catch(() => undefined);
+      if (onboardingSessionId) {
+        await markOnboardingFailureById(
+          onboardingSessionId,
+          ONBOARDING_FAILURE_CODE,
+          ONBOARDING_FAILURE_MESSAGE,
+        ).catch(() => undefined);
+      }
     }
 
     // Return 500 so Stripe retries with backoff.
@@ -172,7 +183,31 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
-  const provisionTenant = extractProvisionTenantInput(session);
+  const onboardingSessionId = extractOnboardingSessionIdFromCheckoutSession(session);
+  const onboardingSession = onboardingSessionId
+    ? await getOnboardingSessionById(onboardingSessionId)
+    : null;
+
+  let resolvedCycle: "monthly" | "annual" | null = null;
+  let resolvedSeats: number | null = null;
+  const stripeSubscriptionId = typeof session.subscription === "string"
+    ? session.subscription
+    : session.subscription?.id ?? null;
+
+  if (stripeSubscriptionId) {
+    const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    const primaryItem = subscription.items.data[0];
+    resolvedCycle = resolveBillingCycleFromStripeInterval(primaryItem?.price.recurring?.interval);
+    resolvedSeats = typeof primaryItem?.quantity === "number"
+      ? normalizeSeatCount(primaryItem.quantity, onboardingSession?.seats ?? 1)
+      : null;
+  }
+
+  const provisionTenant = extractProvisionTenantInput(session, {
+    onboardingSession,
+    cycle: resolvedCycle,
+    seats: resolvedSeats,
+  });
   if (!provisionTenant.ok) {
     throw new Error(provisionTenant.message);
   }

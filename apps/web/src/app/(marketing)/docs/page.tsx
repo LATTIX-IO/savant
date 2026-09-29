@@ -3,56 +3,25 @@ import Link from "next/link";
 import { SiteFrame } from "@/components/marketing/site-frame";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildBreadcrumbJsonLd, buildDocsJsonLd, resolveSiteOrigin } from "@/lib/seo";
+import { buildPublicPageMetadata } from "@/lib/seo-metadata";
+import { DOCS_GUIDES } from "@/lib/marketing-content";
 
-export const metadata = {
-  title: "Docs",
-  description: "Get started with Savant: connect a repository, evaluate, approve, release, distribute, audit, and improve skills.",
-};
+export const metadata = buildPublicPageMetadata("/docs");
 
-const GUIDES = [
-  {
-    id: "connect",
-    title: "Connect a repository",
-    body: "Point Savant at the Git repository where your skills live — GitHub, GitLab, Azure DevOps, Bitbucket, or any Git host over SSH or HTTPS. Webhook sync registers each change as a candidate.",
-  },
-  {
-    id: "evaluate",
-    title: "Evaluate",
-    body: "Check a rubric and a case set into the repository next to each skill. Savant scores every candidate with the model you choose and compares it with the current baseline.",
-  },
-  {
-    id: "approve",
-    title: "Approve",
-    body: "Approval tiers and required reviewers are defined in policy. Owners, reviewers, and compliance act on one timeline for each candidate.",
-  },
-  {
-    id: "release",
-    title: "Release",
-    body: "Approved versions are promoted draft → staging → production. Release records are signed and pinned to evaluated content; a regression pins the prior version automatically.",
-  },
-  {
-    id: "distribute",
-    title: "Distribute",
-    body: "Released skills reach tools through native integrations or the managed sync agent for developer environments, and each surface reports the version it runs.",
-  },
-  {
-    id: "audit",
-    title: "Audit",
-    body: "Every change, approval, release, and access event is recorded append-only and can be exported to your SIEM.",
-  },
-  {
-    id: "improvement",
-    title: "Improve",
-    body: "Instrumented runtimes report skill runs. Savant measures outcomes, clusters failures, and proposes bounded improvements. Each candidate is validated against validation, regression, and holdout sets before a person reviews it; approval creates a new Git version that follows your release policy.",
-  },
-];
+const GUIDES = DOCS_GUIDES;
 
 export default async function DocsPage() {
   const session = auth0 ? await auth0.getSession() : null;
   const viewer = buildAuthViewer(session?.user);
 
+  const origin = resolveSiteOrigin();
+
   return (
     <SiteFrame signedIn={viewer.isAuthenticated} current="docs">
+      <JsonLd data={buildBreadcrumbJsonLd(origin, [{ name: "Docs", path: "/docs" }])} />
+      <JsonLd data={buildDocsJsonLd(origin)} />
       <section className="page-hero" aria-labelledby="docs-title">
         <div className="shell">
           <div className="sh-meta">

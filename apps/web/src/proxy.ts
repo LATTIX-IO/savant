@@ -92,5 +92,6 @@ export async function proxy(request: Request) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt).*)"],
+  // Crawler-facing files skip the Auth0 session work so they stay cheap and CDN-cacheable.
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|sitemap.xml|robots.txt|llms.txt|llms-full.txt|indexnow.txt|opengraph-image).*)"],
 };

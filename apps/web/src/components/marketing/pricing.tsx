@@ -5,19 +5,11 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { trackMarketingEvent } from "@/lib/marketing-analytics";
+import { PRICING } from "@/lib/marketing-content";
 
 type Cycle = "monthly" | "annual";
 
-const INCLUDES = [
-  "Unlimited skills",
-  "Evaluations",
-  "Releases",
-  "Repositories",
-  "SSO + SCIM",
-  "Distribution",
-  "Audit",
-  "Improvement recommendations",
-];
+const INCLUDES = PRICING.includes;
 
 export function Pricing({ signedIn }: { signedIn: boolean }) {
   const [cycle, setCycle] = useState<Cycle>("annual");

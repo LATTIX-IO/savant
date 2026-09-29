@@ -4,10 +4,12 @@ import { redirect } from "next/navigation";
 import { auth0, isAuth0Configured } from "@/lib/auth0";
 import { buildAuthStatusHref, normalizeReturnToPath } from "@/lib/auth0-config";
 import { isOnboardingSandboxEnabled } from "@/lib/onboarding-runtime";
+import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
+  ...NOINDEX_METADATA,
   title: "Login to Savant",
   description:
     "Login to access your dashboard, onboarding, and protected workspace routes.",

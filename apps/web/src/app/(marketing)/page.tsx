@@ -16,12 +16,11 @@ import { SectionHead } from "@/components/marketing/section-head";
 import { SiteFrame } from "@/components/marketing/site-frame";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildFaqJsonLd, buildSiteJsonLd, resolveSiteOrigin } from "@/lib/seo";
+import { buildPublicPageMetadata } from "@/lib/seo-metadata";
 
-export const metadata = {
-  title: { absolute: "Savant — The system of record for organizational skills" },
-  description:
-    "Turn expertise into governed capability. Version skills in Git, prove them with evaluations, govern every release, keep every AI surface aligned, and improve skills from real use.",
-};
+export const metadata = buildPublicPageMetadata("/");
 
 const PRODUCT_NOTES = [
   { title: "Health from evidence", body: "Skill health is the eval pass rate, not a status someone typed." },
@@ -34,8 +33,12 @@ export default async function LandingPage() {
   const viewer = buildAuthViewer(session?.user);
   const signedIn = viewer.isAuthenticated;
 
+  const origin = resolveSiteOrigin();
+
   return (
     <SiteFrame signedIn={signedIn}>
+      <JsonLd data={buildSiteJsonLd(origin)} />
+      <JsonLd data={buildFaqJsonLd(origin)} />
       <Hero signedIn={signedIn} />
       <MetricRail />
       <ProblemTransition />

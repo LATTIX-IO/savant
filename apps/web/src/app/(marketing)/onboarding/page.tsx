@@ -19,8 +19,10 @@ import {
   getOnboardingStateForSubject,
   markOnboardingCanceled,
 } from "@/server/control-plane/onboarding-store";
+import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 
 export const metadata = {
+  ...NOINDEX_METADATA,
   title: "Set up your workspace",
 };
 

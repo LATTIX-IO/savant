@@ -19,7 +19,11 @@
     "security:scan": "pnpm run security:deps && pnpm run security:secrets",
     "test": "node ./scripts/run-node-tests.mjs",
     "typecheck": "turbo run typecheck",
-    "test:python": "cd services/skillopt-adapter && uv run --no-project --with pytest python -m pytest -q && cd ../skill-intelligence && uv run --no-project --with pytest python -m pytest -q"
+    "test:python": "cd services/skillopt-adapter && uv run --no-project --with pytest python -m pytest -q && cd ../skill-intelligence && uv run --no-project --with pytest python -m pytest -q",
+    "seo:verify": "node ./scripts/seo/verify-live.mjs",
+    "seo:indexnow": "node ./scripts/seo/indexnow-submit.mjs",
+    "cloudflare:plan": "node ./infra/cloudflare/apply.mjs",
+    "cloudflare:apply": "node ./infra/cloudflare/apply.mjs --apply"
   },
   "devDependencies": {
     "turbo": "^2.5.6"

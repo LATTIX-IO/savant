@@ -40,6 +40,18 @@ Savant can also normalize these fallback values if your deployment currently exp
 - `VERCEL_PROJECT_PRODUCTION_URL`
 - `VERCEL_URL`
 
+For search and AI-engine visibility (see `docs/operations/seo-geo-aeo.md`), set in `Production` only:
+
+- `GOOGLE_SITE_VERIFICATION`, `BING_SITE_VERIFICATION`
+- `INDEXNOW_KEY`
+- optionally `SAVANT_SEO_INDEXING=0` to keep production out of search indexes
+
+Preview deployments are `noindex` automatically.
+
+## Domains and DNS
+
+DNS for `savantrepo.com` is moving from Vercel DNS to Cloudflare (DNS-only). The runbook is in `infra/cloudflare/README.md`. Whichever DNS host is authoritative, set `www.savantrepo.com` in Vercel → Domains to redirect to `savantrepo.com` with **308 Permanent**. The Vercel default of 307 is temporary and splits ranking signals between hosts.
+
 ## Auth0 application settings
 
 For the production domain `https://savantrepo.com`, configure the Auth0 Regular Web Application with:

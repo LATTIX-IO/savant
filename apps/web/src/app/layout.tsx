@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import Script from "next/script";
 import "./globals.css";
 
+import { buildRootMetadata } from "@/lib/seo-metadata";
 import { SAVANT_UI_TWEAKS_STORAGE_KEY } from "@/lib/theme-preference";
 
 const geistSans = Geist({
@@ -16,6 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  ...buildRootMetadata(),
   title: {
     default: "Savant — Skills, governed",
     template: "%s | Savant",

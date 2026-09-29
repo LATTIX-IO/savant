@@ -19,6 +19,20 @@
       ],
       "port": 3100,
       "autoPort": true
+    },
+    {
+      "name": "web-prod",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": [
+        "--filter",
+        "@savant/web",
+        "exec",
+        "next",
+        "start",
+        "-p",
+        "3200"
+      ],
+      "port": 3200
     }
   ]
 }

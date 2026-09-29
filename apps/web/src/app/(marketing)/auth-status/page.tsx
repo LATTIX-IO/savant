@@ -16,10 +16,12 @@ import {
   resolveRequestOrigin,
   type DiagnosticEnvStatus,
 } from "@/lib/auth0-diagnostics";
+import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
+  ...NOINDEX_METADATA,
   title: "Auth status",
   description:
     "Public Auth0 readiness diagnostics for this Savant deployment. Verifies hosted Universal Login wiring and onboarding prerequisites without exposing secrets.",

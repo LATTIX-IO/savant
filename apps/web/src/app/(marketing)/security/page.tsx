@@ -1,67 +1,24 @@
 import { SiteFrame } from "@/components/marketing/site-frame";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
+import { JsonLd } from "@/components/seo/json-ld";
+import { buildBreadcrumbJsonLd, resolveSiteOrigin } from "@/lib/seo";
+import { buildPublicPageMetadata } from "@/lib/seo-metadata";
+import { SECURITY_SECTIONS } from "@/lib/marketing-content";
 
-export const metadata = {
-  title: "Security",
-  description:
-    "How Savant protects governed skills: identity and access, Git provenance, signed releases, immutable audit, tenant isolation, and bounded improvement.",
-};
+export const metadata = buildPublicPageMetadata("/security");
 
-const SECTIONS = [
-  {
-    id: "identity",
-    title: "Identity and access",
-    points: [
-      "Single sign-on through Auth0 by default, or your own identity provider over OIDC or SAML.",
-      "SCIM provisioning keeps members and groups aligned with your directory.",
-      "Role-based access control; approval tiers and reviewers are defined in policy.",
-    ],
-  },
-  {
-    id: "data",
-    title: "Data handling",
-    points: [
-      "Your Git repository remains the source of truth for skill content.",
-      "Savant stores references to commits, evaluation results, release records, and audit events.",
-      "Workspaces are tenant-isolated; access is always scoped to one workspace.",
-    ],
-  },
-  {
-    id: "provenance",
-    title: "Provenance and release control",
-    points: [
-      "Every skill version resolves to a commit, and every release to evaluated content.",
-      "Release records are signed; promotion runs draft → staging → production under policy.",
-      "Auto-pin on regression holds the prior version; rollback is one action.",
-    ],
-  },
-  {
-    id: "audit",
-    title: "Audit",
-    points: [
-      "Changes, approvals, releases, and access events are recorded append-only.",
-      "Audit events can be exported to your SIEM.",
-    ],
-  },
-  {
-    id: "improvement",
-    title: "Bounded improvement",
-    points: [
-      "Run telemetry is redacted and pseudonymized before analysis; capture level follows your tenant setting.",
-      "The optimization worker holds no database, Git, or release credentials.",
-      "Locked sections of a skill cannot be read or changed by the optimizer.",
-      "Only authorized people approve a recommendation. There is no autonomous deployment mode.",
-    ],
-  },
-];
+const SECTIONS = SECURITY_SECTIONS;
 
 export default async function SecurityPage() {
   const session = auth0 ? await auth0.getSession() : null;
   const viewer = buildAuthViewer(session?.user);
 
+  const origin = resolveSiteOrigin();
+
   return (
     <SiteFrame signedIn={viewer.isAuthenticated} current="security">
+      <JsonLd data={buildBreadcrumbJsonLd(origin, [{ name: "Security", path: "/security" }])} />
       <section className="page-hero" aria-labelledby="security-title">
         <div className="shell">
           <div className="sh-meta">

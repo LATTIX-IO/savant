@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 import { SavantShell } from "@/components/savant/app-shell";
 import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
+import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { getSavantShellData } from "@/server/control-plane/shell-data";
 import {
@@ -27,6 +28,8 @@ function buildWorkspaceShortLabel(workspaceName: string): string {
   const [first, second] = tokens;
   return `${first?.[0] ?? "S"}${second?.[0] ?? first?.[1] ?? "V"}`.toUpperCase();
 }
+
+export const metadata = NOINDEX_METADATA;
 
 export default async function TenantWorkspaceLayout({
   children,

@@ -7,14 +7,11 @@ import {
   buildOnboardingReturnToPath,
   isOnboardingSandboxEnabled,
 } from "@/lib/onboarding-runtime";
+import { buildPublicPageMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = {
-  title: "Create your Savant workspace",
-  description:
-    "Start a 14-day Savant trial. Sign up and configure your workspace in under a minute.",
-};
+export const metadata = buildPublicPageMetadata("/signup");
 
 type SignupSearchParams = {
   cycle?: string;

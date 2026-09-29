@@ -1,0 +1,29 @@
+name: SEO / crawler access
+
+# Checks what search and AI crawlers actually receive from production, through
+# the DNS/CDN layer. Catches edge regressions the app build cannot see, such as
+# Cloudflare "Block AI bots" or managed robots.txt being switched on.
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      origin:
+        description: Origin to verify
+        required: false
+        default: https://savantrepo.com
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify live crawler surface
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Verify
+        run: node ./scripts/seo/verify-live.mjs --origin "${{ github.event.inputs.origin || 'https://savantrepo.com' }}"

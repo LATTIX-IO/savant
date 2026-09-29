@@ -1,35 +1,6 @@
-import type { ReactNode } from "react";
+import { FAQ_ITEMS } from "@/lib/marketing-content";
 
-const ITEMS: { q: string; a: ReactNode }[] = [
-  {
-    q: "Does Savant store our skill content?",
-    a: "No. Your Git repository is the source of truth. Savant references commits and runs evaluations against them, but prompts, runbooks, and agent workflows stay in your environment.",
-  },
-  {
-    q: "Which Git providers do you support?",
-    a: "GitHub Cloud and Enterprise, GitLab Cloud and self-managed, Azure DevOps, Bitbucket Cloud and Data Center, and other Git deployments over SSH or HTTPS.",
-  },
-  {
-    q: "What does an eval suite look like?",
-    a: "A rubric and a case set, both checked into the repository. Savant scores each candidate with the model you choose, surfaces regressions against the baseline, and keeps results for the life of the release.",
-  },
-  {
-    q: "Does Savant change skills on its own?",
-    a: "No. Savant proposes improvements from run evidence and validates each candidate against the regression suite, but only authorized reviewers approve. An approved change becomes a new Git version and follows your existing release policy.",
-  },
-  {
-    q: "How does authentication work?",
-    a: "Auth0 by default, or bring your own identity provider over SAML or OIDC. Group membership drives RBAC, and SCIM keeps it in lockstep with your directory.",
-  },
-  {
-    q: "What happens if a release regresses?",
-    a: "Auto-pin on regression is a default policy: the prior version pins immediately, an incident opens, and the skill owner is notified. Manual rollback is one click.",
-  },
-  {
-    q: "Do you offer a free trial?",
-    a: "Yes. Every workspace starts with a 14-day trial with all workflows enabled. Cancel during the trial and you are not charged; after it, billing is per seat, monthly or annually.",
-  },
-];
+const ITEMS = FAQ_ITEMS;
 
 export function FAQ() {
   return (

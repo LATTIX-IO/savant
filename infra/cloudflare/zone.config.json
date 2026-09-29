@@ -1,0 +1,46 @@
+{
+  "$comment": "Desired state of the Cloudflare zone for savantrepo.com. Apply with: node infra/cloudflare/apply.mjs (dry run) then --apply. See infra/cloudflare/README.md.",
+  "zone": "savantrepo.com",
+  "proxied": false,
+  "dnsRecords": [
+    {
+      "type": "A",
+      "name": "@",
+      "content": "76.76.21.21",
+      "comment": "Vercel apex. Replace with the exact value on the Vercel project's Domains card if it lists a different IP."
+    },
+    {
+      "type": "CNAME",
+      "name": "www",
+      "content": "cname.vercel-dns.com",
+      "comment": "Vercel www. Replace with the project-specific target on the Domains card if it lists one."
+    },
+    { "type": "CAA", "name": "@", "data": { "flags": 0, "tag": "issue", "value": "letsencrypt.org" }, "comment": "Vercel issues certificates with Let's Encrypt." },
+    { "type": "CAA", "name": "@", "data": { "flags": 0, "tag": "issue", "value": "pki.goog" }, "comment": "Cloudflare Universal SSL (only used when proxied)." },
+    { "type": "CAA", "name": "@", "data": { "flags": 0, "tag": "issue", "value": "sectigo.com" }, "comment": "Cloudflare Universal SSL (only used when proxied)." }
+  ],
+  "settings": {
+    "$comment": "Applied in this order. ssl_automatic_mode=custom stops Automatic SSL/TLS from overriding ssl. always_use_https stays off: Vercel already redirects to HTTPS, and a Cloudflare redirect on port 80 can break Let's Encrypt HTTP-01 renewals when proxied.",
+    "ssl_automatic_mode": "custom",
+    "ssl": "strict",
+    "min_tls_version": "1.2",
+    "always_use_https": "off",
+    "automatic_https_rewrites": "on",
+    "http3": "on",
+    "early_hints": "on"
+  },
+  "botManagement": {
+    "$comment": "Keeps AI search, answer, and training crawlers allowed (GEO/AEO) and stops Cloudflare from prepending its own robots.txt. Only these fields are sent; anything else tuned in the dashboard is left alone.",
+    "fight_mode": false,
+    "ai_bots_protection": "disabled",
+    "crawler_protection": "disabled",
+    "is_robots_txt_managed": false,
+    "bot_preference_sync_enabled": false
+  },
+  "redirect": {
+    "$comment": "Only takes effect when www is proxied. In DNS-only mode set the www redirect to 308 in Vercel instead (see README).",
+    "ref": "savant_www_to_apex",
+    "statusCode": 301
+  },
+  "crawlerHints": true
+}

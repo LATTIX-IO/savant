@@ -19,8 +19,9 @@ import {
   getOnboardingSessionForSubjectByCheckoutSessionId,
   getOnboardingSessionForSubjectById,
 } from "@/server/control-plane/onboarding-store";
+import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 
-export const metadata = { title: "Welcome to Savant" };
+export const metadata = { ...NOINDEX_METADATA, title: "Welcome to Savant" };
 export const dynamic = "force-dynamic";
 
 type SuccessSearchParams = {

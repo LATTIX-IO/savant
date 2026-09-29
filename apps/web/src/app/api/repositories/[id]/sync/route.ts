@@ -28,3 +28,5 @@ export const POST = createRepositorySyncPostHandler({
   indexTenantRepository,
   isKnownError: isKnownRepositorySyncRouteError,
 });
+// Indexing runs inline; large repositories need more than the default function duration.
+export const maxDuration = 300;

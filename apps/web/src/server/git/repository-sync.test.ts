@@ -226,7 +226,7 @@ test("large repositories are bounded by configurable limits", async () => {
       broker: harness.broker,
       audit: harness.stores.audit,
       writer: harness.writer,
-      limits: { maxTreeEntries: 20, maxFileBytes: 1024, maxTotalBytes: 4096, maxSkillCount: 10, maxDepth: 12 },
+      limits: { maxTreeEntries: 20, maxFileBytes: 1024, maxTotalBytes: 4096, maxSkillCount: 10, maxDepth: 12, readConcurrency: 4 },
     }, { organizationId: ORG_A, repositoryId: repository.id, actor: { type: "system", ref: "test" }, trigger: "manual" }),
     (error: unknown) => error instanceof GitProviderError && error.code === "INDEX_FAILED",
   );

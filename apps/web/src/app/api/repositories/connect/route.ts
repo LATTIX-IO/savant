@@ -45,3 +45,6 @@ export const POST = createRepositoryConnectPostHandler({
   isIndexError: isRepositoryIndexRouteError,
   isKnownError: isKnownRepositoryConnectRouteError,
 });
+
+// Indexing runs inline; large repositories need more than the default function duration.
+export const maxDuration = 300;

@@ -24,6 +24,7 @@ export type RepositoryReadLimits = {
   maxTotalBytes: number;
   maxSkillCount: number;
   maxDepth: number;
+  readConcurrency: number;
 };
 
 function readPositiveInt(env: Env, key: string, fallback: number): number {
@@ -38,6 +39,7 @@ export function readRepositoryReadLimits(env: Env = process.env): RepositoryRead
     maxTotalBytes: readPositiveInt(env, "GIT_SYNC_MAX_TOTAL_BYTES", 25 * 1024 * 1024),
     maxSkillCount: readPositiveInt(env, "GIT_SYNC_MAX_SKILLS", 1_000),
     maxDepth: readPositiveInt(env, "GIT_SYNC_MAX_DEPTH", 12),
+    readConcurrency: Math.min(readPositiveInt(env, "GIT_SYNC_READ_CONCURRENCY", 8), 32),
   };
 }
 
@@ -135,16 +137,33 @@ export async function readRepositorySnapshot(input: {
       ...skillRoots.flatMap((root) => [`${root}/metadata.yaml`, `${root}/SKILL.md`]),
     ].filter((path, index, all) => observed.has(path) && all.indexOf(path) === index);
 
-    const files: Record<string, string> = {};
+    const contents = new Map<string, string>();
     let bytesRead = 0;
+    let next = 0;
 
-    for (const path of wanted) {
-      const content = await provider.readFile(credential, locator, commitSha, path, { ...context, maxBytes: limits.maxFileBytes });
-      bytesRead += content.length;
-      if (bytesRead > limits.maxTotalBytes) {
-        throw new GitProviderError("INDEX_FAILED", `Reading ${repository.fullName} exceeded the ${limits.maxTotalBytes}-byte sync budget.`, { status: 413 });
+    // Bounded parallelism keeps large repositories within serverless time
+    // limits without bursting provider rate limits.
+    async function worker() {
+      while (next < wanted.length) {
+        const path = wanted[next++] as string;
+        const content = await provider.readFile(credential, locator, commitSha, path, { ...context, maxBytes: limits.maxFileBytes });
+        bytesRead += content.length;
+        if (bytesRead > limits.maxTotalBytes) {
+          throw new GitProviderError("INDEX_FAILED", `Reading ${repository.fullName} exceeded the ${limits.maxTotalBytes}-byte sync budget.`, { status: 413 });
+        }
+        contents.set(path, content.toString("utf8"));
       }
-      files[path] = content.toString("utf8");
+    }
+
+    await Promise.all(Array.from({ length: Math.min(limits.readConcurrency, wanted.length) }, () => worker()));
+
+    // Deterministic key order regardless of completion order.
+    const files: Record<string, string> = {};
+    for (const path of wanted) {
+      const content = contents.get(path);
+      if (content !== undefined) {
+        files[path] = content;
+      }
     }
 
     span.setAttribute("file_count", Object.keys(files).length);

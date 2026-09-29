@@ -104,6 +104,7 @@ const PROTECTED_DASHBOARD_PREFIXES = [
   "/repositories",
   "/evaluations",
   "/releases",
+  "/intelligence",
   "/policies",
   "/audit",
   "/connectors",
@@ -262,8 +263,22 @@ export function buildAuthStatusHref({
   return `/auth-status?${search.toString()}`;
 }
 
+// API routes that authenticate machine callers themselves (tenant-scoped
+// telemetry ingest tokens or the platform worker token) and must not be
+// redirected to the interactive sign-in flow. Each handler falls back to, or
+// requires, its own authorization check.
+const SELF_AUTHENTICATED_API_PREFIXES = ["/api/skill-runs", "/api/internal/"] as const;
+
+export function isSelfAuthenticatedApiPath(pathname: string): boolean {
+  return SELF_AUTHENTICATED_API_PREFIXES.some((prefix) =>
+    prefix.endsWith("/")
+      ? pathname.startsWith(prefix)
+      : pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export function isProtectedDashboardPath(pathname: string): boolean {
-  if (isAuthRoute(pathname) || isLegacyAuthApiRoute(pathname)) {
+  if (isAuthRoute(pathname) || isLegacyAuthApiRoute(pathname) || isSelfAuthenticatedApiPath(pathname)) {
     return false;
   }
 

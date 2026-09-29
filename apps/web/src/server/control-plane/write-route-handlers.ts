@@ -86,6 +86,18 @@ export interface RepositoryConnectRouteHandlerDependencies {
     locator: ParsedRepositoryLocator;
     connectionId?: string | undefined;
   }): Promise<{ warning?: string | undefined }>;
+  /**
+   * Inline initial index so skills appear right after connect. Optional so a
+   * deployment can defer indexing to the sync route; index failures are
+   * surfaced as warnings rather than failing the connection.
+   */
+  indexTenantRepository?(input: {
+    context: ResolvedTenantContext;
+    repositoryId: string;
+    trigger?: "initial" | undefined;
+    requestedAt: Date;
+  }): Promise<RepoSyncPayload>;
+  isIndexError?(error: unknown): error is RouteHandledError;
   isKnownError(error: unknown): error is RouteHandledError;
 }
 
@@ -136,10 +148,34 @@ export function createRepositoryConnectPostHandler(
         }
       }
 
+      let repository = connected.repository;
+      let indexedSkillCount: number | undefined;
+
+      if (deps.indexTenantRepository && repository.providerReadiness.supportsImmediateIndexing) {
+        try {
+          const indexed = await deps.indexTenantRepository({
+            context: tenantContext,
+            repositoryId: repository.id,
+            trigger: "initial",
+            requestedAt: new Date(),
+          });
+          repository = indexed.repository;
+          indexedSkillCount = indexed.indexedSkillCount;
+          warnings.push(...indexed.warnings);
+        } catch (error) {
+          if (!deps.isIndexError?.(error)) {
+            throw error;
+          }
+          warnings.push(`Repository connected, but the initial index did not complete: ${error.message} Use Sync to retry.`);
+        }
+      }
+
       return NextResponse.json(
         {
           data: {
             ...connected,
+            repository,
+            ...(indexedSkillCount != null ? { indexedSkillCount } : {}),
             warnings,
           },
           meta: createControlPlaneMeta("database"),

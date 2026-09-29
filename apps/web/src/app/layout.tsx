@@ -22,6 +22,18 @@ export const metadata: Metadata = {
   },
   description:
     "Savant is the enterprise platform for codifying expertise as governed, measurable, reusable skills.",
+  // Browser tabs follow the OS/browser color scheme, not the in-app theme
+  // toggle, so the SVG favicon switches on prefers-color-scheme. favicon.ico
+  // (light variant, src/app/favicon.ico) covers browsers that ignore SVG
+  // favicons. Declaring `icons` replaces the file-convention apple icon, so it
+  // is listed explicitly.
+  icons: {
+    icon: [
+      { url: "/brand/savant-icon-light.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/brand/savant-icon-dark.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+    ],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180", type: "image/png" }],
+  },
 };
 
 const themeBootstrapScript = `

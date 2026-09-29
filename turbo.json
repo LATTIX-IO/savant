@@ -10,6 +10,8 @@
         "AUTH0_*",
         "NEXT_PUBLIC_AUTH0_*",
         "DATABASE_URL",
+        "TELEMETRY_ENCRYPTION_KEY",
+        "SAVANT_WORKER_TOKEN",
         "STRIPE_*",
         "NEXT_PUBLIC_STRIPE_*",
         "NEXT_ADAPTER_PATH",

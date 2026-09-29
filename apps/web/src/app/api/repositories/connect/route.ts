@@ -2,6 +2,8 @@ import {
   connectTenantRepository,
   RepositoryConnectError,
 } from "@/server/control-plane/repository-connect";
+import { indexTenantRepository, RepositoryIndexError } from "@/server/control-plane/repository-index";
+import { RepositoryProviderConnectionError } from "@/server/control-plane/repository-provider-connection";
 import { RepositoryProviderError } from "@/server/control-plane/repository-provider-read";
 import {
   RepositoryRequestError,
@@ -26,6 +28,12 @@ function isKnownRepositoryConnectRouteError(error: unknown): error is RouteHandl
     || error instanceof TenantContextError;
 }
 
+function isRepositoryIndexRouteError(error: unknown): error is RouteHandledError {
+  return error instanceof RepositoryIndexError
+    || error instanceof RepositoryProviderError
+    || error instanceof RepositoryProviderConnectionError;
+}
+
 export const POST = createRepositoryConnectPostHandler({
   authorizeTenantRequest,
   readJsonObject,
@@ -33,5 +41,7 @@ export const POST = createRepositoryConnectPostHandler({
   validateTenantSkillRepoContract,
   connectTenantRepository,
   ensureRepositoryWebhookRegistration,
+  indexTenantRepository,
+  isIndexError: isRepositoryIndexRouteError,
   isKnownError: isKnownRepositoryConnectRouteError,
 });

@@ -18,7 +18,8 @@
     "security:secrets": "node ./scripts/security-scan.mjs",
     "security:scan": "pnpm run security:deps && pnpm run security:secrets",
     "test": "node ./scripts/run-node-tests.mjs",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck",
+    "test:python": "cd services/skillopt-adapter && uv run --no-project --with pytest python -m pytest -q && cd ../skill-intelligence && uv run --no-project --with pytest python -m pytest -q"
   },
   "devDependencies": {
     "turbo": "^2.5.6"

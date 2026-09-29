@@ -23,6 +23,7 @@ These store state that is not hosted in Git:
 - review requests, comments, release approvals, and rollout targets
 - connector installations and sync runs
 - workspace settings and immutable audit events
+- Skill Intelligence telemetry and governance (`0005_skill_intelligence.sql`): skill runs and encrypted run artifacts, feedback, outcomes, optimization configs and jobs, curated dataset manifests, candidates and their evaluations, improvement recommendations, and reviews. These are kept separate from the Git-derived skill/version index; an approved recommendation becomes a normal `release_requests` row. Failure clusters and health snapshots are recomputable derived views
 
 ### Rebuildable derived tables
 

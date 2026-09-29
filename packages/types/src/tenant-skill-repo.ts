@@ -93,6 +93,8 @@ export interface RepoConnectRequest {
 export interface RepoConnectPayload {
   created: boolean;
   repository: RepositoryListItem;
+  /** Present when the initial index ran inline during connect. */
+  indexedSkillCount?: number;
   warnings: string[];
 }
 

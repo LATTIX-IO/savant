@@ -2,14 +2,20 @@ import type { GitProvider } from "@savant/types";
 
 import { isConcreteRepositoryProvider, type ConcreteRepositoryProvider } from "./repository-provider.ts";
 
-export type RepositoryProviderConnectionStatus = "active" | "revoked" | "error";
+export type RepositoryProviderConnectionStatus =
+  | "active"
+  | "needs_reauthorization"
+  | "revoked"
+  | "error"
+  | "disconnected";
 
 export type RepositoryProviderConnectionRecord = {
   id: string;
   providerType: ConcreteRepositoryProvider;
   displayName: string;
   installationRef: string | null;
-  credentialsRef: string;
+  /** Environment variable reference; only legacy (deployment-managed) connections have one. */
+  credentialsRef: string | null;
   status: RepositoryProviderConnectionStatus;
   createdAt: Date | string;
 };
@@ -99,6 +105,9 @@ async function createDatabaseRepositoryProviderConnectionStore(): Promise<Reposi
         from git_provider_connections
         where organization_id = ${input.organizationId}
           and provider_type = ${provider}
+          -- Write operations still use deployment-managed credentials; managed
+          -- Source Control connections are read-only (INV-GIT-09).
+          and credentials_ref is not null
           and (${input.connectionId ?? null}::uuid is null or id = ${input.connectionId ?? null}::uuid)
         order by created_at asc
       `;
@@ -191,5 +200,13 @@ export function resolveRepositoryProviderAccessToken(
   connection: Pick<RepositoryProviderConnectionRecord, "credentialsRef">,
   env: Record<string, string | undefined> = process.env,
 ): string {
+  if (!connection.credentialsRef) {
+    throw new RepositoryProviderConnectionError(
+      "repository_provider_write_credential_unavailable",
+      "This provider connection is read-only. Repository write operations require a deployment-managed write credential.",
+      409,
+    );
+  }
+
   return resolveRepositoryProviderSecretFromRef(connection.credentialsRef, env);
 }

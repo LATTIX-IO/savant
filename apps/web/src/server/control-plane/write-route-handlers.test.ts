@@ -170,6 +170,76 @@ test("createRepositoryConnectPostHandler returns a created response for a connec
   assert.equal(webhookRegistrations, 0);
 });
 
+type ConnectDeps = Parameters<typeof createRepositoryConnectPostHandler>[0];
+
+function createConnectHandlerDeps(
+  overrides: Pick<ConnectDeps, "indexTenantRepository"> & Partial<Pick<ConnectDeps, "isIndexError">>,
+): ConnectDeps {
+  const locator = createGitHubLocator();
+  const base: ConnectDeps = {
+    authorizeTenantRequest: async () => createTenantContext(),
+    readJsonObject: async () => ({ provider: "github" }),
+    resolveRepositoryConnectRequest: async () => ({
+      locator,
+      validationSource: "provider-live-preview",
+      request: { provider: "github", repoUrl: locator.normalizedUrl, defaultBranch: "main", displayName: "Finance Skills", syncMode: "poll" },
+      validationRequest: { path: "connect", provider: "github", repoUrl: locator.normalizedUrl, defaultBranch: "main", displayName: "Finance Skills", syncMode: "poll" },
+    }),
+    validateTenantSkillRepoContract: () => createReadyValidation(),
+    connectTenantRepository: async () => ({
+      created: true,
+      repository: { ...createRepositoryListItem(), skills: 0 },
+      warnings: [],
+    }),
+    ensureRepositoryWebhookRegistration: async () => ({}),
+    isKnownError: isKnownRouteError,
+  };
+  return Object.assign(base, overrides);
+}
+
+test("createRepositoryConnectPostHandler indexes the repository inline so skills appear immediately", async () => {
+  let indexedRepositoryId: string | null = null;
+  const handler = createRepositoryConnectPostHandler(createConnectHandlerDeps({
+    indexTenantRepository: async ({ repositoryId }) => {
+      indexedRepositoryId = repositoryId;
+      return {
+        accepted: true,
+        repository: { ...createRepositoryListItem(), skills: 7, projection: { indexedAt: "2026-09-29T00:00:00.000Z", lastSuccessfulSyncAt: "2026-09-29T00:00:00.000Z", lastWebhookAt: null } },
+        syncMode: "poll",
+        requestedAt: "2026-09-29T00:00:00.000Z",
+        nextPollAt: null,
+        indexedSkillCount: 7,
+        warnings: ["registry/owners.yaml missing"],
+        message: "Indexed",
+      };
+    },
+  }));
+
+  const body = await (await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"))).json();
+
+  assert.equal(indexedRepositoryId, "repo_123");
+  assert.equal(body.data.indexedSkillCount, 7);
+  assert.equal(body.data.repository.skills, 7);
+  assert.deepEqual(body.data.warnings, ["registry/owners.yaml missing"]);
+});
+
+test("createRepositoryConnectPostHandler keeps the connection and reports a warning when the initial index fails", async () => {
+  const handler = createRepositoryConnectPostHandler(createConnectHandlerDeps({
+    indexTenantRepository: async () => {
+      throw new TestRouteError("repository_provider_not_found", "GitHub returned 404 for this repository.", 404);
+    },
+    isIndexError: (error: unknown): error is RouteHandledError => error instanceof TestRouteError,
+  }));
+
+  const response = await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"));
+  const body = await response.json();
+
+  assert.equal(response.status, 201);
+  assert.equal(body.data.repository.skills, 0);
+  assert.equal(body.data.indexedSkillCount, undefined);
+  assert.match(body.data.warnings[0], /initial index did not complete: GitHub returned 404/);
+});
+
 test("createRepositoryConnectPostHandler maps tenant write access errors to a 403 response", async () => {
   const locator = createGitHubLocator();
   const handler = createRepositoryConnectPostHandler({

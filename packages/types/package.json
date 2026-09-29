@@ -7,6 +7,8 @@
     ".": "./src/index.ts",
     "./control-plane": "./src/control-plane.ts",
     "./repository-provider-readiness": "./src/repository-provider-readiness.ts",
-    "./tenant-skill-repo": "./src/tenant-skill-repo.ts"
+    "./tenant-skill-repo": "./src/tenant-skill-repo.ts",
+    "./skill-intelligence": "./src/skill-intelligence.ts",
+    "./git-providers": "./src/git-providers.ts"
   }
 }

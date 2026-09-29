@@ -25,6 +25,16 @@ import type {
   SkillSourceResponse,
   SkillSourceUpdateRequest,
   SkillSourceUpdateResponse,
+  IngestTokenCreateResponse,
+  OptimizationJobResponse,
+  OptimizationTriggerRequest,
+  OrganizationIntelligenceResponse,
+  RecommendationReviewRequest,
+  SkillImprovementListResponse,
+  SkillImprovementResponse,
+  SkillIntelligenceResponse,
+  SkillIntelligenceSettings,
+  SkillIntelligenceSettingsResponse,
 } from "@savant/types";
 
 import type { EvaluationDetailResponse } from "./evaluation-detail-helpers.ts";
@@ -394,4 +404,91 @@ export function updateSkillSource(
       ...(options?.signal ? { signal: options.signal } : {}),
     },
   );
+}
+// ---------------------------------------------------------------------------
+// Skill Intelligence
+// ---------------------------------------------------------------------------
+
+function sendControlPlaneJson<T>(
+  path: string,
+  method: "POST" | "PUT",
+  body: unknown,
+  options?: TenantRequestOptions,
+): Promise<T> {
+  return fetchControlPlaneJson<T>(
+    buildTenantScopedControlPlanePath(path, options),
+    {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body ?? {}),
+      ...(options?.signal ? { signal: options.signal } : {}),
+    },
+  );
+}
+
+export function fetchSkillIntelligence(
+  id: string,
+  options?: TenantRequestOptions,
+): Promise<SkillIntelligenceResponse> {
+  return fetchControlPlaneJson<SkillIntelligenceResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/intelligence`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function fetchSkillImprovements(
+  id: string,
+  options?: TenantRequestOptions,
+): Promise<SkillImprovementListResponse> {
+  return fetchControlPlaneJson<SkillImprovementListResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/improvements`, options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function requestSkillOptimization(
+  id: string,
+  request: OptimizationTriggerRequest = {},
+  options?: TenantRequestOptions,
+): Promise<OptimizationJobResponse> {
+  return sendControlPlaneJson(`/api/skills/${encodeURIComponent(id)}/improvements`, "POST", request, options);
+}
+
+export function reviewImprovement(
+  id: string,
+  request: RecommendationReviewRequest & { devReviewerAlias?: string },
+  options?: TenantRequestOptions,
+): Promise<SkillImprovementResponse> {
+  return sendControlPlaneJson(`/api/improvements/${encodeURIComponent(id)}/review`, "POST", request, options);
+}
+
+export function stageImprovement(id: string, options?: TenantRequestOptions): Promise<SkillImprovementResponse> {
+  return sendControlPlaneJson(`/api/improvements/${encodeURIComponent(id)}/stage`, "POST", {}, options);
+}
+
+export function reevaluateImprovement(id: string, options?: TenantRequestOptions): Promise<OptimizationJobResponse> {
+  return sendControlPlaneJson(`/api/improvements/${encodeURIComponent(id)}/reevaluate`, "POST", {}, options);
+}
+
+export function fetchOrganizationIntelligence(options?: TenantRequestOptions): Promise<OrganizationIntelligenceResponse> {
+  return fetchControlPlaneJson<OrganizationIntelligenceResponse>(
+    buildTenantScopedControlPlanePath("/api/intelligence", options),
+    options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+export function updateSkillIntelligenceSettings(
+  settings: Partial<SkillIntelligenceSettings>,
+  options?: TenantRequestOptions,
+): Promise<SkillIntelligenceSettingsResponse> {
+  return sendControlPlaneJson("/api/intelligence/settings", "PUT", settings, options);
+}
+
+export function createTelemetryIngestToken(
+  request: { label: string; connectorId?: string },
+  options?: TenantRequestOptions,
+): Promise<IngestTokenCreateResponse> {
+  return sendControlPlaneJson("/api/intelligence/ingest-tokens", "POST", request, options);
 }

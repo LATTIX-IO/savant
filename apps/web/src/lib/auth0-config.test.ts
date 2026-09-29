@@ -222,6 +222,16 @@ test("isProtectedDashboardPath only gates dashboard and API routes", () => {
   assert.equal(isProtectedDashboardPath("/api/auth/login"), false);
 });
 
+test("isProtectedDashboardPath exempts only self-authenticated telemetry and worker APIs", () => {
+  assert.equal(isProtectedDashboardPath("/api/skill-runs"), false);
+  assert.equal(isProtectedDashboardPath("/api/skill-runs/run-1/feedback"), false);
+  assert.equal(isProtectedDashboardPath("/api/internal/optimization-jobs/claim"), false);
+  assert.equal(isProtectedDashboardPath("/api/skill-runs-export"), true);
+  assert.equal(isProtectedDashboardPath("/api/internal"), true);
+  assert.equal(isProtectedDashboardPath("/api/intelligence"), true);
+  assert.equal(isProtectedDashboardPath("/api/improvements/abc/review"), true);
+});
+
 test("getLegacyAuthRedirectPath upgrades legacy login URLs to the current sign-in and sign-up pages", () => {
   assert.equal(getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/login"), "/signin");
   assert.equal(

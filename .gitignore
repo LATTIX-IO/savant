@@ -38,3 +38,11 @@ yarn-error.log*
 
 .vercel
 .env*
+
+# python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+*.egg-info/
+uv.lock

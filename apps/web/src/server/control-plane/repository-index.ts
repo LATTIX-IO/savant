@@ -8,12 +8,9 @@ import type {
 } from "@savant/types";
 
 import { buildConnectedRepositoryListItem } from "./repository-connect.ts";
-import {
-  resolveRepositoryProviderAccessToken,
-  resolveRepositoryProviderConnection,
-  RepositoryProviderConnectionError,
-} from "./repository-provider-connection.ts";
-import { createProviderAuthenticatedFetch } from "./repository-provider-authenticated-fetch.ts";
+import { RepositoryProviderConnectionError } from "./repository-provider-connection.ts";
+import { GitProviderError } from "../git/errors.ts";
+import { syncRepository, type IndexSnapshotInput, type IndexWriter } from "../git/repository-sync-service.ts";
 import { parseRepositoryLocator } from "./repository-provider.ts";
 import {
   resolveRepositoryReadAdapter,
@@ -609,75 +606,6 @@ async function loadIndexableRepository(
   return repository;
 }
 
-async function markRepositoryIndexing(repositoryId: string) {
-  const { getControlPlaneDatabase } = await import("./database.ts");
-  const sql = getControlPlaneDatabase();
-
-  await sql`
-    update repository_sync_state
-    set
-      status = 'indexing',
-      error_code = null,
-      error_message = null
-    where repository_id = ${repositoryId}
-  `;
-}
-
-async function markRepositoryIndexFailure(input: {
-  organizationId: string;
-  actor: RepositoryIndexActor;
-  repositoryId: string;
-  syncMode: RepositorySyncMode;
-  now: Date;
-  code: string;
-  message: string;
-}) {
-  const { getControlPlaneDatabase } = await import("./database.ts");
-  const sql = getControlPlaneDatabase();
-  const nextPollAt = input.syncMode === "poll"
-    ? new Date(input.now.getTime() + 5 * 60 * 1000)
-    : null;
-
-  await sql.begin(async (tx) => {
-    await tx`
-      update repository_sync_state
-      set
-        status = 'error',
-        next_poll_at = ${nextPollAt},
-        error_code = ${input.code},
-        error_message = ${input.message.slice(0, 500)}
-      where repository_id = ${input.repositoryId}
-    `;
-
-    await tx`
-      insert into audit_events (
-        organization_id,
-        actor_type,
-        actor_ref,
-        category,
-        action,
-        target_type,
-        target_ref,
-        payload_redacted
-      )
-      values (
-        ${input.organizationId},
-        ${input.actor.type},
-        ${input.actor.ref},
-        'repo',
-        'repository_sync_failed',
-        'repository',
-        ${input.repositoryId},
-        ${tx.json({
-          code: input.code,
-          message: input.message,
-          nextPollAt: nextPollAt?.toISOString() ?? null,
-        })}
-      )
-    `;
-  });
-}
-
 async function persistRepositoryIndex(input: {
   organizationId: string;
   actor: RepositoryIndexActor;
@@ -831,7 +759,8 @@ async function persistRepositoryIndex(input: {
         last_successful_sync_at = ${input.now},
         next_poll_at = ${nextPollAt},
         error_code = null,
-        error_message = null
+        error_message = null,
+        sync_started_at = null
       where repository_id = ${input.repository.id}
       returning
         sync_mode as "syncMode",
@@ -939,6 +868,7 @@ function mapIndexingError(
 export async function indexTenantRepository(input: {
   context: ResolvedTenantContext;
   repositoryId: string;
+  trigger?: RepositoryIndexTrigger | undefined;
   requestedAt?: Date | undefined;
   now?: Date | undefined;
 }): Promise<RepoSyncPayload> {
@@ -957,95 +887,127 @@ export async function indexTenantRepository(input: {
       type: "user",
       ref: input.context.identity.subject,
     },
+    trigger: input.trigger,
     requestedAt: input.requestedAt,
     now: input.now,
   });
 }
 
+export type RepositoryIndexTrigger = "initial" | "manual" | "poll" | "webhook" | "reconciliation";
+
+function toRepositoryIndexError(error: unknown): RepositoryIndexError {
+  if (error instanceof RepositoryIndexError) {
+    return error;
+  }
+
+  if (error instanceof GitProviderError) {
+    return new RepositoryIndexError(error.code, error.message, error.status, error.details);
+  }
+
+  const mapped = mapIndexingError(error);
+  return new RepositoryIndexError(mapped.code, mapped.message, mapped.status, mapped.details);
+}
+
+/**
+ * Anonymous read for public repositories with no provider connection. Only
+ * reached when connection resolution found none (INV-GIT-01); a refusal is
+ * reported as an authorization problem rather than repository absence.
+ */
+async function readAnonymousIndexSnapshot(repository: IndexableRepositoryRow): Promise<IndexSnapshotInput> {
+  const locator = repository.canonicalCloneUrl
+    ? parseRepositoryLocator({ provider: repository.providerType, repoUrl: repository.canonicalCloneUrl })
+    : null;
+
+  if (!locator) {
+    throw new RepositoryIndexError("repository_locator_invalid", "The connected repository URL could not be parsed for indexing.", 409);
+  }
+
+  try {
+    const snapshot = await resolveRepositoryReadAdapter(locator.provider).readRepositoryIndexSnapshot(locator, {
+      branch: repository.defaultBranch,
+    });
+    return {
+      metadata: snapshot.metadata ?? {
+        externalId: "",
+        defaultBranch: snapshot.defaultBranch,
+        displayName: `${repository.ownerName}/${repository.repoName}`,
+        visibility: "unknown",
+      },
+      defaultBranch: snapshot.defaultBranch,
+      commitSha: snapshot.commitSha,
+      observedPaths: snapshot.observedPaths,
+      files: snapshot.files,
+    };
+  } catch (error) {
+    if (error instanceof RepositoryProviderError && (error.status === 401 || error.status === 403 || error.status === 404)) {
+      throw new GitProviderError(
+        "CONNECTION_REQUIRED",
+        `Savant read ${locator.normalizedUrl} anonymously because this workspace has no ${repository.providerType} connection, and the provider refused. Connect ${repository.providerType} in Settings → Source control, then run Sync.`,
+      );
+    }
+    throw error;
+  }
+}
+
+function createDatabaseIndexWriter(repository: IndexableRepositoryRow): IndexWriter<ParsedRepositoryIndex, RepoSyncPayload> {
+  return {
+    validate: (snapshot) => parseRepositoryIndexSnapshot(snapshot),
+    skillCount: (parsed) => parsed.skills.length,
+    commit: async (input) => persistRepositoryIndex({
+      organizationId: input.organizationId,
+      actor: input.actor,
+      repository: {
+        ...repository,
+        defaultBranch: input.snapshot.defaultBranch,
+      },
+      snapshot: input.snapshot,
+      parsed: input.parsed,
+      now: input.now,
+    }),
+  };
+}
+
+/**
+ * Indexes a repository through the provider-independent sync pipeline:
+ * resolve the exact provider connection, obtain a credential from the broker,
+ * read the tree and skill files through the GitProvider contract, validate,
+ * then atomically replace the index. Failures leave the previous index intact.
+ */
 export async function indexRepositoryById(input: {
   organizationId: string;
   repositoryId: string;
   actor: RepositoryIndexActor;
+  trigger?: RepositoryIndexTrigger | undefined;
   requestedAt?: Date | undefined;
   now?: Date | undefined;
 }): Promise<RepoSyncPayload> {
-
   const repository = await loadIndexableRepository(
     input.organizationId,
     input.repositoryId,
   );
-  const syncMode = repository.syncMode ?? "manual";
-
-  if (!repository.canonicalCloneUrl) {
-    throw new RepositoryIndexError(
-      "repository_locator_missing",
-      "A canonical repository URL is required before Savant can index this repository.",
-      409,
-    );
-  }
-
-  const locator = parseRepositoryLocator({
-    provider: repository.providerType,
-    repoUrl: repository.canonicalCloneUrl,
-  });
-
-  if (!locator) {
-    throw new RepositoryIndexError(
-      "repository_locator_invalid",
-      "The connected repository URL could not be parsed for indexing.",
-      409,
-    );
-  }
-
-  const requestedAt = input.requestedAt ?? input.now ?? new Date();
-  const now = input.now ?? requestedAt;
-
-  await markRepositoryIndexing(repository.id);
+  const now = input.now ?? input.requestedAt ?? new Date();
+  const { getGitRuntime } = await import("../git/runtime.ts");
+  const runtime = await getGitRuntime();
 
   try {
-    const fetcher = repository.connectionId
-      ? createProviderAuthenticatedFetch(
-          repository.providerType,
-          resolveRepositoryProviderAccessToken(
-            await resolveRepositoryProviderConnection({
-              organizationId: input.organizationId,
-              provider: repository.providerType,
-              connectionId: repository.connectionId,
-            }),
-          ),
-        )
-      : undefined;
-    const snapshot = await resolveRepositoryReadAdapter(locator.provider).readRepositoryIndexSnapshot(locator, {
-      branch: repository.defaultBranch,
-      ...(fetcher ? { fetcher } : {}),
-    });
-    const parsed = parseRepositoryIndexSnapshot(snapshot);
-
-    return persistRepositoryIndex({
+    const synced = await syncRepository({
+      connections: runtime.stores.connections,
+      repositories: runtime.stores.repositories,
+      broker: runtime.broker,
+      audit: runtime.stores.audit,
+      writer: createDatabaseIndexWriter(repository),
+      readAnonymousSnapshot: () => readAnonymousIndexSnapshot(repository),
+    }, {
       organizationId: input.organizationId,
-      actor: input.actor,
-      repository,
-      snapshot,
-      parsed,
-      now,
-    });
-  } catch (error) {
-    const mapped = mapIndexingError(error);
-
-    await markRepositoryIndexFailure({
-      organizationId: input.organizationId,
-      actor: input.actor,
       repositoryId: repository.id,
-      syncMode,
+      actor: input.actor,
+      trigger: input.trigger ?? "manual",
+      ref: repository.defaultBranch,
       now,
-      code: mapped.code,
-      message: mapped.message,
     });
 
-    if (error instanceof RepositoryIndexError || error instanceof RepositoryProviderError) {
-      throw error;
-    }
-
-    throw new RepositoryIndexError(mapped.code, mapped.message, mapped.status, mapped.details);
+    return synced.result;
+  } catch (error) {
+    throw toRepositoryIndexError(error);
   }
 }

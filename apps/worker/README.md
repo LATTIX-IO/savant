@@ -11,3 +11,7 @@ The first runtime decision for background processing will be made after the Rust
 For the first integrated beta, prefer the lightest job mechanism that can provide retries and idempotency without introducing a separate deployment target prematurely. Extract queue-driven or long-running execution here once benchmark data or production pressure shows that `apps/web` is no longer a safe host for those workloads.
 
 See `docs/architecture/adr-0001-beta-runtime-boundary.md` for the accepted beta-scope decision.
+
+## Skill Intelligence worker
+
+The first background workload, the Skill Intelligence / SkillOpt optimization worker, lives in `services/skill-intelligence` (Python, because SkillOpt is Python). It pulls leased jobs from the control plane's internal API and holds no database credentials. See `docs/architecture/skill-intelligence.md`.

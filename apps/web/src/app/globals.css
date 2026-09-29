@@ -293,31 +293,23 @@ a { color: inherit; text-decoration: none; }
 }
 
 .savant-logo {
-  position: relative;
-  display: inline-block;
-  width: 118px;
+  display: inline-flex;
+  align-items: center;
   height: 32px;
-  overflow: hidden;
+  width: auto;
 }
 
 .savant-logo-image {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: block;
-  height: auto;
+  height: 100%;
+  width: auto;
   max-width: none;
 }
 
-.savant-logo-image-light-surface {
-  width: 102.8%;
-  transform: translate(-1.3%, -5.5%);
-}
-
-.savant-logo-image-dark-surface {
-  width: 106.4%;
-  transform: translate(-3.3%, -7.7%);
-}
+/* Pick the tone variant from the theme set on <html> before first paint. */
+.savant-logo-for-dark { display: none; }
+:root[data-theme="dark"] .savant-logo-for-light { display: none; }
+:root[data-theme="dark"] .savant-logo-for-dark { display: block; }
 
 .nav {
   flex: 1;

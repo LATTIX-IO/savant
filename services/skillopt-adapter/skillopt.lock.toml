@@ -1,0 +1,65 @@
+# Pinned optimization engine configuration. Recorded (with its hash) as
+# provenance on every optimization run and every improvement recommendation.
+#
+# Change this file only through code review: a different engine version,
+# commit, or command template produces a different config_hash, and existing
+# recommendations keep pointing at the configuration that generated them.
+
+[engine]
+name = "skillopt"
+display_name = "Microsoft SkillOpt"
+version = "0.2.0"
+# Set to an exact commit SHA when relying on features that postdate the PyPI
+# release (e.g. handoff mode or reviewed subset adoption). Empty = PyPI release.
+source_commit = ""
+python = ">=3.11"
+
+[optimizer]
+# Defaults; the control plane's tenant provider governance chooses the backend.
+default_model = "gpt-5"
+default_backend = "azure-openai"
+
+# Command templates used by SkillOptCliEngine. Placeholders are substituted with
+# sandbox-local paths and budget values; nothing else is interpolated.
+# These must be verified against the pinned SkillOpt release before enabling
+# the "skillopt" engine in production (`python -m savant_skillopt_adapter doctor`).
+[commands]
+optimize = [
+  "skillopt", "train",
+  "--skill", "{skill_path}",
+  "--train", "{train_path}",
+  "--val", "{val_path}",
+  "--backend", "{backend}",
+  "--model", "{model}",
+  "--iterations", "{max_iterations}",
+  "--lr", "{learning_rate}",
+  "--out", "{output_dir}",
+]
+evaluate = [
+  "skillopt", "eval",
+  "--skill", "{skill_path}",
+  "--tasks", "{cases_path}",
+  "--backend", "{backend}",
+  "--model", "{model}",
+  "--out", "{scores_path}",
+]
+
+[sandbox]
+timeout_seconds = 1800
+max_memory_mb = 4096
+max_output_bytes = 5000000
+# Only these environment variables reach the engine process. Database URLs,
+# worker tokens, and encryption keys can never be inherited.
+env_allowlist = [
+  "PATH", "SYSTEMROOT", "TEMP", "TMP", "LANG", "LC_ALL",
+  "AZURE_OPENAI_API_KEY", "AZURE_OPENAI_ENDPOINT", "AZURE_OPENAI_API_VERSION",
+  "OPENAI_API_KEY", "OPENAI_BASE_URL",
+  "ANTHROPIC_API_KEY",
+]
+# Hosts the engine may reach. Enforced by the deployment network policy; the
+# adapter additionally refuses to launch against a non-allowlisted endpoint.
+egress_allowlist = [
+  "*.openai.azure.com",
+  "api.openai.com",
+  "api.anthropic.com",
+]

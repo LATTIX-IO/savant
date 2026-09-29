@@ -42,7 +42,14 @@ import {
 import { buildRepositoryWebUrl } from "@/lib/repository-links";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 
-type TabKey = "evaluation" | "builder" | "versions" | "access" | "activity";
+import {
+  ImprovementsTab,
+  InsightsTab,
+  RunsTab,
+  useSkillIntelligence,
+} from "./skill-intelligence-tabs";
+
+type TabKey = "evaluation" | "builder" | "runs" | "insights" | "improvements" | "versions" | "access" | "activity";
 
 type LoadStatus = "idle" | "loading" | "error" | "success";
 
@@ -149,6 +156,7 @@ export function SkillScreen({ skillId }: { skillId: string }) {
     (current: number) => current + 1,
     0,
   );
+  const skillIntelligence = useSkillIntelligence(skillId, reloadToken);
   const sourceSkillId = source?.skillId ?? null;
   const sourceSkillUuid = source?.skillUuid ?? null;
 
@@ -458,6 +466,12 @@ export function SkillScreen({ skillId }: { skillId: string }) {
           [
             ["builder", "Builder", queuedRecommendations.length > 0 ? `${queuedRecommendations.length} queued` : source?.mode === "repository" ? source.sourcePath : undefined],
             ["evaluation", "Evaluation", `${detail.flaggedCases.length} flagged`],
+            ["runs", "Runs", skillIntelligence.intelligence.data ? `${skillIntelligence.intelligence.data.health.runCount}` : undefined],
+            ["insights", "Insights", skillIntelligence.intelligence.data?.health.composite != null ? `${skillIntelligence.intelligence.data.health.composite}` : undefined],
+            ["improvements", "Improvements", (() => {
+              const ready = (skillIntelligence.improvements.data ?? []).filter((recommendation) => recommendation.status === "ready-for-review").length;
+              return ready > 0 ? `${ready} ready` : undefined;
+            })()],
             ["versions", "Versions", `${skill.versionCount}`],
             ["access", "Access"],
             ["activity", "Activity"],
@@ -506,6 +520,17 @@ export function SkillScreen({ skillId }: { skillId: string }) {
             setSaveMessage(null);
             setBuilderFeedback(null);
           }}
+        />
+      )}
+      {tab === "runs" && <RunsTab state={skillIntelligence.intelligence} />}
+      {tab === "insights" && (
+        <InsightsTab state={skillIntelligence.intelligence} skillId={skillId} onChanged={skillIntelligence.reload} />
+      )}
+      {tab === "improvements" && (
+        <ImprovementsTab
+          state={skillIntelligence.improvements}
+          isDevelopment={process.env.NODE_ENV === "development"}
+          onChanged={skillIntelligence.reload}
         />
       )}
       {tab === "versions" && <VersionsTab detail={detail} />}

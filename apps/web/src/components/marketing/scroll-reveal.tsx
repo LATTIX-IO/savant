@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { useEffect } from "react";
 
 /**
@@ -8,8 +9,11 @@ import { useEffect } from "react";
  * marketing.css to fade + lift the element into place.
  *
  * Mounted once at the top of the marketing layout — no per-component setup.
+ * Re-runs on client-side navigation so each page's elements get observed.
  */
 export function ScrollRevealObserver() {
+  const pathname = usePathname();
+
   useEffect(() => {
     if (typeof window === "undefined" || typeof IntersectionObserver === "undefined") {
       return;
@@ -45,7 +49,7 @@ export function ScrollRevealObserver() {
     targets.forEach((el) => observer.observe(el));
 
     return () => observer.disconnect();
-  }, []);
+  }, [pathname]);
 
   return null;
 }

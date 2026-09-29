@@ -1,0 +1,133 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Savant identity tokens
+   institutional intelligence · governance · precision · continuous improvement
+
+   Palette values are the raw brand; semantic tokens are what components use.
+   Dark sections and dark mode override the semantic layer only — never add
+   ad hoc colours in component CSS.
+   ───────────────────────────────────────────────────────────────────────── */
+
+:root {
+  /* Brand palette */
+  --color-ink: #181916;
+  --color-cloud: #F6F5F1;
+  --color-stone: #D9DAD4;
+  --color-sage: #68745B;
+  --color-signal: #F2CD35;
+  --color-graphite: #292A27;
+
+  /* Motion */
+  --motion-fast: 140ms;
+  --motion-standard: 240ms;
+  --motion-slow: 480ms;
+  --motion-system: 800ms;
+  --ease-standard: cubic-bezier(.2, .8, .2, 1);
+  --ease-linear-system: cubic-bezier(.4, 0, .2, 1);
+
+  /* Radius — precise, never soft consumer SaaS */
+  --radius-control: 5px;
+  --radius-system: 7px;
+  --radius-panel: 10px;
+  --radius-pill: 999px;
+
+  /* Layout */
+  --layout-max: 1440px;
+  --layout-content: 1248px;
+  --layout-gutter: clamp(16px, 3.4vw, 48px);
+  --section-y: clamp(72px, 10vw, 168px);
+  --section-y-tight: clamp(56px, 7vw, 112px);
+}
+
+/* Semantic layer — light (default art direction) */
+.savant-theme {
+  --surface-primary: var(--color-cloud);
+  --surface-secondary: #EFEFEA;
+  --surface-raised: #FBFBF8;
+  --surface-dark: var(--color-graphite);
+  --surface-inverse: var(--color-ink);
+
+  --text-primary: var(--color-ink);
+  --text-secondary: #3E403B;
+  --text-muted: #62645E;
+  --text-inverse: var(--color-cloud);
+
+  --border-light: rgba(24, 25, 22, .12);
+  --border-strong: rgba(24, 25, 22, .26);
+
+  /* Sage: governance, structure, positive trends. `--sage-text` is tuned for
+     4.5:1 on Cloud; the raw brand sage is for strokes and geometry. */
+  --sage-line: var(--color-sage);
+  --sage-text: #56624A;
+  --sage-wash: #E6E9E0;
+
+  /* Signal: activity, intelligence, attention. Never body text on light. */
+  --signal: var(--color-signal);
+  --signal-ink: #6E5A06;
+  --signal-wash: #F8EDC0;
+
+  --attention: #8B3A2F;
+
+  --orbit-line: var(--color-sage);
+  --orbit-line-soft: rgba(104, 116, 91, .34);
+  --node-idle: var(--surface-primary);
+  --node-on: var(--color-ink);
+
+  --action-bg: var(--color-ink);
+  --action-bg-hover: #30322D;
+  --action-fg: var(--color-cloud);
+
+  --focus-ring: #181916;
+  --nav-scrolled: rgba(246, 245, 241, .86);
+
+  color-scheme: light;
+}
+
+/* Dark mode — designed, not inverted. Graphite canvas, Cloud text, Stone
+   secondary, white/sage orbit lines, Signal preserved. */
+html[data-theme="dark"] .savant-theme,
+.savant-theme .savant-dark,
+.savant-theme.savant-dark {
+  --surface-primary: var(--color-graphite);
+  --surface-secondary: #23241F;
+  --surface-raised: #32332F;
+  --surface-dark: #1E1F1B;
+  --surface-inverse: var(--color-cloud);
+
+  --text-primary: var(--color-cloud);
+  --text-secondary: var(--color-stone);
+  --text-muted: #A9ABA3;
+  --text-inverse: var(--color-ink);
+
+  --border-light: rgba(246, 245, 241, .13);
+  --border-strong: rgba(246, 245, 241, .28);
+
+  --sage-line: #8F9C80;
+  --sage-text: #AEBB9F;
+  --sage-wash: rgba(143, 156, 128, .16);
+
+  --signal-ink: var(--color-signal);
+  --signal-wash: rgba(242, 205, 53, .14);
+
+  --attention: #E0917F;
+
+  --orbit-line: rgba(246, 245, 241, .62);
+  --orbit-line-soft: rgba(174, 187, 159, .30);
+  --node-idle: var(--surface-primary);
+  --node-on: var(--color-cloud);
+
+  --action-bg: var(--color-cloud);
+  --action-bg-hover: #FFFFFF;
+  --action-fg: var(--color-ink);
+
+  --focus-ring: var(--color-signal);
+  --nav-scrolled: rgba(41, 42, 39, .86);
+
+  color-scheme: dark;
+}
+
+/* Dark sections sit on a slightly deeper field in dark mode so they still read
+   as emphasis rather than disappearing into the canvas. */
+html[data-theme="dark"] .savant-theme .savant-dark {
+  --surface-primary: #1E1F1B;
+  --surface-raised: #2A2B27;
+}

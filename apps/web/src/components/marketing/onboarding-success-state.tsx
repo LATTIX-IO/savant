@@ -8,6 +8,7 @@ import {
   type OnboardingStatusView,
 } from "@/lib/onboarding";
 import { Ic } from "@/components/savant/icons";
+import { trackMarketingEvent } from "@/lib/marketing-analytics";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { formatWorkspaceUrlForDisplay } from "@/lib/workspace-url";
 
@@ -66,6 +67,13 @@ export function OnboardingSuccessState({
       window.clearInterval(intervalId);
     };
   }, [onboardingSessionId, sessionId, status.isTerminal]);
+
+  const isReady = status.status === "ready";
+  useEffect(() => {
+    if (isReady) {
+      trackMarketingEvent("signup_complete", { sandbox: isSandbox });
+    }
+  }, [isReady, isSandbox]);
 
   const workspaceUrl = formatWorkspaceUrlForDisplay(status.workspaceSlug);
   const dashboardHref = buildTenantAppPath(status.workspaceSlug, "/dashboard");

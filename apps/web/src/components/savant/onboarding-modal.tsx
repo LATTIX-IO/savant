@@ -23,6 +23,7 @@ import {
   buildTenantScopedControlPlanePath,
   provisionRepository,
 } from "@/lib/control-plane-client";
+import { trackMarketingEvent } from "@/lib/marketing-analytics";
 
 type Path = "connect" | "provision";
 type ProviderId = "github" | "gitlab" | "azure" | "bitbucket" | "selfhosted" | "more";
@@ -330,6 +331,7 @@ export function OnboardingModal() {
       });
 
       reportRepositoryConnected(payload.data.repository.id);
+      trackMarketingEvent("repository_connect_complete", { provider });
       setProvisionPersist({ status: "success", data: payload.data });
     } catch (error) {
       setProvisionPersist({

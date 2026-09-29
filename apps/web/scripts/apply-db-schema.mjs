@@ -51,9 +51,21 @@ if (!databaseUrl) {
   process.exit(1);
 }
 
-const schemaFiles = await loadSchemaFiles();
+// Optional `--only=0006,0007` restricts the run to schema files with those prefixes.
+const onlyArgument = process.argv.find((argument) => argument.startsWith("--only="));
+const onlyPrefixes = onlyArgument
+  ? onlyArgument.slice("--only=".length).split(",").map((prefix) => prefix.trim()).filter(Boolean)
+  : null;
+
+const schemaFiles = (await loadSchemaFiles()).filter(
+  (schemaFile) => !onlyPrefixes || onlyPrefixes.some((prefix) => schemaFile.startsWith(prefix)),
+);
 if (schemaFiles.length === 0) {
-  console.error(`No schema files were found in ${SCHEMA_DIR}.`);
+  console.error(
+    onlyPrefixes
+      ? `No schema files in ${SCHEMA_DIR} match --only=${onlyPrefixes.join(",")}.`
+      : `No schema files were found in ${SCHEMA_DIR}.`,
+  );
   process.exit(1);
 }
 

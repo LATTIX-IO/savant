@@ -59,6 +59,8 @@ export const VALID_SKILL_FILES: Record<string, string> = {
     'status: "draft"',
   ].join("\n") + "\n",
   "tier2/methodology/legal/contract-review-assistant/SKILL.md": "# Contract Review Assistant\n\nReview contracts.\n",
+  "tier2/methodology/legal/contract-review-assistant/agents/reviewer.md": "# Reviewer\n",
+  "tier2/methodology/legal/contract-review-assistant/eval/cases.yaml": "cases: []\n",
 };
 
 export const MALFORMED_SKILL_FILES: Record<string, string> = {

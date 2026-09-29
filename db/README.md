@@ -19,7 +19,7 @@ These store state that is not hosted in Git:
 
 - organizations, users, groups, and memberships
 - role bindings and policy bindings
-- Git provider connections, repository registrations, and sync state
+- Git provider connections, repository registrations, and sync state. `0006_git_provider_integration.sql` adds managed provider connections (GitHub App installations, OAuth, manual tokens, and `legacy_env` rows that still reference a deployment env var), encrypted credentials in `git_provider_secrets` (key held outside the database), single-use OAuth state in `git_oauth_states`, and the explicit `repository_connections` association. See `docs/architecture/git-provider-integration.md`
 - review requests, comments, release approvals, and rollout targets
 - connector installations and sync runs
 - workspace settings and immutable audit events

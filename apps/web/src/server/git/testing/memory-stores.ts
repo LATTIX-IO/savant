@@ -103,7 +103,6 @@ export function createMemoryGitStores(state: MemoryGitState = createMemoryGitSta
           providerScope: input.providerScope,
           scopes: input.scopes,
           status: "active",
-          credentialsRef: null,
           lastErrorCode: null,
           lastErrorAt: null,
           lastValidatedAt: timestamp,

@@ -23,6 +23,8 @@ import {
 } from "@/lib/control-plane-client";
 import { extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 
+import { RepositoryConnectionControls } from "./repository-connection-controls";
+
 type ProviderFilter = "all" | "github" | "gitlab" | "azure" | "bitbucket";
 
 export function RepositoriesScreen() {
@@ -495,6 +497,22 @@ export function RepositoriesScreen() {
                   repository={sel}
                   syncing={syncingRepositoryId === sel.id}
                   onRetry={() => void requestRepositorySyncFor(sel.id, "manual")}
+                />
+
+                <RepositoryConnectionControls
+                  key={sel.id}
+                  repository={sel}
+                  onChanged={(message) => {
+                    setSyncNotice({ tone: "default", message });
+                    setReloadListToken((value) => value + 1);
+                    setReloadDetailToken((value) => value + 1);
+                  }}
+                  onRemoved={(message) => {
+                    setSyncNotice({ tone: "default", message });
+                    setSelId("");
+                    setDetail(null);
+                    setReloadListToken((value) => value + 1);
+                  }}
                 />
 
                 <div className="divider" />

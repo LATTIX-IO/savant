@@ -128,7 +128,8 @@ function createConnectionStore(sql: Sql, root: ControlPlaneSql): GitConnectionSt
             provider_scope = ${input.providerScope},
             scopes = ${sql.json(input.scopes)},
             status = 'active',
-            credentials_ref = null,
+            -- credentials_ref is kept: repository write operations still use the
+            -- deployment-managed credential of a converted legacy connection.
             last_error_code = null,
             last_error_at = null,
             last_validated_at = now(),

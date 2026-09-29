@@ -342,7 +342,7 @@ export function createBitbucketProvider(options?: BitbucketProviderOptions): Git
     type: "bitbucket",
     label: "Bitbucket",
     hierarchy: ["Workspace", "Project", "Repository"],
-    requestedAccess: ["Repositories: Read", "Account: Read"],
+    requestedAccess: ["Repositories: Read", "Account: Read", "Workspace membership: Read"],
     capabilities: {
       primaryAuth: "oauth",
       supportsRefresh: true,
@@ -362,7 +362,7 @@ export function createBitbucketProvider(options?: BitbucketProviderOptions): Git
         return null;
       }
       const appBaseUrl = (env.APP_BASE_URL ?? "<APP_BASE_URL>").replace(/\/+$/, "");
-      return `Set BITBUCKET_OAUTH_CLIENT_ID and BITBUCKET_OAUTH_CLIENT_SECRET. Create a Bitbucket OAuth consumer with only Account: Read and Repositories: Read permissions and the callback URL ${appBaseUrl}/api/git/connections/bitbucket/callback.`;
+      return `Set BITBUCKET_OAUTH_CLIENT_ID and BITBUCKET_OAUTH_CLIENT_SECRET. Create a Bitbucket OAuth client with only Account: Read, Workspace membership: Read and Repositories: Read and the callback URL ${appBaseUrl}/api/git/connections/bitbucket/callback.`;
     },
 
     async getAuthorizationUrl(request) {

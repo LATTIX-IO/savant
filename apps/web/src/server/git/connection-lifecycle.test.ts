@@ -227,3 +227,22 @@ test("legacy env connections keep working through the broker and are flagged as 
   assert.equal(summary?.isLegacy, true);
   assert.ok(!JSON.stringify(summary).includes("GITHUB_WRITE_TOKEN"));
 });
+
+test("reauthorizing a legacy connection converts reads to the managed credential and keeps the write reference", async () => {
+  const { provider } = createFakeGitProvider({ type: "gitlab" });
+  const harness = createGitTestHarness({ providers: [provider] });
+  const legacy = harness.seedConnection({ organizationId: ORG_A, provider: "gitlab", authType: "legacy_env", credentialsRef: "GITLAB_WRITE_TOKEN", providerAccountId: null });
+  const actor = harness.actor(ORG_A);
+
+  const url = new URL(await harness.connections.startAuthorization(actor, { provider: "gitlab", reauthorizeConnectionId: legacy.id }));
+  const query = new URLSearchParams({ state: url.searchParams.get("state") ?? "", code: SAMPLE_TOKENS.authorizationCode });
+  const completed = await harness.connections.completeAuthorization({ provider: "gitlab", query, userSubject: actor.subject });
+
+  assert.equal(completed.connection.id, legacy.id);
+  assert.equal(completed.connection.isLegacy, false);
+  assert.equal(harness.state.connections.length, 1);
+  assert.equal(harness.state.connections[0]?.authType, "oauth");
+  assert.equal(harness.state.connections[0]?.credentialsRef, "GITLAB_WRITE_TOKEN");
+  const resolved = await harness.broker.resolve({ organizationId: ORG_A, connectionId: legacy.id });
+  assert.equal(resolved.credential.accessToken, SAMPLE_TOKENS.valid);
+});

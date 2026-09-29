@@ -372,8 +372,19 @@ function ProviderCard({
           </div>
         </div>
         {canManage && (
-          <button type="button" className="btn btn-sm btn-primary" disabled={!connectable || busy === `connect:${provider.type}`} onClick={onConnect}>
-            {busy === `connect:${provider.type}` ? "Redirecting…" : connections.length > 0 ? "Connect another" : "Connect"}
+          <button
+            type="button"
+            className={`btn btn-sm ${connectable ? "btn-primary" : ""}`}
+            disabled={!connectable || busy === `connect:${provider.type}`}
+            onClick={onConnect}
+            title={connectable ? undefined : provider.configurationHint ?? "Not configured on this deployment."}
+            style={connectable ? undefined : { opacity: 0.55, cursor: "not-allowed" }}
+          >
+            {!connectable
+              ? "Not configured"
+              : busy === `connect:${provider.type}`
+                ? "Redirecting…"
+                : connections.length > 0 ? "Connect another" : "Connect"}
           </button>
         )}
       </div>

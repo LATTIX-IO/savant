@@ -1,4 +1,4 @@
-import { createSign } from "node:crypto";
+import { createPrivateKey, createSign } from "node:crypto";
 
 import { GitProviderError } from "../errors.ts";
 import { decodeCursor, encodeCursor, encodePathSegments, providerJson, providerRequest, readNextLink } from "../http.ts";
@@ -119,6 +119,31 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
   const config = () => options?.config ?? readGitHubAppConfig(env);
   const now = options?.now ?? Date.now;
   const webHost = () => new URL(config().webBaseUrl).host;
+
+  /**
+   * Env vars still needed. The OAuth client is required in production because
+   * installation ownership is verified with it at callback time.
+   */
+  function missingConfiguration(): string[] {
+    const cfg = config();
+    const required: Array<[string, string | null]> = [
+      ["GITHUB_APP_ID", cfg.appId],
+      ["GITHUB_APP_SLUG", cfg.appSlug],
+      ["GITHUB_APP_PRIVATE_KEY", cfg.privateKey],
+    ];
+    if (env.NODE_ENV === "production" && env.GITHUB_APP_ALLOW_UNVERIFIED_INSTALLATIONS !== "true") {
+      required.push(["GITHUB_APP_CLIENT_ID", cfg.clientId], ["GITHUB_APP_CLIENT_SECRET", cfg.clientSecret]);
+    }
+    const missing = required.filter(([, value]) => !value).map(([name]) => name);
+    if (cfg.privateKey) {
+      try {
+        createPrivateKey(cfg.privateKey);
+      } catch {
+        missing.push("GITHUB_APP_PRIVATE_KEY (not a valid PEM private key; paste the whole .pem file, including the BEGIN/END lines)");
+      }
+    }
+    return missing;
+  }
 
   async function mintInstallationToken(installationId: string, context?: ProviderRuntimeContext): Promise<InstallationToken> {
     const cached = installationTokenCache.get(installationId);
@@ -241,14 +266,14 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
     },
 
     isConfigured() {
-      const cfg = config();
-      return Boolean(cfg.appId && cfg.appSlug && cfg.privateKey);
+      return missingConfiguration().length === 0;
     },
 
     configurationHint() {
-      return provider.isConfigured()
+      const missing = missingConfiguration();
+      return missing.length === 0
         ? null
-        : "Set GITHUB_APP_ID, GITHUB_APP_SLUG, GITHUB_APP_PRIVATE_KEY, GITHUB_APP_CLIENT_ID and GITHUB_APP_CLIENT_SECRET for the Savant GitHub App.";
+        : `The Savant GitHub App is not configured on this deployment. Missing: ${missing.join(", ")}.`;
     },
 
     async getAuthorizationUrl(request) {

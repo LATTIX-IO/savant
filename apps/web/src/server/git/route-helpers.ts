@@ -45,7 +45,7 @@ export async function readJsonBody(request: Request): Promise<Record<string, unk
   } catch {
     // Fall through.
   }
-  throw new GitProviderError("INVALID_PROVIDER_RESPONSE", "Expected a JSON object request body.", { status: 400 });
+  throw new GitProviderError("INVALID_REQUEST", "Expected a JSON object request body.");
 }
 
 export function readOptionalString(body: Record<string, unknown>, key: string, maxLength: number): string | undefined {
@@ -58,7 +58,7 @@ export function readOptionalString(body: Record<string, unknown>, key: string, m
     return undefined;
   }
   if (trimmed.length > maxLength) {
-    throw new GitProviderError("INVALID_PROVIDER_RESPONSE", `${key} is too long.`, { status: 400 });
+    throw new GitProviderError("INVALID_REQUEST", `${key} is too long.`);
   }
   return trimmed;
 }

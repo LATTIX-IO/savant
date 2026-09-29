@@ -121,7 +121,6 @@ function sanitizeProviderText(value: string | null | undefined, maxLength = 300)
   if (!value) {
     return "";
   }
-  // eslint-disable-next-line no-control-regex
   const cleaned = redactString(value.replace(/[\u0000-\u001f\u007f]+/g, " ").trim());
   return cleaned.length > maxLength ? `${cleaned.slice(0, maxLength)}…` : cleaned;
 }

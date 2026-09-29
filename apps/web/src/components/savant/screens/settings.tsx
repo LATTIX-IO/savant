@@ -10,7 +10,7 @@ import type {
   WorkspaceSecuritySettings,
   WorkspaceSettingsPayload,
 } from "@savant/types";
-import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 
 import type { AuthViewer } from "@/lib/auth0-session";
 import {
@@ -25,10 +25,13 @@ import {
   setAIConnectionDefaults,
 } from "@/lib/control-plane-client";
 
+import { SourceControlSection } from "./settings-source-control";
+
 const SECTIONS: { id: SettingsSectionId; label: string; sub: string }[] = [
   { id: "general", label: "General", sub: "Org identity & defaults" },
   { id: "auth", label: "Authentication", sub: "SSO, IdP, MFA" },
   { id: "ai", label: "AI providers", sub: "BYO models & key routing" },
+  { id: "source-control", label: "Source control", sub: "Integrations · Git providers" },
   { id: "members", label: "Members", sub: "Users & groups" },
   { id: "security", label: "Security", sub: "Keys, audit retention" },
   { id: "notifications", label: "Notifications", sub: "Alerts & subscriptions" },
@@ -43,6 +46,18 @@ export function SettingsScreen({
   settings: WorkspaceSettingsPayload;
 }) {
   const [section, setSection] = useState<SettingsSectionId>("general");
+
+  // Deep links such as the provider OAuth return (?section=source-control) open a section directly.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("section");
+    const match = SECTIONS.find((candidate) => candidate.id === requested);
+    if (!match) {
+      return;
+    }
+
+    const timeoutHandle = window.setTimeout(() => setSection(match.id), 0);
+    return () => window.clearTimeout(timeoutHandle);
+  }, []);
   const visibleSections = getVisibleSettingsSectionIds().map((id) => SECTIONS.find((section) => section.id === id)!).filter(Boolean);
   const activeSection = visibleSections.some((visibleSection) => visibleSection.id === section)
     ? section
@@ -119,6 +134,9 @@ export function SettingsScreen({
               members={settings.members}
               connections={settings.aiConnections}
             />
+          )}
+          {activeSection === "source-control" && (
+            <SourceControlSection canManage={canViewerManageAIConnections(viewer, settings.members)} />
           )}
           {activeSection === "members" && <MembersSection members={settings.members} />}
           {activeSection === "security" && <SecuritySection settings={settings.security} />}

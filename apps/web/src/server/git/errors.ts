@@ -30,6 +30,7 @@ const HTTP_STATUS_BY_CODE: Record<GitProviderErrorCode, number> = {
   PROVIDER_HOST_REJECTED: 400,
   AUTHORIZATION_STATE_INVALID: 400,
   PERMISSION_DENIED: 403,
+  INVALID_REQUEST: 400,
 };
 
 /** Codes that indicate the connection's authorization itself is no longer usable. */

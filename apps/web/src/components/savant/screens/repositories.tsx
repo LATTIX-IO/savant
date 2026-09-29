@@ -21,6 +21,7 @@ import {
   fetchRepositoryList,
   triggerRepositorySync,
 } from "@/lib/control-plane-client";
+import { extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 
 type ProviderFilter = "all" | "github" | "gitlab" | "azure" | "bitbucket";
 
@@ -414,7 +415,7 @@ export function RepositoriesScreen() {
                         </td>
                         <td className="muted">{r.lastSync}</td>
                         <td>
-                          <RepositoryStatusPill status={r.status} />
+                          <RepositoryStatusPill status={r.status} syncState={r.syncState} skills={r.skills} />
                         </td>
                       </tr>
                     ))}
@@ -489,6 +490,12 @@ export function RepositoriesScreen() {
                     {det.description}
                   </div>
                 </div>
+
+                <RepositorySyncIssue
+                  repository={sel}
+                  syncing={syncingRepositoryId === sel.id}
+                  onRetry={() => void requestRepositorySyncFor(sel.id, "manual")}
+                />
 
                 <div className="divider" />
 
@@ -585,7 +592,120 @@ export function RepositoriesScreen() {
   );
 }
 
-function RepositoryStatusPill({ status }: { status: RepositorySyncStatus }) {
+const SYNC_ISSUE_PROVIDER_LABELS: Record<string, string> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  bitbucket: "Bitbucket",
+  azure: "Azure Repos",
+};
+
+function sourceControlSettingsHref(): string {
+  const slug = typeof window === "undefined" ? null : extractWorkspaceSlugFromPathname(window.location.pathname);
+  return slug ? `/o/${encodeURIComponent(slug)}/settings?section=source-control` : "/settings?section=source-control";
+}
+
+/**
+ * Repository connected but not readable: shows the specific remediation
+ * instead of a generic error, keeping connection and indexing state distinct.
+ */
+function RepositorySyncIssue({
+  repository,
+  syncing,
+  onRetry,
+}: {
+  repository: RepositoryListItem;
+  syncing: boolean;
+  onRetry: () => void;
+}) {
+  const state = repository.syncState;
+  if (state !== "auth_required" && state !== "access_revoked" && state !== "failed") {
+    return null;
+  }
+
+  const provider = SYNC_ISSUE_PROVIDER_LABELS[repository.provider] ?? repository.provider;
+  const authProblem = state !== "failed";
+
+  return (
+    <div className={`note ${authProblem ? "brass" : "blood"}`} style={{ flexDirection: "column", alignItems: "stretch", gap: 8 }}>
+      <div className="row" style={{ alignItems: "flex-start" }}>
+        <Ic.Warn className="n-icon" />
+        <span style={{ fontSize: 12.5, lineHeight: 1.45 }}>
+          {repository.syncMessage
+            ?? (authProblem
+              ? `Repository connected, but Savant could not read it. ${provider} authorization does not currently provide access to this repository.`
+              : "The last sync failed. The previously indexed skills are still available.")}
+        </span>
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        {authProblem && (
+          <a className="btn btn-sm" href={sourceControlSettingsHref()}>
+            {repository.syncErrorCode === "CONNECTION_AMBIGUOUS" ? `Choose ${provider} connection` : `Reauthorize ${provider}`}
+          </a>
+        )}
+        <button type="button" className="btn btn-sm" disabled={syncing} onClick={onRetry}>
+          {syncing ? "Syncing…" : "Retry Sync"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function RepositoryStatusPill({
+  status,
+  syncState,
+  skills,
+}: {
+  status: RepositorySyncStatus;
+  syncState?: RepositoryListItem["syncState"];
+  skills: number;
+}) {
+  switch (syncState) {
+    case "ready":
+      return (
+        <span className="chip chip-moss">
+          <span className="dot" />
+          Ready · {skills} skill{skills === 1 ? "" : "s"}
+        </span>
+      );
+    case "indexing":
+      return (
+        <span className="chip chip-brass">
+          <span className="dot" />
+          Syncing
+        </span>
+      );
+    case "pending":
+      return (
+        <span className="chip chip-paper">
+          <span className="dot" />
+          Pending first sync
+        </span>
+      );
+    case "auth_required":
+      return (
+        <span className="chip chip-brass">
+          <span className="dot" />
+          Authorization required
+        </span>
+      );
+    case "access_revoked":
+      return (
+        <span className="chip chip-blood">
+          <span className="dot" />
+          Access revoked
+        </span>
+      );
+    case "failed":
+      return (
+        <span className="chip chip-blood">
+          <span className="dot" />
+          Last sync failed
+        </span>
+      );
+    default:
+      break;
+  }
+
   if (status === "ok") {
     return (
       <span className="chip chip-moss">

@@ -39,7 +39,8 @@ export type GitProviderErrorCode =
   | "PROVIDER_NOT_CONFIGURED"
   | "PROVIDER_HOST_REJECTED"
   | "AUTHORIZATION_STATE_INVALID"
-  | "PERMISSION_DENIED";
+  | "PERMISSION_DENIED"
+  | "INVALID_REQUEST";
 
 /** Repository indexing state, distinct from provider connection state. */
 export type RepositorySyncState =
@@ -49,6 +50,25 @@ export type RepositorySyncState =
   | "failed"
   | "auth_required"
   | "access_revoked";
+
+/** Maps the stored repository_sync_state.status to the user-facing indexing state. */
+export function mapRepositorySyncState(status: string | null | undefined): RepositorySyncState {
+  switch (status) {
+    case "indexing":
+      return "indexing";
+    case "ok":
+    case "warn":
+      return "ready";
+    case "error":
+      return "failed";
+    case "auth_required":
+      return "auth_required";
+    case "access_revoked":
+      return "access_revoked";
+    default:
+      return "pending";
+  }
+}
 
 export interface GitProviderDescriptor {
   type: GitProviderType;

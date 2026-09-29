@@ -14,7 +14,6 @@ import {
   type ProviderRuntimeContext,
   type RepositoryLocator,
   type RepositoryTreeEntry,
-  type RuntimeCredential,
 } from "../types.ts";
 import { parseGitHubRepositoryUrl } from "../url-parsing.ts";
 

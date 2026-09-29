@@ -8,6 +8,7 @@ export type SettingsSectionId =
   | "general"
   | "auth"
   | "ai"
+  | "source-control"
   | "members"
   | "security"
   | "billing"
@@ -17,6 +18,7 @@ export const SETTINGS_SECTION_IDS = [
   "general",
   "auth",
   "ai",
+  "source-control",
   "members",
   "security",
   "billing",

@@ -16,6 +16,7 @@ test("development environments keep unfinished governance and settings features 
     "general",
     "auth",
     "ai",
+    "source-control",
     "members",
     "security",
     "billing",
@@ -32,6 +33,7 @@ test("production environments hide unfinished governance pages and sensitive set
   assert.deepEqual(getVisibleSettingsSectionIds("production"), [
     "general",
     "ai",
+    "source-control",
     "members",
     "billing",
   ]);

@@ -281,6 +281,8 @@ export function createGitConnectionService(deps: GitConnectionServiceDeps) {
       provider: GitProviderType;
       query: URLSearchParams;
       userSubject: string | null | undefined;
+      /** Re-checks that the user still holds the right role in the state's organization. */
+      verifyActor?: ((organizationId: string, subject: string) => Promise<GitActor>) | undefined;
     }): Promise<{
       connection: GitConnectionSummary;
       created: boolean;
@@ -299,6 +301,13 @@ export function createGitConnectionService(deps: GitConnectionServiceDeps) {
         env,
       });
       const actor = { organizationId: consumed.organizationId, subject: consumed.userSubject };
+
+      if (input.verifyActor) {
+        assertGitPermission(
+          await input.verifyActor(consumed.organizationId, consumed.userSubject),
+          consumed.reauthorizeConnectionId ? "reauthorize_provider" : "connect_provider",
+        );
+      }
 
       const completed = await provider.completeAuthorization(input.query, {
         redirectUri: resolveGitOAuthRedirectUri(provider.type, env),
@@ -508,7 +517,7 @@ export function createGitConnectionService(deps: GitConnectionServiceDeps) {
 
       const token = input.token.trim();
       if (token.length < 8 || token.length > 4096 || /\s/.test(token)) {
-        throw new GitProviderError("AUTH_REQUIRED", "Enter a valid access token.", { status: 400 });
+        throw new GitProviderError("INVALID_REQUEST", "Enter a valid access token.");
       }
 
       let host: string | null = null;

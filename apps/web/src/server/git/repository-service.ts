@@ -1,3 +1,4 @@
+import { mapRepositorySyncState } from "@savant/types";
 import type {
   ConnectedRepositoryResult,
   GitProviderErrorCode,
@@ -41,21 +42,7 @@ export type SelectedRepository = {
 };
 
 export function mapSyncState(sync: Pick<RepositorySyncRecord, "status"> | null): RepositorySyncState {
-  switch (sync?.status) {
-    case "indexing":
-      return "indexing";
-    case "ok":
-    case "warn":
-      return "ready";
-    case "error":
-      return "failed";
-    case "auth_required":
-      return "auth_required";
-    case "access_revoked":
-      return "access_revoked";
-    default:
-      return "pending";
-  }
+  return mapRepositorySyncState(sync?.status);
 }
 
 function locatorFromSelection(provider: GitProviderType, selection: SelectedRepository, host: string): RepositoryLocator | null {
@@ -101,7 +88,7 @@ export function createGitRepositoryService(deps: {
       assertGitPermission(actor, "connect_repository");
 
       if (input.repositories.length === 0 || input.repositories.length > 100) {
-        throw new GitProviderError("INVALID_PROVIDER_RESPONSE", "Select between 1 and 100 repositories to connect.", { status: 400 });
+        throw new GitProviderError("INVALID_REQUEST", "Select between 1 and 100 repositories to connect.");
       }
 
       const resolved = await broker.resolve({ organizationId: actor.organizationId, connectionId: input.connectionId }, deps.context);

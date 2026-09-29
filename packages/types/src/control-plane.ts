@@ -1,3 +1,4 @@
+import type { RepositorySyncState } from "./git-providers";
 import type { RepositoryProviderReadiness } from "./repository-provider-readiness";
 
 export type GitProvider =
@@ -68,6 +69,10 @@ export interface RepositoryListItem {
   lastSync: string;
   status: RepositorySyncStatus;
   projection: RepositoryProjectionMetadata;
+  /** Indexing state, distinct from provider connection state. */
+  syncState?: RepositorySyncState | undefined;
+  syncErrorCode?: string | null | undefined;
+  syncMessage?: string | null | undefined;
 }
 
 export interface RepositoryCommitSummary {

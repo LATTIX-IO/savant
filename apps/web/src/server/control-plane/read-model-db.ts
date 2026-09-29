@@ -1,4 +1,4 @@
-import { getRepositoryProviderReadiness } from "@savant/types";
+import { getRepositoryProviderReadiness, mapRepositorySyncState } from "@savant/types";
 import type {
   AccessGrantItem,
   AccessPolicyRuleItem,
@@ -95,6 +95,8 @@ type RepositoryRow = {
   default_branch: string;
   repo_status: string;
   sync_status: string | null;
+  sync_error_code?: string | null;
+  sync_error_message?: string | null;
   skill_count: number;
   last_indexed_at: Date | string | null;
   last_successful_sync_at: Date | string | null;
@@ -709,7 +711,13 @@ export function mapRepositorySyncStatus(
   repositoryStatus: string,
   syncStatus: string | null | undefined,
 ): RepositorySyncStatus {
-  if (repositoryStatus === "disabled" || repositoryStatus === "stale" || syncStatus === "error") {
+  if (
+    repositoryStatus === "disabled"
+    || repositoryStatus === "stale"
+    || syncStatus === "error"
+    || syncStatus === "auth_required"
+    || syncStatus === "access_revoked"
+  ) {
     return "stale";
   }
 
@@ -839,6 +847,9 @@ function buildRepositoryListItem(row: RepositoryRow): RepositoryListItem {
     lastSync: formatRelativeControlPlaneTime(row.last_activity_at),
     status: mapRepositorySyncStatus(row.repo_status, row.sync_status),
     projection: buildRepositoryProjectionMetadata(row),
+    syncState: mapRepositorySyncState(row.sync_status),
+    syncErrorCode: row.sync_error_code ?? null,
+    syncMessage: row.sync_error_message ?? null,
   };
 }
 
@@ -1884,6 +1895,8 @@ async function queryRepositories(organizationId: string): Promise<RepositoryRow[
       repositories.default_branch,
       repositories.status as repo_status,
       repository_sync_state.status as sync_status,
+      repository_sync_state.error_code as sync_error_code,
+      repository_sync_state.error_message as sync_error_message,
       coalesce(skill_counts.skill_count, 0)::int as skill_count,
       repository_sync_state.last_indexed_at,
       repository_sync_state.last_successful_sync_at,

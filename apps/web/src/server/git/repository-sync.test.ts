@@ -177,6 +177,8 @@ test("private repositories are never read anonymously; public ones may be when n
   const privateRepo = harness.seedRepository({ organizationId: ORG_A, owner: "o", name: "private" });
   await assert.rejects(() => harness.sync(ORG_A, privateRepo.id, "manual", { readAnonymousSnapshot }), (error: unknown) => error instanceof GitProviderError && error.code === "CONNECTION_REQUIRED");
   assert.equal(anonymousReads, 0);
+  const stored = harness.state.syncStates.get(privateRepo.id)?.errorMessage ?? "";
+  assert.equal(stored.split("Settings → Source control").length - 1, 1, "remediation is not repeated");
 
   const publicRepo = harness.seedRepository({ organizationId: ORG_A, owner: "o", name: "public", visibility: "public" });
   await harness.sync(ORG_A, publicRepo.id, "manual", { readAnonymousSnapshot });

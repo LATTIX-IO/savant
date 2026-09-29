@@ -271,7 +271,10 @@ export async function syncRepository<TParsed, TResult>(
     } catch (caught) {
       const error = normalizeSyncError(caught);
       const status = syncFailureStatus(error.code);
-      const remediation = describeGitRemediation({ code: error.code, provider: repository.provider, repositoryName: repository.fullName });
+      // Connection-resolution errors already say what to do; don't repeat it.
+      const remediation = error.code.startsWith("CONNECTION_")
+        ? null
+        : describeGitRemediation({ code: error.code, provider: repository.provider, repositoryName: repository.fullName });
       const message = status === "error"
         ? error.message
         : `Repository connected, but Savant could not read it. ${error.message}${remediation ? ` ${remediation}` : ""}`;

@@ -172,6 +172,8 @@ export function RepositoriesScreen() {
         tone: "error",
         message: error instanceof Error ? error.message : "Could not request repository sync.",
       });
+      // A failed sync still records its outcome on the repository; show it.
+      setReloadListToken((value) => value + 1);
     } finally {
       setSyncingRepositoryId((value) => (value === repositoryId ? null : value));
     }
@@ -657,7 +659,11 @@ function RepositorySyncIssue({
       <div className="row" style={{ gap: 8 }}>
         {authProblem && (
           <a className="btn btn-sm" href={sourceControlSettingsHref()}>
-            {repository.syncErrorCode === "CONNECTION_AMBIGUOUS" ? `Choose ${provider} connection` : `Reauthorize ${provider}`}
+            {repository.syncErrorCode === "CONNECTION_AMBIGUOUS"
+              ? `Choose ${provider} connection`
+              : repository.syncErrorCode === "CONNECTION_REQUIRED" || repository.syncErrorCode === "CONNECTION_NOT_FOUND"
+                ? `Connect ${provider}`
+                : `Reauthorize ${provider}`}
           </a>
         )}
         <button type="button" className="btn btn-sm" disabled={syncing} onClick={onRetry}>

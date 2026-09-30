@@ -11,7 +11,7 @@ import {
   resolveDesiredRecords,
 } from "./plan.mjs";
 
-const ZONE = { zoneId: "z1", zoneName: "savantrepo.com" };
+const ZONE = { zoneId: "z1", zoneName: "savantskills.app" };
 
 test("zone.config.json keeps AI crawlers allowed and robots.txt ours", async () => {
   const config = JSON.parse(await readFile(new URL("./zone.config.json", import.meta.url), "utf8"));
@@ -44,12 +44,12 @@ test("planDnsRecords creates missing records and leaves matching ones alone", ()
       { type: "A", name: "@", content: "76.76.21.21", proxied: false },
       { type: "CNAME", name: "www", content: "cname.vercel-dns.com", proxied: false },
     ],
-    current: [{ id: "r1", type: "A", name: "savantrepo.com", content: "76.76.21.21", proxied: false, ttl: 1 }],
+    current: [{ id: "r1", type: "A", name: "savantskills.app", content: "76.76.21.21", proxied: false, ttl: 1 }],
   });
 
   assert.equal(operations.length, 1);
   assert.equal(operations[0].method, "POST");
-  assert.equal(operations[0].body.name, "www.savantrepo.com");
+  assert.equal(operations[0].body.name, "www.savantskills.app");
   assert.deepEqual(conflicts, []);
 });
 
@@ -58,8 +58,8 @@ test("planDnsRecords updates a stale record in place and flags extras", () => {
     ...ZONE,
     desired: [{ type: "A", name: "@", content: "76.76.21.21", proxied: false }],
     current: [
-      { id: "r1", type: "A", name: "savantrepo.com", content: "216.198.79.65", proxied: true },
-      { id: "r2", type: "A", name: "savantrepo.com", content: "64.29.17.65", proxied: false },
+      { id: "r1", type: "A", name: "savantskills.app", content: "216.198.79.65", proxied: true },
+      { id: "r2", type: "A", name: "savantskills.app", content: "64.29.17.65", proxied: false },
     ],
   });
 
@@ -75,7 +75,7 @@ test("planDnsRecords compares CAA records by their structured data", () => {
   const { operations } = planDnsRecords({
     ...ZONE,
     desired: [caa],
-    current: [{ id: "c1", type: "CAA", name: "savantrepo.com", content: '0 issue "letsencrypt.org"', data: caa.data, proxied: false }],
+    current: [{ id: "c1", type: "CAA", name: "savantskills.app", content: '0 issue "letsencrypt.org"', data: caa.data, proxied: false }],
   });
 
   assert.deepEqual(operations, []);
@@ -85,7 +85,7 @@ test("planDnsRecords reports a CNAME/A clash on the same name", () => {
   const { conflicts } = planDnsRecords({
     ...ZONE,
     desired: [{ type: "CNAME", name: "www", content: "cname.vercel-dns.com", proxied: false }],
-    current: [{ id: "a1", type: "A", name: "www.savantrepo.com", content: "216.198.79.1", proxied: false }],
+    current: [{ id: "a1", type: "A", name: "www.savantskills.app", content: "216.198.79.1", proxied: false }],
   });
 
   assert.equal(conflicts.length, 1);
@@ -115,10 +115,10 @@ test("planBotManagement sends only the managed fields that changed", () => {
 });
 
 test("buildRedirectRule preserves path and query without duplicating it", () => {
-  const rule = buildRedirectRule({ zoneName: "savantrepo.com", ref: "www", statusCode: 301 });
+  const rule = buildRedirectRule({ zoneName: "savantskills.app", ref: "www", statusCode: 301 });
 
-  assert.equal(rule.expression, '(http.host eq "www.savantrepo.com")');
-  assert.equal(rule.action_parameters.from_value.target_url.expression, 'concat("https://savantrepo.com", http.request.uri.path)');
+  assert.equal(rule.expression, '(http.host eq "www.savantskills.app")');
+  assert.equal(rule.action_parameters.from_value.target_url.expression, 'concat("https://savantskills.app", http.request.uri.path)');
   assert.equal(rule.action_parameters.from_value.preserve_query_string, true);
 });
 
@@ -126,11 +126,11 @@ test("planRedirectRules keeps foreign rules and is idempotent", () => {
   const redirect = { ref: "savant_www_to_apex", statusCode: 301 };
   const foreign = { id: "x", version: "3", ref: "other", expression: "true", action: "redirect", action_parameters: {} };
 
-  const [operation] = planRedirectRules({ zoneId: "z1", zoneName: "savantrepo.com", redirect, currentRuleset: { rules: [foreign] } });
+  const [operation] = planRedirectRules({ zoneId: "z1", zoneName: "savantskills.app", redirect, currentRuleset: { rules: [foreign] } });
   assert.equal(operation.method, "PUT");
   assert.deepEqual(operation.body.rules.map((rule) => rule.ref), ["other", "savant_www_to_apex"]);
   assert.equal("id" in operation.body.rules[0], false, "server-owned fields are stripped before PUT");
 
-  const converged = { rules: [foreign, { id: "y", ...buildRedirectRule({ zoneName: "savantrepo.com", ...redirect }) }] };
-  assert.deepEqual(planRedirectRules({ zoneId: "z1", zoneName: "savantrepo.com", redirect, currentRuleset: converged }), []);
+  const converged = { rules: [foreign, { id: "y", ...buildRedirectRule({ zoneName: "savantskills.app", ...redirect }) }] };
+  assert.deepEqual(planRedirectRules({ zoneId: "z1", zoneName: "savantskills.app", redirect, currentRuleset: converged }), []);
 });

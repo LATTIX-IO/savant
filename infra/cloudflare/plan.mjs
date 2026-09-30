@@ -1,4 +1,4 @@
-// Pure planning logic for the Cloudflare zone in front of savantrepo.com.
+// Pure planning logic for the Cloudflare zone in front of savantskills.app.
 // Given the desired config (zone.config.json) and the zone's current state as
 // read from the API, returns the list of API operations that converge them.
 // No I/O here, so it is unit-tested in plan.test.mjs.

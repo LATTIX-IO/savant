@@ -50,14 +50,29 @@ Preview deployments are `noindex` automatically.
 
 ## Domains and DNS
 
-DNS for `savantrepo.com` is moving from Vercel DNS to Cloudflare (DNS-only). The runbook is in `infra/cloudflare/README.md`. Whichever DNS host is authoritative, set `www.savantrepo.com` in Vercel → Domains to redirect to `savantrepo.com` with **308 Permanent**. The Vercel default of 307 is temporary and splits ranking signals between hosts.
+`savantskills.app` is the canonical domain. It's registered with Vercel and uses Vercel DNS. Set `www.savantskills.app` in Vercel → Domains to redirect to `savantskills.app` with **308 Permanent**. The Vercel default of 307 is temporary and splits ranking signals between hosts.
+
+The previous domain, `savantrepo.com` (and `www.savantrepo.com`), stays attached to the project as an alias:
+
+- **Page requests** on alias hosts get a 308 to the canonical origin. See `apps/web/src/lib/canonical-host.ts`; the alias list is overridable with `SAVANT_REDIRECT_HOSTS`.
+- **`/api/*`, `/auth/*` and `/.well-known/*` keep working on every host.** That covers Git provider webhooks and OAuth callbacks, MCP router URLs already configured in AI tools, and the public catalog API.
+
+The canonical origin is `APP_BASE_URL`, which is also the origin Auth0 is configured for. So redirects follow the sign-in configuration and never land users on a host without their session. `NEXT_PUBLIC_APP_URL` and `APP_BASE_URL` take precedence over Vercel's `VERCEL_PROJECT_PRODUCTION_URL`, because Vercel sets that to the *shortest* production domain, which isn't necessarily the canonical one.
+
+**Changing domains.** Do these in order:
+
+1. Add the new callback URLs to Auth0 and to each Git provider app, keeping the old ones.
+2. Switch `APP_BASE_URL` and `NEXT_PUBLIC_APP_URL`.
+3. Redeploy.
+4. Remove the old callbacks once traffic has moved.
 
 ## Auth0 application settings
 
-For the production domain `https://savantrepo.com`, configure the Auth0 Regular Web Application with:
+For the production domain `https://savantskills.app`, configure the Auth0 Regular Web Application with:
 
-- Allowed Callback URLs: `https://savantrepo.com/auth/callback`
-- Allowed Logout URLs: `https://savantrepo.com/`
+- Allowed Callback URLs: `https://savantskills.app/auth/callback` (keep `https://savantrepo.com/auth/callback` during the domain migration)
+- Allowed Logout URLs: `https://savantskills.app/`
+- Allowed Web Origins: `https://savantskills.app`
 - Application Type: `Regular Web Application`
 - Token Endpoint Authentication Method: `client_secret_post`
 

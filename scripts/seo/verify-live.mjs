@@ -1,7 +1,7 @@
 // End-to-end check of what search and AI crawlers actually receive from a
 // deployed origin, through whatever DNS/CDN layer fronts it (Vercel, Cloudflare).
 //
-//   node ./scripts/seo/verify-live.mjs [--origin https://savantrepo.com]
+//   node ./scripts/seo/verify-live.mjs [--origin https://savantskills.app]
 //
 // Exits non-zero when any check fails. Safe to run from CI after a deploy.
 import process from "node:process";
@@ -24,7 +24,7 @@ function readArg(name) {
   return index === -1 ? null : process.argv[index + 1] ?? null;
 }
 
-const origin = (readArg("--origin") ?? process.env.SITE_ORIGIN ?? "https://savantrepo.com").replace(/\/+$/, "");
+const origin = (readArg("--origin") ?? process.env.SITE_ORIGIN ?? "https://savantskills.app").replace(/\/+$/, "");
 const host = new URL(origin).host;
 const results = [];
 

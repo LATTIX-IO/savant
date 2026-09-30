@@ -13,20 +13,20 @@ test("buildWorkspacePath formats the path-based tenant route", () => {
   assert.equal(buildWorkspacePath("finance-ops"), "/o/finance-ops");
 });
 
-test("workspace URL helpers default to the savantrepo.com canonical origin", () => {
-  assert.equal(resolveCanonicalWorkspaceOrigin({}), "https://savantrepo.com");
-  assert.equal(buildWorkspaceUrl("finance-ops"), "https://savantrepo.com/o/finance-ops");
-  assert.equal(formatWorkspaceUrlForDisplay("finance-ops"), "savantrepo.com/o/finance-ops");
-  assert.equal(formatWorkspaceUrlPrefixForDisplay(), "savantrepo.com/o/");
+test("workspace URL helpers default to the savantskills.app canonical origin", () => {
+  assert.equal(resolveCanonicalWorkspaceOrigin({}), "https://savantskills.app");
+  assert.equal(buildWorkspaceUrl("finance-ops"), "https://savantskills.app/o/finance-ops");
+  assert.equal(formatWorkspaceUrlForDisplay("finance-ops"), "savantskills.app/o/finance-ops");
+  assert.equal(formatWorkspaceUrlPrefixForDisplay(), "savantskills.app/o/");
 });
 
 test("resolveCanonicalWorkspaceOrigin prefers the configured production hostname", () => {
   assert.equal(
     resolveCanonicalWorkspaceOrigin({
-      VERCEL_PROJECT_PRODUCTION_URL: "app.savantrepo.com",
+      VERCEL_PROJECT_PRODUCTION_URL: "app.savantskills.app",
       APP_BASE_URL: "http://localhost:3000",
     }),
-    "https://app.savantrepo.com",
+    "https://app.savantskills.app",
   );
 });
 
@@ -36,6 +36,6 @@ test("resolveCanonicalWorkspaceOrigin ignores localhost fallbacks for canonical 
       NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
       APP_BASE_URL: "http://localhost:3000",
     }),
-    "https://savantrepo.com",
+    "https://savantskills.app",
   );
 });

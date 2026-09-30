@@ -182,7 +182,7 @@ test("registerGitLabRepositoryWebhook creates a push hook with token verificatio
       webhookBody = init?.body ? JSON.parse(String(init.body)) as Record<string, unknown> : null;
       return Response.json({
         id: 17,
-        url: "https://app.savantrepo.com/api/repositories/webhooks/17",
+        url: "https://app.savantskills.app/api/repositories/webhooks/17",
         push_events: true,
       });
     }
@@ -191,7 +191,7 @@ test("registerGitLabRepositoryWebhook creates a push hook with token verificatio
   };
 
   const result = await registerGitLabRepositoryWebhook(locator, {
-    callbackUrl: "https://app.savantrepo.com/api/repositories/webhooks/17",
+    callbackUrl: "https://app.savantskills.app/api/repositories/webhooks/17",
     secretRef: "REPOSITORY_WEBHOOK_SECRET",
     events: ["push"],
   }, {
@@ -202,11 +202,11 @@ test("registerGitLabRepositoryWebhook creates a push hook with token verificatio
   });
 
   assert.equal(result.id, "17");
-  assert.equal(result.url, "https://app.savantrepo.com/api/repositories/webhooks/17");
+  assert.equal(result.url, "https://app.savantskills.app/api/repositories/webhooks/17");
   assert.deepEqual(result.events, ["push"]);
   assert.equal(result.secretRef, "REPOSITORY_WEBHOOK_SECRET");
   assert.deepEqual(webhookBody, {
-    url: "https://app.savantrepo.com/api/repositories/webhooks/17",
+    url: "https://app.savantskills.app/api/repositories/webhooks/17",
     push_events: true,
     enable_ssl_verification: true,
     token: hookValue,

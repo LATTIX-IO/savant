@@ -19,7 +19,7 @@ import {
   serializeJsonLd,
 } from "./seo.ts";
 
-const ORIGIN = "https://savantrepo.com";
+const ORIGIN = "https://savantskills.app";
 
 test("resolveSiteOrigin defaults to the production domain", () => {
   assert.equal(resolveSiteOrigin({}), ORIGIN);
@@ -56,7 +56,7 @@ test("production robots.txt opens public pages to every AI crawler and points at
   assert.match(robots, /^Allow: \/$/m);
   assert.match(robots, /^Disallow: \/o\/$/m);
   assert.match(robots, /^Disallow: \/api\/$/m);
-  assert.match(robots, /^Sitemap: https:\/\/savantrepo\.com\/sitemap\.xml$/m);
+  assert.match(robots, /^Sitemap: https:\/\/savantskills\.app\/sitemap\.xml$/m);
   assert.match(robots, /^Content-Signal: search=yes, ai-input=yes, ai-train=yes$/m);
 
   for (const agent of [...AI_CRAWLERS.answer, ...AI_CRAWLERS.training]) {
@@ -82,8 +82,8 @@ test("llms.txt follows the llmstxt.org shape", () => {
   assert.equal(lines[0], "# Savant");
   assert.ok(lines.some((line) => line.startsWith("> ")), "summary blockquote");
   assert.match(llms, /^## Product$/m);
-  assert.match(llms, /\[Docs\]\(https:\/\/savantrepo\.com\/docs\)/);
-  assert.match(llms, /\[Full text\]\(https:\/\/savantrepo\.com\/llms-full\.txt\)/);
+  assert.match(llms, /\[Docs\]\(https:\/\/savantskills\.app\/docs\)/);
+  assert.match(llms, /\[Full text\]\(https:\/\/savantskills\.app\/llms-full\.txt\)/);
   assert.match(llms, /\$1 per user per month/);
 });
 

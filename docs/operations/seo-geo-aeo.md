@@ -1,6 +1,6 @@
 # SEO, GEO, and AEO
 
-How `savantrepo.com` presents itself to search engines (SEO), generative engines that train on or retrieve the web (GEO), and answer engines that quote it (AEO). The edge and DNS side is covered in `infra/cloudflare/README.md`.
+How `savantskills.app` presents itself to search engines (SEO), generative engines that train on or retrieve the web (GEO), and answer engines that quote it (AEO). The edge and DNS side is covered in `infra/cloudflare/README.md`.
 
 ## What the app serves
 
@@ -42,6 +42,6 @@ INDEXNOW_KEY=... pnpm seo:indexnow      # ping Bing/Yandex/Seznam/Naver with the
 
 ## One-time registrations
 
-1. **Google Search Console.** Add the `savantrepo.com` property with a DNS TXT record (in Cloudflare once the zone is live) or `GOOGLE_SITE_VERIFICATION`, then submit `https://savantrepo.com/sitemap.xml`.
+1. **Google Search Console.** Add the `savantskills.app` property with a DNS TXT record (in Cloudflare once the zone is live) or `GOOGLE_SITE_VERIFICATION`, then submit `https://savantskills.app/sitemap.xml`.
 2. **Bing Webmaster Tools.** Import from Search Console or use `BING_SITE_VERIFICATION`, then submit the sitemap.
 3. **Validate structured data** with the [Rich Results Test](https://search.google.com/test/rich-results) and the [Schema Markup Validator](https://validator.schema.org/).

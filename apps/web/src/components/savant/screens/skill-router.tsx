@@ -41,7 +41,7 @@ function setupFor(client: ClientKey, origin: string, token: string): { steps: st
  * skill router (MCP), and watch the live telemetry it records.
  */
 export function SkillRouterScreen() {
-  const [origin, setOrigin] = useState("https://savantrepo.com");
+  const [origin, setOrigin] = useState("https://savantskills.app");
   const [client, setClient] = useState<ClientKey>("claude-code");
   const [token, setToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

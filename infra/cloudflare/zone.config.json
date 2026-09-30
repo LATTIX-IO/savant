@@ -1,6 +1,6 @@
 {
-  "$comment": "Desired state of the Cloudflare zone for savantrepo.com. Apply with: node infra/cloudflare/apply.mjs (dry run) then --apply. See infra/cloudflare/README.md.",
-  "zone": "savantrepo.com",
+  "$comment": "Desired state of the Cloudflare zone for savantskills.app. Apply with: node infra/cloudflare/apply.mjs (dry run) then --apply. See infra/cloudflare/README.md.",
+  "zone": "savantskills.app",
   "proxied": false,
   "dnsRecords": [
     {

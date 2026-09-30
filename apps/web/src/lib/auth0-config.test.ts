@@ -67,29 +67,29 @@ test("hasAuth0EnvConfig requires every Auth0 variable to be configured", () => {
 test("resolveAuth0AppBaseUrl falls back to Vercel deployment metadata when APP_BASE_URL is missing", () => {
   assert.equal(
     resolveAuth0AppBaseUrl({
-      AUTH0_BASE_URL: "https://legacy.savantrepo.com/",
+      AUTH0_BASE_URL: "https://legacy.savantskills.app/",
     }),
-    "https://legacy.savantrepo.com",
+    "https://legacy.savantskills.app",
   );
 
   assert.equal(
     resolveAuth0AppBaseUrl({
-      NEXT_PUBLIC_APP_URL: "https://preview.savantrepo.com/",
+      NEXT_PUBLIC_APP_URL: "https://preview.savantskills.app/",
     }),
-    "https://preview.savantrepo.com",
+    "https://preview.savantskills.app",
   );
 
   assert.equal(
     resolveAuth0AppBaseUrl({
       APP_BASE_URL: "<APP_BASE_URL>",
-      VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+      VERCEL_PROJECT_PRODUCTION_URL: "savantskills.app",
     }),
-    "https://savantrepo.com",
+    "https://savantskills.app",
   );
 
   assert.equal(
     hasAuth0EnvConfig({
-      VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+      VERCEL_PROJECT_PRODUCTION_URL: "savantskills.app",
       AUTH0_DOMAIN: "dev-tenant.us.auth0.com",
       AUTH0_CLIENT_ID: "client-id",
       AUTH0_CLIENT_SECRET: "client-secret",
@@ -116,8 +116,8 @@ test("resolveAuth0Domain accepts both AUTH0_DOMAIN and AUTH0_ISSUER_BASE_URL", (
   );
 
   assert.equal(
-    resolveAuth0Domain({ AUTH0_ISSUER_BASE_URL: "https://login.savantrepo.com/" }),
-    "login.savantrepo.com",
+    resolveAuth0Domain({ AUTH0_ISSUER_BASE_URL: "https://login.savantskills.app/" }),
+    "login.savantskills.app",
   );
 });
 
@@ -156,13 +156,13 @@ test("isLocalDevHostname only allows loopback-style hosts", () => {
   assert.equal(isLocalDevHostname("app.localhost"), true);
   assert.equal(isLocalDevHostname("127.0.0.1"), true);
   assert.equal(isLocalDevHostname("[::1]"), true);
-  assert.equal(isLocalDevHostname("savantrepo.com"), false);
+  assert.equal(isLocalDevHostname("savantskills.app"), false);
 });
 
 test("isLocalDevAuthBypass requires both development mode and a local host", () => {
   assert.equal(isLocalDevAuthBypass("http://localhost:3000/settings", "development"), true);
   assert.equal(isLocalDevAuthBypass("http://127.0.0.1:3000/settings", "development"), true);
-  assert.equal(isLocalDevAuthBypass("https://savantrepo.com/settings", "development"), false);
+  assert.equal(isLocalDevAuthBypass("https://savantskills.app/settings", "development"), false);
   assert.equal(isLocalDevAuthBypass("http://localhost:3000/settings", "production"), false);
 });
 
@@ -187,7 +187,7 @@ test("normalizeReturnToPath keeps safe relative paths and rejects external targe
 
 test("getAuthReturnTo preserves the relative dashboard path and query string", () => {
   assert.equal(
-    getAuthReturnTo("https://savantrepo.com/repositories?tab=all&sort=recent"),
+    getAuthReturnTo("https://savantskills.app/repositories?tab=all&sort=recent"),
     "/repositories?tab=all&sort=recent",
   );
 });
@@ -233,13 +233,13 @@ test("isProtectedDashboardPath exempts only self-authenticated telemetry and wor
 });
 
 test("getLegacyAuthRedirectPath upgrades legacy login URLs to the current sign-in and sign-up pages", () => {
-  assert.equal(getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/login"), "/signin");
+  assert.equal(getLegacyAuthRedirectPath("https://savantskills.app/api/auth/login"), "/signin");
   assert.equal(
-    getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/login?screen_hint=signup&returnTo=%2Fonboarding"),
+    getLegacyAuthRedirectPath("https://savantskills.app/api/auth/login?screen_hint=signup&returnTo=%2Fonboarding"),
     "/signup?returnTo=%2Fonboarding",
   );
   assert.equal(
-    getLegacyAuthRedirectPath("https://savantrepo.com/api/auth/logout?returnTo=%2F"),
+    getLegacyAuthRedirectPath("https://savantskills.app/api/auth/logout?returnTo=%2F"),
     "/auth/logout?returnTo=%2F",
   );
 });

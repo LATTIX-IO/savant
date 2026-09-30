@@ -127,13 +127,13 @@ test("checkoutLineItemFor falls back to inline recurring price data", () => {
 
 test("appUrl prefers explicit Stripe return URLs and falls back to the app base url", () => {
   assert.equal(appUrl({ NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000/" }), "http://127.0.0.1:3000");
-  assert.equal(appUrl({ APP_BASE_URL: "https://savantrepo.com" }), "https://savantrepo.com");
+  assert.equal(appUrl({ APP_BASE_URL: "https://savantskills.app" }), "https://savantskills.app");
   assert.equal(
     appUrl({
-      APP_BASE_URL: "https://savantrepo.com",
+      APP_BASE_URL: "https://savantskills.app",
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000/",
     }),
-    "https://savantrepo.com",
+    "https://savantskills.app",
   );
   assert.equal(appUrl({}), "http://localhost:3000");
 });
@@ -143,17 +143,17 @@ test("resolveCheckoutBaseUrl prefers the live forwarded request origin over stat
     url: "https://internal-vercel-host.example/api/billing/checkout",
     headers: new Headers({
       "x-forwarded-proto": "https",
-      "x-forwarded-host": "app.savantrepo.com",
+      "x-forwarded-host": "app.savantskills.app",
       host: "internal-vercel-host.example",
     }),
   };
 
   assert.equal(
     resolveCheckoutBaseUrl(request, {
-      APP_BASE_URL: "https://stale-config.savantrepo.com",
+      APP_BASE_URL: "https://stale-config.savantskills.app",
       NEXT_PUBLIC_APP_URL: "http://127.0.0.1:3000",
     }),
-    "https://app.savantrepo.com",
+    "https://app.savantskills.app",
   );
 });
 
@@ -164,9 +164,9 @@ test("resolveCheckoutBaseUrl falls back to appUrl when request origin cannot be 
         url: "not-a-valid-url",
       },
       {
-        APP_BASE_URL: "https://savantrepo.com",
+        APP_BASE_URL: "https://savantskills.app",
       },
     ),
-    "https://savantrepo.com",
+    "https://savantskills.app",
   );
 });

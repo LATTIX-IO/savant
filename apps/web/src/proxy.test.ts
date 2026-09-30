@@ -75,7 +75,7 @@ test("proxy returns an unavailable HTML response instead of throwing when Auth0 
 
   try {
     const { proxy } = await importProxyModule();
-    const response = await proxy(new Request("https://savantrepo.com/settings"));
+    const response = await proxy(new Request("https://savantskills.app/settings"));
 
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("x-savant-error-code"), "auth_service_unavailable");
@@ -99,7 +99,7 @@ test("proxy returns a structured JSON unavailable response for API requests when
 
   try {
     const { proxy } = await importProxyModule();
-    const response = await proxy(new Request("https://savantrepo.com/api/overview"));
+    const response = await proxy(new Request("https://savantskills.app/api/overview"));
 
     assert.equal(response.status, 503);
     assert.equal(response.headers.get("x-savant-error-code"), "auth_service_unavailable");

@@ -7,12 +7,12 @@ import {
 } from "./request-security.ts";
 
 test("assertSameOriginMutationRequest accepts matching origin headers", () => {
-  const request = new Request("https://app.savantrepo.com/api/ai-connections", {
+  const request = new Request("https://app.savantskills.app/api/ai-connections", {
     method: "POST",
     headers: {
-      origin: "https://app.savantrepo.com",
-      host: "app.savantrepo.com",
-      "x-forwarded-host": "app.savantrepo.com",
+      origin: "https://app.savantskills.app",
+      host: "app.savantskills.app",
+      "x-forwarded-host": "app.savantskills.app",
       "x-forwarded-proto": "https",
     },
   });
@@ -21,12 +21,12 @@ test("assertSameOriginMutationRequest accepts matching origin headers", () => {
 });
 
 test("assertSameOriginMutationRequest accepts referer when origin is absent", () => {
-  const request = new Request("https://app.savantrepo.com/api/ai-connections", {
+  const request = new Request("https://app.savantskills.app/api/ai-connections", {
     method: "POST",
     headers: {
-      referer: "https://app.savantrepo.com/o/finance-ops/settings",
-      host: "app.savantrepo.com",
-      "x-forwarded-host": "app.savantrepo.com",
+      referer: "https://app.savantskills.app/o/finance-ops/settings",
+      host: "app.savantskills.app",
+      "x-forwarded-host": "app.savantskills.app",
       "x-forwarded-proto": "https",
     },
   });
@@ -35,11 +35,11 @@ test("assertSameOriginMutationRequest accepts referer when origin is absent", ()
 });
 
 test("assertSameOriginMutationRequest rejects missing mutation origins", () => {
-  const request = new Request("https://app.savantrepo.com/api/ai-connections", {
+  const request = new Request("https://app.savantskills.app/api/ai-connections", {
     method: "POST",
     headers: {
-      host: "app.savantrepo.com",
-      "x-forwarded-host": "app.savantrepo.com",
+      host: "app.savantskills.app",
+      "x-forwarded-host": "app.savantskills.app",
       "x-forwarded-proto": "https",
     },
   });
@@ -55,12 +55,12 @@ test("assertSameOriginMutationRequest rejects missing mutation origins", () => {
 });
 
 test("assertSameOriginMutationRequest rejects mismatched origins", () => {
-  const request = new Request("https://app.savantrepo.com/api/ai-connections", {
+  const request = new Request("https://app.savantskills.app/api/ai-connections", {
     method: "POST",
     headers: {
       origin: "https://evil.example.com",
-      host: "app.savantrepo.com",
-      "x-forwarded-host": "app.savantrepo.com",
+      host: "app.savantskills.app",
+      "x-forwarded-host": "app.savantskills.app",
       "x-forwarded-proto": "https",
     },
   });

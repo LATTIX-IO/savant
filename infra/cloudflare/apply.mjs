@@ -1,4 +1,4 @@
-// Converge the Cloudflare zone for savantrepo.com with zone.config.json.
+// Converge the Cloudflare zone for savantskills.app with zone.config.json.
 //
 //   CLOUDFLARE_API_TOKEN=... node infra/cloudflare/apply.mjs            # dry run: print the plan
 //   CLOUDFLARE_API_TOKEN=... node infra/cloudflare/apply.mjs --apply    # execute it
@@ -149,7 +149,7 @@ async function main() {
       });
     }
   } else {
-    warnings.push("DNS-only mode: the www → apex redirect is Vercel's job. Set www.savantrepo.com to redirect to savantrepo.com with 308 in Vercel → Domains.");
+    warnings.push("DNS-only mode: the www → apex redirect is Vercel's job. Set www.savantskills.app to redirect to savantskills.app with 308 in Vercel → Domains.");
   }
 
   console.log(`Zone ${config.zone} (${zoneId}), status ${zone.status}, mode ${config.proxied ? "proxied" : "DNS-only"}`);

@@ -52,7 +52,7 @@ export const MAX_SKILL_BYTES = 1_500_000;
 export const MAX_SKILL_FILES = 60;
 export const TEXT_FILE = /\.(md|markdown|txt|ya?ml|json|toml|py|sh|bash|js|mjs|cjs|ts|tsx|jsx|ps1|rb|go|rs|sql|html|css|csv|xml|ini|cfg)$|(^|\/)(LICENSE|Makefile|Dockerfile|requirements[^/]*\.txt)$/i;
 
-const USER_AGENT = "savant-skill-hub (+https://savantrepo.com/catalog)";
+const USER_AGENT = "savant-skill-hub (+https://savantskills.app/catalog)";
 
 export function contentHash(files: readonly HubFile[]): string {
   const hash = createHash("sha256");

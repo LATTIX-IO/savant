@@ -76,10 +76,10 @@ test("resolveRepositoryWebhookPublicBaseUrl rejects localhost origins", () => {
 
 test("resolveRepositoryWebhookPublicBaseUrl returns the configured origin", () => {
   const result = resolveRepositoryWebhookPublicBaseUrl({
-    APP_BASE_URL: "https://app.savantrepo.com/workspaces/demo",
+    APP_BASE_URL: "https://app.savantskills.app/workspaces/demo",
   });
 
-  assert.equal(result, "https://app.savantrepo.com");
+  assert.equal(result, "https://app.savantskills.app");
 });
 
 test("verifyGitHubWebhookSignature accepts a valid signature", () => {

@@ -7,7 +7,7 @@ import {
 
 export type WorkspaceUrlEnv = Auth0Env;
 
-export const CANONICAL_WORKSPACE_ORIGIN = "https://savantrepo.com";
+export const CANONICAL_WORKSPACE_ORIGIN = "https://savantskills.app";
 
 function normalizeOriginCandidate(value: string): string {
   const trimmed = value.trim().replace(/\/+$/, "");
@@ -51,11 +51,8 @@ function isNonLocalOrigin(candidate: string): boolean {
 }
 
 export function resolveCanonicalWorkspaceOrigin(env: WorkspaceUrlEnv = process.env): string {
-  const productionUrl = readConfiguredEnvValue(env, "VERCEL_PROJECT_PRODUCTION_URL");
-  if (productionUrl) {
-    return normalizeOriginCandidate(productionUrl);
-  }
-
+  // The configured app URL wins: Vercel's VERCEL_PROJECT_PRODUCTION_URL is the
+  // *shortest* production domain, which isn't necessarily the canonical one.
   const publicUrl = readConfiguredEnvValue(env, "NEXT_PUBLIC_APP_URL")
     ?? readConfiguredEnvValue(env, "NEXT_PUBLIC_SITE_URL");
   if (publicUrl) {
@@ -68,6 +65,11 @@ export function resolveCanonicalWorkspaceOrigin(env: WorkspaceUrlEnv = process.e
   const appBaseUrl = resolveAuth0AppBaseUrl(env);
   if (appBaseUrl && isNonLocalOrigin(appBaseUrl)) {
     return appBaseUrl;
+  }
+
+  const productionUrl = readConfiguredEnvValue(env, "VERCEL_PROJECT_PRODUCTION_URL");
+  if (productionUrl) {
+    return normalizeOriginCandidate(productionUrl);
   }
 
   return CANONICAL_WORKSPACE_ORIGIN;

@@ -160,7 +160,7 @@ export function getAuthCallbackFailureHint(failure: AuthCallbackFailure | null):
     const normalizedDescription = failure.oauthErrorDescription?.toLowerCase() ?? null;
 
     if (normalizedDescription?.includes("redirect_uri")) {
-      return "Auth0 rejected the callback URL used during the token exchange. Verify APP_BASE_URL and the Auth0 Allowed Callback URLs exactly match https://savantrepo.com/auth/callback before redeploying.";
+      return "Auth0 rejected the callback URL used during the token exchange. Verify APP_BASE_URL and the Auth0 Allowed Callback URLs exactly match https://savantskills.app/auth/callback before redeploying.";
     }
 
     if (

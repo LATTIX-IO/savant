@@ -31,8 +31,8 @@ All dashboard routes are protected by default and redirect to `/auth/login` when
 
 1. Copy `../../.env.example` into your local `.env.local` (or update the existing one without exposing secrets).
 2. Fill in the real `AUTH0_CLIENT_SECRET` and a 64-character hex `AUTH0_SECRET`.
-3. Set `APP_BASE_URL=https://savantrepo.com` when you have a single stable production origin. If your deployment still uses older Auth0 variable names, Savant also accepts `AUTH0_BASE_URL` and `AUTH0_ISSUER_BASE_URL` and normalizes them to the current SDK format at startup. Savant also accepts `NEXT_PUBLIC_AUTH0_DOMAIN`, `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`, and `NEXT_PUBLIC_AUTH0_CLIENT_ID` as fallbacks when the server-side names are absent.
-4. Align the deployed browser origin with `APP_BASE_URL`. If the live request reaches `https://preview.example.vercel.app` but `APP_BASE_URL` points to `https://savantrepo.com`, Auth0 callbacks and logout redirects will drift.
+3. Set `APP_BASE_URL=https://savantskills.app` when you have a single stable production origin. If your deployment still uses older Auth0 variable names, Savant also accepts `AUTH0_BASE_URL` and `AUTH0_ISSUER_BASE_URL` and normalizes them to the current SDK format at startup. Savant also accepts `NEXT_PUBLIC_AUTH0_DOMAIN`, `NEXT_PUBLIC_AUTH0_ISSUER_BASE_URL`, and `NEXT_PUBLIC_AUTH0_CLIENT_ID` as fallbacks when the server-side names are absent.
+4. Align the deployed browser origin with `APP_BASE_URL`. If the live request reaches `https://preview.example.vercel.app` but `APP_BASE_URL` points to `https://savantskills.app`, Auth0 callbacks and logout redirects will drift.
 5. For preview or host-inferred deployments, the app can derive the public origin from `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, `VERCEL_URL`, or the incoming request host at runtime.
 
 On Vercel, Savant will fall back to `NEXT_PUBLIC_APP_URL`, `VERCEL_PROJECT_PRODUCTION_URL`, and then `VERCEL_URL` when `APP_BASE_URL` is missing. The underlying Auth0 SDK can also infer the base URL from the current request host, but setting `APP_BASE_URL` explicitly is still the safest production configuration for a single stable domain.
@@ -48,8 +48,8 @@ That split matters: login can be broken even when Stripe is fine, and Stripe can
 
 The currently configured Auth0 application expects:
 
-- Callback URL: `https://savantrepo.com/auth/callback`
-- Logout URL: `https://savantrepo.com/`
+- Callback URL: `https://savantskills.app/auth/callback`
+- Logout URL: `https://savantskills.app/`
 - Application type: `regular_web`
 - Token endpoint auth method: `client_secret_post`
 
@@ -102,7 +102,7 @@ The hardened onboarding flow now persists drafts, requires Auth0 identity correl
 
 If production auth is green but onboarding still shows blocked on `/auth-status`, the remaining missing pieces are usually `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`, not the database itself.
 
-For the first production multi-tenant rollout, protected product routes resolve under `https://savantrepo.com/o/{workspaceSlug}`. Root product URLs such as `/dashboard` and `/settings` now act as authenticated entry points that redirect into the user\'s preferred workspace when a tenant membership is available.
+For the first production multi-tenant rollout, protected product routes resolve under `https://savantskills.app/o/{workspaceSlug}`. Root product URLs such as `/dashboard` and `/settings` now act as authenticated entry points that redirect into the user\'s preferred workspace when a tenant membership is available.
 
 Moving from test to live does not require a code change: swap the Stripe keys, the webhook secret, and (if you use Stripe-managed catalog prices) the live monthly/yearly price ids, then redeploy.
 

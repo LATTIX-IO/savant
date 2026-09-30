@@ -56,7 +56,7 @@ function createTenantContext(): ResolvedTenantContext {
   };
 }
 
-function createRequest(url = "https://savantrepo.com/api/test?workspaceSlug=acme") {
+function createRequest(url = "https://savantskills.app/api/test?workspaceSlug=acme") {
   return new Request(url, {
     method: "POST",
     headers: {
@@ -159,7 +159,7 @@ test("createRepositoryConnectPostHandler returns a created response for a connec
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/repositories/connect?workspaceSlug=acme"));
   const body = await response.json();
 
   assert.equal(response.status, 201);
@@ -215,7 +215,7 @@ test("createRepositoryConnectPostHandler indexes the repository inline so skills
     },
   }));
 
-  const body = await (await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"))).json();
+  const body = await (await handler(createRequest("https://savantskills.app/api/repositories/connect?workspaceSlug=acme"))).json();
 
   assert.equal(indexedRepositoryId, "repo_123");
   assert.equal(body.data.indexedSkillCount, 7);
@@ -231,7 +231,7 @@ test("createRepositoryConnectPostHandler keeps the connection and reports a warn
     isIndexError: (error: unknown): error is RouteHandledError => error instanceof TestRouteError,
   }));
 
-  const response = await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/repositories/connect?workspaceSlug=acme"));
   const body = await response.json();
 
   assert.equal(response.status, 201);
@@ -276,7 +276,7 @@ test("createRepositoryConnectPostHandler maps tenant write access errors to a 40
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/repositories/connect?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/repositories/connect?workspaceSlug=acme"));
 
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {
@@ -325,7 +325,7 @@ test("createRepositoryProvisionPostHandler returns a created response for a prov
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/repositories/provision?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/repositories/provision?workspaceSlug=acme"));
   const body = await response.json();
 
   assert.equal(response.status, 201);
@@ -366,7 +366,7 @@ test("createRepositoryProvisionPostHandler maps tenant write access errors to a 
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/repositories/provision?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/repositories/provision?workspaceSlug=acme"));
 
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {
@@ -415,7 +415,7 @@ test("createRepositorySyncPostHandler returns the indexed payload after an accep
   });
 
   const response = await handler(
-    createRequest("https://savantrepo.com/api/repositories/repo_123/sync?workspaceSlug=acme"),
+    createRequest("https://savantskills.app/api/repositories/repo_123/sync?workspaceSlug=acme"),
     { params: Promise.resolve({ id: "repo_123" }) },
   );
   const body = await response.json();
@@ -444,7 +444,7 @@ test("createRepositorySyncPostHandler maps tenant write access errors to a 403 r
   });
 
   const response = await handler(
-    createRequest("https://savantrepo.com/api/repositories/repo_123/sync?workspaceSlug=acme"),
+    createRequest("https://savantskills.app/api/repositories/repo_123/sync?workspaceSlug=acme"),
     { params: Promise.resolve({ id: "repo_123" }) },
   );
 
@@ -473,7 +473,7 @@ test("createRepositorySyncPostHandler rejects invalid sync reasons before callin
   });
 
   const response = await handler(
-    createRequest("https://savantrepo.com/api/repositories/repo_123/sync?workspaceSlug=acme"),
+    createRequest("https://savantskills.app/api/repositories/repo_123/sync?workspaceSlug=acme"),
     { params: Promise.resolve({ id: "repo_123" }) },
   );
 
@@ -521,7 +521,7 @@ test("createSkillScaffoldApplyPostHandler forwards connection selections and ret
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/skills/scaffold/apply?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/skills/scaffold/apply?workspaceSlug=acme"));
   const body = await response.json();
 
   assert.ok(capturedRequest);
@@ -553,7 +553,7 @@ test("createSkillScaffoldApplyPostHandler maps tenant write access errors to a 4
     isKnownError: isKnownRouteError,
   });
 
-  const response = await handler(createRequest("https://savantrepo.com/api/skills/scaffold/apply?workspaceSlug=acme"));
+  const response = await handler(createRequest("https://savantskills.app/api/skills/scaffold/apply?workspaceSlug=acme"));
 
   assert.equal(response.status, 403);
   assert.deepEqual(await response.json(), {

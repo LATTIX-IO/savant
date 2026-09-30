@@ -10,7 +10,7 @@ import {
 
 test("buildPublicAuthSettings marks partial local Auth0 setup as development bypass without exposing secrets", () => {
   const result = buildPublicAuthSettings({
-    APP_BASE_URL: "https://savantrepo.com",
+    APP_BASE_URL: "https://savantskills.app",
     AUTH0_DOMAIN: "dev-uzaxp03ophsygo6g.us.auth0.com",
     AUTH0_CLIENT_ID: "client-id",
     AUTH0_CLIENT_SECRET: "<AUTH0_CLIENT_SECRET>",
@@ -22,9 +22,9 @@ test("buildPublicAuthSettings marks partial local Auth0 setup as development byp
     status: "development-bypass",
     tenantDomain: "dev-uzaxp03ophsygo6g.us.auth0.com",
     clientId: "client-id",
-    appBaseUrl: "https://savantrepo.com",
-    callbackUrl: "https://savantrepo.com/auth/callback",
-    logoutUrl: "https://savantrepo.com/",
+    appBaseUrl: "https://savantskills.app",
+    callbackUrl: "https://savantskills.app/auth/callback",
+    logoutUrl: "https://savantskills.app/",
     applicationType: "regular_web",
     tokenEndpointAuthMethod: "client_secret_post",
     sessionMode: "server-side session",
@@ -46,7 +46,7 @@ test("buildWorkspaceSettingsPayload avoids inventing local members or AI connect
   assert.equal(result.members.length, 0);
   assert.equal(result.general.workspaceName, "Local Workspace");
   assert.equal(result.general.workspaceSlug, "local-workspace");
-  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/local-workspace");
+  assert.equal(result.general.workspaceUrl, "https://savantskills.app/o/local-workspace");
   assert.equal(result.billing.activeSkills, 0);
   assert.equal(result.billing.includedSeats, 0);
   assert.equal(result.billing.usedSeats, 0);
@@ -63,49 +63,49 @@ test("buildWorkspaceSettingsPayload accepts tenant overrides for the current wor
 
   assert.equal(result.general.workspaceName, "Finance Ops");
   assert.equal(result.general.workspaceSlug, "finance-ops");
-  assert.equal(result.general.workspaceUrl, "https://savantrepo.com/o/finance-ops");
+  assert.equal(result.general.workspaceUrl, "https://savantskills.app/o/finance-ops");
 });
 
 test("buildPublicAuthSettings derives the base URL from Vercel production metadata when APP_BASE_URL is absent", () => {
   const result = buildPublicAuthSettings({
-    VERCEL_PROJECT_PRODUCTION_URL: "savantrepo.com",
+    VERCEL_PROJECT_PRODUCTION_URL: "savantskills.app",
     AUTH0_DOMAIN: "dev-uzaxp03ophsygo6g.us.auth0.com",
     AUTH0_CLIENT_ID: "client-id",
     AUTH0_CLIENT_SECRET: "<AUTH0_CLIENT_SECRET>",
     AUTH0_SECRET: "<AUTH0_SECRET>",
   });
 
-  assert.equal(result.appBaseUrl, "https://savantrepo.com");
-  assert.equal(result.callbackUrl, "https://savantrepo.com/auth/callback");
-  assert.equal(result.logoutUrl, "https://savantrepo.com/");
+  assert.equal(result.appBaseUrl, "https://savantskills.app");
+  assert.equal(result.callbackUrl, "https://savantskills.app/auth/callback");
+  assert.equal(result.logoutUrl, "https://savantskills.app/");
   assert.equal(result.status, "development-bypass");
 });
 
 test("buildPublicAuthSettings accepts legacy Auth0 issuer and base-url env names", () => {
   const result = buildPublicAuthSettings({
-    AUTH0_BASE_URL: "https://legacy.savantrepo.com",
-    AUTH0_ISSUER_BASE_URL: "https://login.savantrepo.com/",
+    AUTH0_BASE_URL: "https://legacy.savantskills.app",
+    AUTH0_ISSUER_BASE_URL: "https://login.savantskills.app/",
     AUTH0_CLIENT_ID: "client-id",
     AUTH0_CLIENT_SECRET: "client-secret",
     AUTH0_SECRET: "session-secret",
   });
 
   assert.equal(result.status, "configured");
-  assert.equal(result.appBaseUrl, "https://legacy.savantrepo.com");
-  assert.equal(result.tenantDomain, "login.savantrepo.com");
-  assert.equal(result.callbackUrl, "https://legacy.savantrepo.com/auth/callback");
+  assert.equal(result.appBaseUrl, "https://legacy.savantskills.app");
+  assert.equal(result.tenantDomain, "login.savantskills.app");
+  assert.equal(result.callbackUrl, "https://legacy.savantskills.app/auth/callback");
 });
 
 test("buildPublicAuthSettings accepts public Auth0 aliases when server equivalents are absent", () => {
   const result = buildPublicAuthSettings({
-    NEXT_PUBLIC_AUTH0_DOMAIN: "https://login.savantrepo.com/",
+    NEXT_PUBLIC_AUTH0_DOMAIN: "https://login.savantskills.app/",
     NEXT_PUBLIC_AUTH0_CLIENT_ID: "public-client-id",
     AUTH0_CLIENT_SECRET: "client-secret",
     AUTH0_SECRET: "session-secret",
   });
 
   assert.equal(result.status, "configured");
-  assert.equal(result.tenantDomain, "login.savantrepo.com");
+  assert.equal(result.tenantDomain, "login.savantskills.app");
   assert.equal(result.clientId, "public-client-id");
 });
 

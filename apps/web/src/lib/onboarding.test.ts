@@ -179,13 +179,13 @@ test("buildStripeTenantMetadata creates a stable Auth0-Stripe correlation payloa
     buildStripeTenantMetadata({
       organizationId: "org_123",
       workspaceSlug: "savant-ops",
-      workspaceUrl: "https://savantrepo.com/o/savant-ops",
+      workspaceUrl: "https://savantskills.app/o/savant-ops",
       auth0Subject: "auth0|abc123",
     }),
     {
       tenantId: "org_123",
       workspaceSlug: "savant-ops",
-      workspaceUrl: "https://savantrepo.com/o/savant-ops",
+      workspaceUrl: "https://savantskills.app/o/savant-ops",
       auth0Sub: "auth0|abc123",
     },
   );

@@ -16,7 +16,7 @@ test("buildAuth0Diagnostics summarizes hosted Auth0 and onboarding readiness wit
     AUTH0_CLIENT_ID: "client-id",
     AUTH0_CLIENT_SECRET: "<AUTH0_CLIENT_SECRET>",
     AUTH0_SECRET: "<AUTH0_SECRET>",
-    APP_BASE_URL: "https://savantrepo.com",
+    APP_BASE_URL: "https://savantskills.app",
     NEXT_PUBLIC_APP_URL: "http://localhost:3000",
     DATABASE_URL: "<DATABASE_URL>",
     STRIPE_SECRET_KEY: "sk_test_123",
@@ -31,7 +31,7 @@ test("buildAuth0Diagnostics summarizes hosted Auth0 and onboarding readiness wit
   assert.equal(result.clientId, "client-id");
   assert.equal(result.clientSecretStatus, "placeholder");
   assert.equal(result.sessionSecretStatus, "placeholder");
-  assert.equal(result.appBaseUrl, "https://savantrepo.com");
+  assert.equal(result.appBaseUrl, "https://savantskills.app");
   assert.equal(result.publicAppUrl, "http://localhost:3000");
   assert.equal(result.appBaseUrlMatchesPublicAppUrl, false);
   assert.equal(result.databaseStatus, "placeholder");
@@ -47,7 +47,7 @@ test("buildAuth0Diagnostics accepts public Auth0 aliases used in some deployment
     NEXT_PUBLIC_AUTH0_CLIENT_ID: "public-client-id",
     AUTH0_CLIENT_SECRET: "client-secret",
     AUTH0_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    APP_BASE_URL: "https://savantrepo.com",
+    APP_BASE_URL: "https://savantskills.app",
     DATABASE_URL: "postgres://db.example.com/savant",
     STRIPE_SECRET_KEY: "sk_test_123",
     STRIPE_WEBHOOK_SECRET: "whsec_example",
@@ -65,7 +65,7 @@ test("buildAuth0Diagnostics treats quoted placeholders as placeholders and expos
     AUTH0_CLIENT_ID: "client-id",
     AUTH0_CLIENT_SECRET: '"<AUTH0_CLIENT_SECRET>"',
     AUTH0_SECRET: '"<AUTH0_SECRET>"',
-    APP_BASE_URL: "https://savantrepo.com",
+    APP_BASE_URL: "https://savantskills.app",
   });
 
   assert.equal(result.clientSecretStatus, "placeholder");
@@ -109,10 +109,10 @@ test("resolveRequestOrigin derives the deployed origin from forwarded headers", 
   assert.equal(
     resolveRequestOrigin({
       forwardedProto: "https",
-      forwardedHost: "savantrepo.com",
+      forwardedHost: "savantskills.app",
       nodeEnv: "production",
     }),
-    "https://savantrepo.com",
+    "https://savantskills.app",
   );
 
   assert.equal(
@@ -123,14 +123,14 @@ test("resolveRequestOrigin derives the deployed origin from forwarded headers", 
     "http://localhost:3000",
   );
 
-  assert.equal(doOriginsMatch("https://savantrepo.com", "https://savantrepo.com/auth/callback"), true);
-  assert.equal(doOriginsMatch("https://preview.savantrepo.com", "https://savantrepo.com"), false);
+  assert.equal(doOriginsMatch("https://savantskills.app", "https://savantskills.app/auth/callback"), true);
+  assert.equal(doOriginsMatch("https://preview.savantskills.app", "https://savantskills.app"), false);
 });
 
 test("auth and onboarding blockers are reported separately", () => {
   const diagnostics = {
     ...buildAuth0Diagnostics({
-      APP_BASE_URL: "https://savantrepo.com",
+      APP_BASE_URL: "https://savantskills.app",
       STRIPE_SECRET_KEY: "sk_test_123",
     }),
     discovery: {
@@ -142,7 +142,7 @@ test("auth and onboarding blockers are reported separately", () => {
     },
   };
 
-  const authIssues = getAuthBlockingIssues(diagnostics, "https://savantrepo.com");
+  const authIssues = getAuthBlockingIssues(diagnostics, "https://savantskills.app");
   const onboardingIssues = getOnboardingBlockingIssues(diagnostics);
 
   assert.equal(authIssues.some((issue) => issue.includes("AUTH0_CLIENT_SECRET")), true);

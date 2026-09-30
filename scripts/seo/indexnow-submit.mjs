@@ -2,7 +2,7 @@
 // and the engines that share its feed). Run after a production deploy that
 // changes public copy:
 //
-//   INDEXNOW_KEY=<key> node ./scripts/seo/indexnow-submit.mjs [--origin https://savantrepo.com] [--dry-run]
+//   INDEXNOW_KEY=<key> node ./scripts/seo/indexnow-submit.mjs [--origin https://savantskills.app] [--dry-run]
 //
 // The key must match the INDEXNOW_KEY env var of the deployment, which serves
 // it at <origin>/indexnow.txt.
@@ -20,7 +20,7 @@ function extractSitemapUrls(xml) {
 }
 
 async function main() {
-  const origin = (readArg("--origin") ?? process.env.SITE_ORIGIN ?? "https://savantrepo.com").replace(/\/+$/, "");
+  const origin = (readArg("--origin") ?? process.env.SITE_ORIGIN ?? "https://savantskills.app").replace(/\/+$/, "");
   const dryRun = process.argv.includes("--dry-run");
   const key = process.env.INDEXNOW_KEY?.trim();
 

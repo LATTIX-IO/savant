@@ -11,7 +11,7 @@ on:
       origin:
         description: Origin to verify
         required: false
-        default: https://savantrepo.com
+        default: https://savantskills.app
 
 permissions:
   contents: read
@@ -26,4 +26,4 @@ jobs:
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       - name: Verify
-        run: node ./scripts/seo/verify-live.mjs --origin "${{ github.event.inputs.origin || 'https://savantrepo.com' }}"
+        run: node ./scripts/seo/verify-live.mjs --origin "${{ github.event.inputs.origin || 'https://savantskills.app' }}"

@@ -47,7 +47,7 @@ test("auth0 module trims and dequotes configured secrets before creating the SDK
   const envSnapshot = snapshotEnv();
   const env = getMutableEnv();
 
-  env.APP_BASE_URL = "https://savantrepo.com";
+  env.APP_BASE_URL = "https://savantskills.app";
   env.AUTH0_CLIENT_ID = "client-id";
   env.AUTH0_CLIENT_SECRET = '  "client-secret"\n';
   env.AUTH0_DOMAIN = "dev-tenant.us.auth0.com";

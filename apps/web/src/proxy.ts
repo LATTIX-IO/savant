@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server.js";
 
 import { auth0, isAuth0Configured } from "./lib/auth0.ts";
+import { canonicalHostRedirect } from "./lib/canonical-host.ts";
 import {
   AUTH_SERVICE_UNAVAILABLE_CODE,
   AUTH_SERVICE_UNAVAILABLE_STATUS,
@@ -40,6 +41,11 @@ function createAuthUnavailableResponse(requestUrl: URL) {
 export async function proxy(request: Request) {
   const client = auth0;
   const requestUrl = new URL(request.url);
+
+  const canonicalRedirect = canonicalHostRedirect(requestUrl, request.headers.get("x-forwarded-host") ?? request.headers.get("host"));
+  if (canonicalRedirect) {
+    return NextResponse.redirect(canonicalRedirect, 308);
+  }
   const legacyAuthRedirectPath = getLegacyAuthRedirectPath(requestUrl);
 
   if (legacyAuthRedirectPath) {

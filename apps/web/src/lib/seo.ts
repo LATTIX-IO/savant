@@ -51,7 +51,7 @@ export function isIndexableDeployment(env: SeoEnv = process.env): boolean {
 // ---------------------------------------------------------------------------
 
 export type PublicRoute = {
-  path: "/" | "/docs" | "/security" | "/signup";
+  path: "/" | "/docs" | "/catalog" | "/security" | "/signup";
   title: string;
   description: string;
   changeFrequency: "daily" | "weekly" | "monthly";
@@ -73,6 +73,14 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     description:
       "Get started with Savant: connect a repository, evaluate, approve, release, distribute, audit, and improve skills.",
     changeFrequency: "weekly",
+    priority: 0.8,
+  },
+  {
+    path: "/catalog",
+    title: "Skill catalog",
+    description:
+      "Agent skills from Anthropic, OpenAI, skills.sh, ClawHub and SkillsMP, safety-scanned with NVIDIA SkillSpector and evaluated live by Savant.",
+    changeFrequency: "daily",
     priority: 0.8,
   },
   {

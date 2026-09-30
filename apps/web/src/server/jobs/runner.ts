@@ -6,7 +6,9 @@ import { CASE_KINDS, EvalGenerationError, generateEvaluationSet, type CaseKind, 
 import { persistGeneratedEvaluation } from "../evaluation/import-results.ts";
 import { evaluateSkillPackage } from "../evaluation/scorecard.ts";
 import { packageFingerprint, runSkillSpectorScans, SafetyScanUnavailableError, SCAN_RESULT_VERSION, SCANNABLE_FILE, type ScanPackage } from "../safety/skillspector.ts";
+import { runHubEval, runHubSafety, runHubSync } from "../hub/jobs.ts";
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
+import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
 
@@ -37,7 +39,7 @@ const MAX_PACKAGE_BYTES = 3 * 1024 * 1024;
 const SCAN_CHUNK = Number(env.SKILLSPECTOR_CHUNK_SIZE) || 40;
 
 async function runSafetyScan(ctx: Context, job: BackgroundJob): Promise<"done" | "released"> {
-  const organizationId = job.organizationId;
+  const organizationId = job.organizationId as string;
   const repositoryId = job.repositoryId as string;
   const store = createSafetyScanStore(ctx.sql);
   const done = new Set(Array.isArray(job.progress.done) ? job.progress.done as string[] : []);
@@ -141,7 +143,7 @@ function seedCasesFrom(dataset: unknown): DraftCase[] {
 }
 
 async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"done" | "released"> {
-  const organizationId = job.organizationId;
+  const organizationId = job.organizationId as string;
   const store = createEvalGenerationStore(ctx.sql);
   const run = await store.get(organizationId, String(job.payload.runId));
   if (!run || run.status === "complete" || run.status === "needs_review") {
@@ -274,7 +276,11 @@ export async function runBackgroundJobs(options: { budgetMs?: number; workers?: 
       const job = await ctx.queue.claim();
       if (!job) return;
       try {
-        const outcome = job.kind === "safety_scan" ? await runSafetyScan(ctx, job) : await runEvalGeneration(ctx, job);
+        const outcome = job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
+          : job.kind === "eval_generation" ? await runEvalGeneration(ctx, job)
+          : job.kind === "hub_sync" ? await runHubSync(ctx, job)
+          : job.kind === "hub_safety" ? await runHubSafety(ctx, job)
+          : await runHubEval(ctx, job);
         if (outcome === "done") {
           await ctx.queue.complete(job.id);
           stats.processed += 1;
@@ -303,10 +309,42 @@ export async function kickBackgroundJobs(): Promise<void> {
   try {
     const { after } = await import("next/server");
     after(async () => {
-      await runBackgroundJobs().catch((error: unknown) => logGitEvent("warn", "background_jobs_failed", { error }));
+      await runAndContinue(0);
     });
   } catch {
     // Not in a request scope (e.g. tests); jobs wait for the next trigger.
+  }
+}
+
+const MAX_CHAIN = Number(env.BACKGROUND_JOBS_MAX_CHAIN) || 60;
+
+/**
+ * Runs jobs within this invocation's budget, then — if work remains and this
+ * run made progress — hands the queue to a fresh invocation of the worker
+ * endpoint, so long backlogs drain without a frequent cron.
+ */
+export async function runAndContinue(depth: number): Promise<void> {
+  const stats = await runBackgroundJobs().catch((error: unknown) => {
+    logGitEvent("warn", "background_jobs_failed", { error });
+    return { processed: 0, released: 0, failed: 0 };
+  });
+  if (depth >= MAX_CHAIN || stats.processed + stats.released === 0) return;
+  if (!(await hasPendingJobs().catch(() => false))) return;
+  const base = selfBaseUrl();
+  const token = internalWorkerToken();
+  if (!base || !token) return;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15_000);
+  try {
+    await fetch(`${base}/api/internal/jobs/run`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "x-savant-chain": String(depth + 1) },
+      signal: controller.signal,
+    });
+  } catch (error) {
+    logGitEvent("warn", "background_jobs_chain_failed", { error });
+  } finally {
+    clearTimeout(timer);
   }
 }
 

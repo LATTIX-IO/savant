@@ -182,3 +182,36 @@ export function fetchSkillAutomation(skillId: string): Promise<{ data: SkillAuto
 export function startSkillEvalGeneration(skillId: string): Promise<{ data: SkillAutomationRun }> {
   return requestJson(`/api/skills/${encodeURIComponent(skillId)}/automation/generate`, { method: "POST" });
 }
+
+// ── Skill catalog ──────────────────────────────────────────────────────
+
+export type CatalogListResponse = {
+  data: {
+    items: import("@/server/hub/catalog-read").CatalogSkillSummary[];
+    total: number;
+    sources: import("@/server/hub/catalog-read").CatalogSource[];
+    stats: { skills: number; validated: number; evaluated: number; scanned: number; flagged: number };
+  };
+};
+
+export async function fetchCatalog(params: { q?: string; source?: string; verdict?: string; limit?: number; offset?: number }): Promise<CatalogListResponse> {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") search.set(key, String(value));
+  const response = await fetch(`/api/public/catalog?${search.toString()}`, { cache: "no-store" });
+  if (!response.ok) throw new ControlPlaneClientError("catalog_unavailable", "The catalog is unavailable.", response.status);
+  return response.json() as Promise<CatalogListResponse>;
+}
+
+export async function fetchCatalogSkill(id: string): Promise<{ data: import("@/server/hub/catalog-read").CatalogSkillDetail }> {
+  const response = await fetch(`/api/public/catalog/${encodeURIComponent(id)}`, { cache: "no-store" });
+  if (!response.ok) throw new ControlPlaneClientError("catalog_skill_unavailable", response.status === 404 ? "That catalog skill wasn't found." : "The catalog is unavailable.", response.status);
+  return response.json() as Promise<{ data: import("@/server/hub/catalog-read").CatalogSkillDetail }>;
+}
+
+export function requestCatalogAnalysis(id: string): Promise<{ data: { queued: boolean } }> {
+  return requestJson(`/api/catalog/${encodeURIComponent(id)}/analyze`, { method: "POST" });
+}
+
+export function importCatalogSkill(id: string, input: { repositoryId: string; targetRoot?: string; owner?: string }): Promise<{ data: { proposal: import("@savant/types").ChangeProposal; root: string } }> {
+  return requestJson(`/api/catalog/${encodeURIComponent(id)}/import`, { method: "POST", body: JSON.stringify(input) });
+}

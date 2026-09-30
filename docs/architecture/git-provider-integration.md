@@ -217,3 +217,43 @@ Many repositories don't have an answer key. For those, Savant generates one afte
 - Package files are copied into the sandbox; repository credentials never enter it.
 
 **Timing.** Jobs run in `after()` with a time budget. Work that doesn't fit is released back to the queue, and continues on the next sync, a skill-page poll, or `/api/internal/jobs/run` (Bearer `SAVANT_WORKER_TOKEN` or `CRON_SECRET`).
+
+### Public skill catalog
+
+Savant keeps a platform-level catalog of skills from reputable hubs. The tables are `skill_hub_sources`, `hub_skills`, `hub_skill_files` and `hub_skill_analyses` (`0010`). Sources:
+
+| Source | How it's read |
+|---|---|
+| Anthropic `anthropics/skills` | GitHub tree + raw files |
+| OpenAI `openai/skills` and `openai/plugins` | GitHub tree + raw files |
+| Karpathy guidelines (community) | GitHub tree + raw files |
+| skills.sh | `/api/v1` with the deployment's Vercel OIDC token; includes partner audits |
+| ClawHub | Public API, `nonSuspiciousOnly`; includes its security status |
+| SkillsMP | Search API; files come from the linked GitHub folder |
+
+The same upstream skill listed by several hubs shares a `canonical_key`. The catalog shows it once and notes where else it's listed.
+
+Pipeline (platform `background_jobs` with a null organization):
+
+1. **`hub_sync`** (daily cron, `/api/internal/hub/sync`) fetches each source. It runs the static checks: frontmatter, thin instructions, placeholders, referenced files missing, executable scripts, license, and upstream security flags.
+2. **`hub_safety`** runs SkillSpector over new or changed packages in the sandbox.
+3. **`hub_eval`** runs the LLM↔Jev live evaluation. These skills have no answer key, so this gives them a starting baseline. It runs for the top `HUB_AUTO_EVAL_LIMIT` per source, or on demand from a workspace.
+
+**Verdicts:**
+- `unsafe`: SkillSpector says do not install.
+- `caution`: SkillSpector says caution, or the upstream hub flagged it.
+- `validated`: safe, and a live score of 70 or more.
+- `analyzed`: scanned or evaluated, but not both passing.
+- `unverified`: still in progress.
+
+**Public read-only surfaces:** `/catalog` and `/catalog/[id]`, plus the JSON API `/api/public/catalog`.
+
+**In the app:** `/o/<workspace>/catalog`. From there a workspace can run a live analysis, or **import** a skill into a connected repository. An import proposes the package under `tier2/imported/<source>/<slug>`. The proposal includes:
+- contract `metadata.yaml` recording provenance and Savant's analysis
+- an agent overlay
+- the generated evaluations (or starter scaffolds)
+- a registry entry
+
+Approval opens a pull request. Unsafe skills can't be imported.
+
+**Job runner.** It responds immediately and works in `after()`. When work remains, it hands the queue to a fresh invocation, authenticated with an internal token derived from `GIT_CREDENTIAL_ENCRYPTION_KEY`. This lets backlogs drain on the Hobby plan's daily crons.

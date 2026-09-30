@@ -267,7 +267,8 @@ export function buildAuthStatusHref({
 // telemetry ingest tokens or the platform worker token) and must not be
 // redirected to the interactive sign-in flow. Each handler falls back to, or
 // requires, its own authorization check.
-const SELF_AUTHENTICATED_API_PREFIXES = ["/api/skill-runs", "/api/internal/"] as const;
+// /api/public/ is anonymous and read-only (the public skill catalog).
+const SELF_AUTHENTICATED_API_PREFIXES = ["/api/skill-runs", "/api/internal/", "/api/public/"] as const;
 
 export function isSelfAuthenticatedApiPath(pathname: string): boolean {
   return SELF_AUTHENTICATED_API_PREFIXES.some((prefix) =>

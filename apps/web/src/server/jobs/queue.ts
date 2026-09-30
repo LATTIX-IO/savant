@@ -6,11 +6,12 @@ type Sql = import("postgres").Sql;
  * of time) is claimable again, up to MAX_ATTEMPTS.
  */
 
-export type JobKind = "eval_generation" | "safety_scan";
+export type JobKind = "eval_generation" | "safety_scan" | "hub_sync" | "hub_safety" | "hub_eval";
 
 export type BackgroundJob = {
   id: string;
-  organizationId: string;
+  /** Null for platform jobs (the public skill catalog). */
+  organizationId: string | null;
   repositoryId: string | null;
   kind: JobKind;
   dedupeKey: string;
@@ -21,7 +22,7 @@ export type BackgroundJob = {
 
 type JobRow = {
   id: string;
-  organization_id: string;
+  organization_id: string | null;
   repository_id: string | null;
   kind: JobKind;
   dedupe_key: string;
@@ -47,7 +48,7 @@ const toJob = (row: JobRow): BackgroundJob => ({
 export function createJobQueue(sql: Sql) {
   return {
     /** Enqueues unless a live job with the same key exists; returns the live job's id either way. */
-    async enqueue(input: { organizationId: string; repositoryId: string | null; kind: JobKind; dedupeKey: string; payload?: Record<string, unknown> }): Promise<{ id: string; created: boolean }> {
+    async enqueue(input: { organizationId: string | null; repositoryId: string | null; kind: JobKind; dedupeKey: string; payload?: Record<string, unknown> }): Promise<{ id: string; created: boolean }> {
       const inserted = await sql<{ id: string }[]>`
         insert into background_jobs (organization_id, repository_id, kind, dedupe_key, payload)
         values (${input.organizationId}, ${input.repositoryId}, ${input.kind}, ${input.dedupeKey}, ${sql.json((input.payload ?? {}) as never)})
@@ -59,7 +60,7 @@ export function createJobQueue(sql: Sql) {
       }
       const [existing] = await sql<{ id: string }[]>`
         select id from background_jobs
-        where organization_id = ${input.organizationId} and kind = ${input.kind} and dedupe_key = ${input.dedupeKey}
+        where organization_id is not distinct from ${input.organizationId}::uuid and kind = ${input.kind} and dedupe_key = ${input.dedupeKey}
           and status in ('queued', 'running')
         limit 1
       `;

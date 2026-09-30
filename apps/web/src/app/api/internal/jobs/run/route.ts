@@ -1,27 +1,26 @@
-import { timingSafeEqual } from "node:crypto";
+import { after, NextResponse } from "next/server";
 
-import { NextResponse } from "next/server";
-
-import { runBackgroundJobs } from "@/server/jobs/runner";
+import { runAndContinue } from "@/server/jobs/runner";
+import { isAuthorizedWorker } from "@/server/jobs/worker-auth";
 
 export const maxDuration = 300;
 
-function authorized(request: Request): boolean {
-  const header = request.headers.get("authorization") ?? "";
-  const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
-  return [process.env.SAVANT_WORKER_TOKEN, process.env.CRON_SECRET].some((secret) => {
-    if (!secret || secret.length < 16 || presented.length !== secret.length) return false;
-    return timingSafeEqual(Buffer.from(presented), Buffer.from(secret));
-  });
-}
-
-/** Processes queued background jobs (safety scans, evaluation generation). For cron or a worker. */
+/**
+ * Processes queued background jobs (tenant safety scans and evaluation
+ * generation; catalog sync, scans and live evaluations). Responds at once and
+ * works after the response, handing any remaining queue to a fresh invocation.
+ * Called by Vercel Cron (CRON_SECRET), external workers (SAVANT_WORKER_TOKEN)
+ * and the runner itself (internal token).
+ */
 async function handle(request: Request) {
-  if (!authorized(request)) {
+  if (!isAuthorizedWorker(request)) {
     return NextResponse.json({ error: { code: "UNAUTHORIZED", message: "A worker token is required." } }, { status: 401 });
   }
-  const stats = await runBackgroundJobs({ budgetMs: 270_000 });
-  return NextResponse.json({ data: stats });
+  const depth = Math.max(0, Number(request.headers.get("x-savant-chain")) || 0);
+  after(async () => {
+    await runAndContinue(depth);
+  });
+  return NextResponse.json({ data: { accepted: true, chain: depth } }, { status: 202 });
 }
 
 export const GET = handle;

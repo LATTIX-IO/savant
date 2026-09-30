@@ -7,11 +7,12 @@ import { useEffect, useRef, useState } from "react";
 import { SavantLogo } from "@/components/brand/savant-logo";
 import { isMarketingNavSolid } from "@/lib/marketing-nav-state";
 
-export type NavKey = "product" | "how" | "security" | "pricing" | "docs";
+export type NavKey = "product" | "how" | "catalog" | "security" | "pricing" | "docs";
 
 const NAV_ITEMS: { key: NavKey; label: string; href: Route }[] = [
   { key: "product", label: "Product", href: "/#product" },
   { key: "how", label: "How it works", href: "/#how-it-works" },
+  { key: "catalog", label: "Catalog", href: "/catalog" },
   { key: "security", label: "Security", href: "/security" },
   { key: "pricing", label: "Pricing", href: "/#pricing" },
   { key: "docs", label: "Docs", href: "/docs" },

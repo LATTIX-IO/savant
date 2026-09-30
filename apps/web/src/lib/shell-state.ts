@@ -20,6 +20,7 @@ const TITLE_BY_PATH: Record<string, { group: string; title: string }> = {
   "/dashboard": { group: "Workspace", title: "Overview" },
   "/skills": { group: "Workspace", title: "Skills" },
   "/repositories": { group: "Workspace", title: "Repositories" },
+  "/catalog": { group: "Workspace", title: "Skill catalog" },
   "/evaluations": { group: "Workspace", title: "Evaluations" },
   "/releases": { group: "Workspace", title: "Releases" },
   "/intelligence": { group: "Workspace", title: "Skill Intelligence" },

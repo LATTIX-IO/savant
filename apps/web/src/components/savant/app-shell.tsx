@@ -84,6 +84,7 @@ function Sidebar({ viewer, shellData }: { viewer: AuthViewer; shellData?: Savant
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/dashboard") : "/dashboard") as Route, label: "Overview", icon: Ic.Overview, count: null, match: (p) => p === "/dashboard" },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/skills") : "/skills") as Route, label: "Skills", icon: Ic.Skills, count: counts.skills, match: (p) => p.startsWith("/skills") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/repositories") : "/repositories") as Route, label: "Repositories", icon: Ic.Repo, count: counts.repositories, match: (p) => p.startsWith("/repositories") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/catalog") : "/catalog") as Route, label: "Skill catalog", icon: Ic.Skills, count: null, match: (p) => p.startsWith("/catalog") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/evaluations") : "/evaluations") as Route, label: "Evaluations", icon: Ic.Eval, count: counts.evaluations, match: (p) => p.startsWith("/evaluations") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/releases") : "/releases") as Route, label: "Releases", icon: Ic.Release, count: counts.releases, match: (p) => p.startsWith("/releases") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/intelligence") : "/intelligence") as Route, label: "Intelligence", icon: Ic.Eval, count: null, match: (p) => p.startsWith("/intelligence") },

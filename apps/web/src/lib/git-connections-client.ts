@@ -215,3 +215,7 @@ export function requestCatalogAnalysis(id: string): Promise<{ data: { queued: bo
 export function importCatalogSkill(id: string, input: { repositoryId: string; targetRoot?: string; owner?: string }): Promise<{ data: { proposal: import("@savant/types").ChangeProposal; root: string } }> {
   return requestJson(`/api/catalog/${encodeURIComponent(id)}/import`, { method: "POST", body: JSON.stringify(input) });
 }
+
+export function requestCatalogSync(): Promise<{ data: { queued: string[] } }> {
+  return requestJson("/api/catalog/sync", { method: "POST" });
+}

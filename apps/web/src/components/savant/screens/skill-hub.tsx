@@ -13,6 +13,7 @@ import {
   fetchCatalogSkill,
   importCatalogSkill,
   requestCatalogAnalysis,
+  requestCatalogSync,
   type CatalogListResponse,
 } from "@/lib/git-connections-client";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
@@ -38,6 +39,8 @@ export function SkillHubScreen() {
   const [offset, setOffset] = useState(0);
   const [data, setData] = useState<CatalogListResponse["data"] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -71,8 +74,25 @@ export function SkillHubScreen() {
             evaluated live (LLM-drafted cases, Jev-validated and scored). Import any skill into a connected repository as a reviewed pull request.
           </div>
         </div>
-        <a className="btn btn-ghost" href="/catalog" target="_blank" rel="noopener noreferrer">Public catalog</a>
+        <div className="row" style={{ gap: 8 }}>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={syncing}
+            onClick={() => {
+              setSyncing(true);
+              requestCatalogSync()
+                .then(() => setNotice("Refreshing the catalog from its sources. New skills appear over the next few minutes."))
+                .catch((reason: unknown) => setNotice(reason instanceof Error ? reason.message : "The catalog couldn't be refreshed."))
+                .finally(() => setSyncing(false));
+            }}
+          >
+            {syncing ? "Refreshing…" : "Refresh sources"}
+          </button>
+          <a className="btn btn-ghost" href="/catalog" target="_blank" rel="noopener noreferrer">Public catalog</a>
+        </div>
       </div>
+      {notice && <div className="note" style={{ marginBottom: 12 }}><span style={{ fontSize: 12.5 }}>{notice}</span></div>}
 
       {data && (
         <div className="row" style={{ gap: 24, flexWrap: "wrap", marginBottom: 16, fontSize: 12.5 }}>

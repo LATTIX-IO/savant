@@ -37,6 +37,9 @@ type EvaluationDetailRow = {
   executed_at: Date | string | null;
   indexed_at: Date | string;
   score_delta: number | null;
+  /** Present on import-time (scorecard) evaluations. */
+  scorecard?: Record<string, unknown> | null;
+  source?: string | null;
   skill_id: string;
   skill_name: string;
   skill_tier: string;
@@ -147,6 +150,35 @@ function buildMetricStrip(
   }
 
   return metrics;
+}
+
+const SCORECARD_METRICS = [
+  ["overall", "Overall score", "overallScore", "Weighted rubric score from the repository's evaluation dataset."],
+  ["quality", "Quality", "qualityScore", "Average sample quality."],
+  ["compliance", "Compliance", "complianceScore", "Format and policy compliance."],
+  ["grounding", "Grounding", "groundingScore", "Grounding on samples where it applies."],
+  ["actionability", "Actionability", "actionabilityScore", "How actionable the outputs are."],
+  ["efficiency", "Efficiency", "efficiencyScore", "Latency, cost, and human revisions."],
+] as const;
+
+/** Rubric dimensions for scorecard evaluations, against the previous scorecard or the committed baseline. */
+function buildScorecardMetrics(
+  scorecard: Record<string, unknown> | null | undefined,
+  baseline: Record<string, unknown> | null | undefined,
+): EvaluationMetric[] {
+  if (!scorecard || typeof scorecard.overallScore !== "number") {
+    return [];
+  }
+  const committed = scorecard.committedBaseline as { overallScore?: number } | null | undefined;
+  return SCORECARD_METRICS.flatMap(([id, label, key, note]) => {
+    const candidate = scorecard[key];
+    if (typeof candidate !== "number") return [];
+    const prior = baseline?.[key];
+    const base = typeof prior === "number"
+      ? prior
+      : key === "overallScore" && typeof committed?.overallScore === "number" ? committed.overallScore : candidate;
+    return [{ id, label, baseline: roundScore(base) ?? 0, candidate: roundScore(candidate) ?? 0, unit: "pts", direction: "up" as const, note }];
+  });
 }
 
 function severityForFailures(failed: number, cases: number): EvaluationFailureCluster["severity"] {
@@ -597,6 +629,8 @@ async function queryPrimaryEvaluationRow(
       indexed_eval_results.executed_at,
       indexed_eval_results.indexed_at,
       indexed_eval_results.score_delta::float8 as score_delta,
+      indexed_eval_results.scorecard,
+      indexed_eval_results.source,
       latest_skills.skill_id,
       latest_skills.display_name as skill_name,
       latest_skills.tier as skill_tier
@@ -637,6 +671,8 @@ async function queryHistoricalEvaluationRows(
       indexed_eval_results.executed_at,
       indexed_eval_results.indexed_at,
       indexed_eval_results.score_delta::float8 as score_delta,
+      indexed_eval_results.scorecard,
+      indexed_eval_results.source,
       ${current.skill_id}::text as skill_id,
       ${current.skill_name}::text as skill_name,
       ${current.skill_tier}::text as skill_tier
@@ -850,16 +886,16 @@ export async function readEvaluationDetailFromDatabase(
     skill,
     baselineRun,
     release,
-    executedBy: "control-plane index",
+    executedBy: primaryRow.source === "import" ? "Savant import evaluation" : "control-plane index",
     executionEnvironment: primaryRow.dataset_source_path
       ? `Indexed benchmark · ${primaryRow.dataset_source_path}`
       : "Indexed benchmark run",
-    candidateModel: "Not indexed",
-    judgeModel: "Not indexed · balanced rubric judge",
+    candidateModel: primaryRow.source === "import" ? "Recorded samples · no live run" : "Not indexed",
+    judgeModel: primaryRow.source === "import" ? "Deterministic scorecard · repository rubric" : "Not indexed · balanced rubric judge",
     focus,
     readOnly,
     publishedRef,
-    metrics: buildMetricStrip(run, baselineRun, release),
+    metrics: [...buildScorecardMetrics(primaryRow.scorecard, baselineRow?.scorecard), ...buildMetricStrip(run, baselineRun, release)],
     metricAlignment: buildMetricAlignment(skill, datasetLabel, recommendations),
     failureClusters,
     recommendations,

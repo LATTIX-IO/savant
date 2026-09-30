@@ -3066,7 +3066,7 @@ export async function readSkillDetailFromDatabase(
   const evaluations: EvalRunSummary[] = evaluationRows.map((row, index) => ({
     id: row.result_id ?? row.run_external_id ?? `${skill.id}-eval-${index + 1}`,
     skill: skill.name,
-    ref: row.comparison_commit_sha?.slice(0, 7) ?? skill.candidateRef !== "—" ? skill.candidateRef : skill.ref,
+    ref: row.comparison_commit_sha?.slice(0, 7) ?? (skill.candidateRef !== "—" ? skill.candidateRef : skill.ref),
     dataset: resolveIndexedEvalDatasetLabel(row),
     cases: row.total_cases,
     passed: row.passed_cases,

@@ -66,6 +66,7 @@ export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promis
     quotaExhaustedAt: null as string | null,
   };
 
+  let pagesThisRun = 0;
   try {
     for (;;) {
       if (timeLeft(ctx) < 45_000) {
@@ -75,6 +76,7 @@ export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promis
       }
       const page = await listSourcePage(source, state.cursor, { skillsShToken });
       await backlog.upsertListings(sourceId, state.runId, page.listings);
+      pagesThisRun += 1;
       state.pages += 1;
       state.seen += page.listings.length;
       if (page.total !== undefined && page.total !== null) state.total = page.total;
@@ -97,9 +99,13 @@ export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promis
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await backlog.saveEnumeration(sourceId, state);
     // Upstream hiccups (5xx) resume from the saved cursor on a later run rather than waiting for tomorrow's sync.
     const transient = error instanceof HubTransientError || /returned 5\d\d/.test(message);
+    // Upstream cursors expire: if resuming from a saved cursor fails straight away, start this source over.
+    if (transient && pagesThisRun === 0 && state.cursor) {
+      Object.assign(state, { runId: `run-${Date.now().toString(36)}`, cursor: null, pages: 0, seen: 0, startedAt: new Date().toISOString() });
+    }
+    await backlog.saveEnumeration(sourceId, state);
     await store.recordSourceSync(sourceId, { status: "error", error: `${message} (after ${state.seen} listings${transient ? "; retrying" : ""})` });
     logGitEvent("warn", "hub_source_sync_failed", { error: message });
     if (transient && job.attempts < 4) {

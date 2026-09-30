@@ -300,7 +300,9 @@ function retrying(fetchImpl: FetchLike): FetchLike {
       } catch (error) {
         if (attempt === 2) throw new HubTransientError(`Network error: ${error instanceof Error ? error.message : String(error)}`);
       }
-      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+      // Honour Retry-After; otherwise back off 5s, 15s (hubs throttle bursts from datacenter IPs).
+      const retryAfter = Number(last?.headers.get("retry-after"));
+      await new Promise((resolve) => setTimeout(resolve, Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(retryAfter, 30) * 1000 : [5000, 15000, 15000][attempt]));
     }
     return last as Response;
   };

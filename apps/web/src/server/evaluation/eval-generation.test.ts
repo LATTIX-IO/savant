@@ -126,3 +126,15 @@ test("draft parsing tolerates reasoning traces, fences and invalid entries", () 
   assert.equal(drafts.length, 1);
   assert.equal(drafts[0]?.context, null);
 });
+
+test("validation relabels a case Jev classifies differently, and doesn't scope-check negative cases", async () => {
+  const { decideValidation } = await import("./eval-generation.ts");
+  const good = { grounded: noul(0.9), clear: noul(0.9), discriminating: score(2.5) };
+  const relabeled = decideValidation("positive", { ...good, in_scope: noul(0.95), behavior: choice("escalation", { escalation: 0.9, positive: 0.05 }) });
+  assert.equal(relabeled.decision, "accepted");
+  assert.equal(relabeled.relabeledFrom, "positive");
+  const negative = decideValidation("negative", { ...good, in_scope: noul(0.1), behavior: choice("negative"), grounded: noul(0.45) });
+  assert.equal(negative.decision, "accepted");
+  const unrelated = decideValidation("edge", { ...good, in_scope: noul(0.9), behavior: choice("none") });
+  assert.equal(unrelated.decision, "rejected");
+});

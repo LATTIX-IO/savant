@@ -49,6 +49,8 @@ export type CaseValidation = {
   discriminating: number;
   behavior: string;
   behaviorConfidence: number;
+  /** Set when Jev classified the case as a different behaviour than the LLM declared. */
+  relabeledFrom?: CaseKind | undefined;
   decision: "accepted" | "rejected" | "needs_review";
   reasons: string[];
 };
@@ -198,7 +200,8 @@ export function buildDraftPrompt(input: {
     wanted,
     "",
     "Rules:",
-    "- Each case must be self-contained: include every fact the assistant needs in `prompt` or `context`.",
+    "- Each case must be self-contained: include every fact the assistant needs in `prompt` or `context`. When the task is about a document, draft, message or data, put that material itself in `context` (several sentences or rows). Never refer to attachments, files or links that aren't included.",
+    "- For \"negative\" cases, the request should look related to the skill but fall outside what it should do; `expected_behavior` says how the skill declines or redirects.",
     "- `expected_behavior` states what a correct response does, and must follow from the skill instructions — not general knowledge.",
     "- Cases must distinguish a response that follows the skill from one that ignores it.",
     "- Use realistic, specific details. Do not mention that this is a test.",
@@ -287,14 +290,16 @@ export function decideValidation(kind: CaseKind, answers: Record<string, Paramet
     if (value < threshold - margin) reasons.push(reason);
     else if (value < threshold) borderline.push(reason);
   };
-  check(inScope, 0.7, 0.2, "not in the skill's scope");
+  // Negative cases are out-of-scope requests by design; the behaviour question covers them.
+  if (kind !== "negative") check(inScope, 0.7, 0.2, "not in the skill's scope");
   // Declining out-of-scope requests is rarely spelled out in a skill, so negative cases get a lower bar.
   check(grounded, kind === "negative" ? 0.4 : 0.65, 0.2, "expected behaviour isn't supported by SKILL.md");
   check(clear, 0.6, 0.2, "not self-contained or ambiguous");
   check(discriminating, 1.5, 0.5, "doesn't discriminate between following and ignoring the skill");
+  // A different valid behaviour relabels the case (Jev selects, the LLM doesn't get the final word).
+  let relabeledFrom: CaseKind | undefined;
   if (behavior.choice === "none") reasons.push("doesn't test a behaviour of this skill");
-  else if (behavior.choice !== kind && kindProbability < 0.25) reasons.push(`tests "${behavior.choice}" behaviour, not "${kind}"`);
-  else if (behavior.choice !== kind) borderline.push(`may test "${behavior.choice}" rather than "${kind}"`);
+  else if (behavior.choice !== kind && (CASE_KINDS as readonly string[]).includes(behavior.choice) && kindProbability < 0.25) relabeledFrom = kind;
 
   return {
     inScope: round2(inScope),
@@ -303,6 +308,7 @@ export function decideValidation(kind: CaseKind, answers: Record<string, Paramet
     discriminating: round2(discriminating),
     behavior: behavior.choice,
     behaviorConfidence: round2(behavior.confidence),
+    ...(relabeledFrom ? { relabeledFrom } : {}),
     decision: reasons.length > 0 ? "rejected" : borderline.length > 0 ? "needs_review" : "accepted",
     reasons: reasons.length > 0 ? reasons : borderline,
   };
@@ -529,7 +535,8 @@ export async function generateEvaluationSet(
       );
       metrics.judgeCalls += 1;
       metrics.judgeTokens += result.usage.inputTokens + result.usage.outputTokens;
-      return { ...draft, round, validation: decideValidation(draft.kind, result.answers) };
+      const validation = decideValidation(draft.kind, result.answers);
+      return { ...draft, kind: validation.relabeledFrom ? validation.behavior as CaseKind : draft.kind, round, validation };
     });
     cases.push(...validated);
   };

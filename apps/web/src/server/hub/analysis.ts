@@ -1,3 +1,4 @@
+import { safetyDecision } from "../safety/policy.ts";
 import { parseSkillFrontmatter, type HubFile } from "./fetchers.ts";
 
 /**
@@ -109,13 +110,16 @@ export function upstreamFlag(security: unknown): string | null {
 export function computeVerdict(input: {
   findings: readonly HubFinding[];
   safetyRecommendation: string | null;
+  safetyRiskScore?: number | null;
   evalStatus: string;
   evalScore: number | null;
 }): HubVerdict {
-  if (input.safetyRecommendation === "DO_NOT_INSTALL" || input.findings.some((finding) => finding.severity === "blocker")) return "unsafe";
-  if (input.safetyRecommendation === "CAUTION" || input.findings.some((finding) => finding.code === "UPSTREAM_SECURITY_FLAG")) return "caution";
+  const safety = safetyDecision(input.safetyRecommendation, input.safetyRiskScore ?? null);
+  if (safety === "block" || input.findings.some((finding) => finding.severity === "blocker")) return "unsafe";
+  if (safety === "caution" || input.findings.some((finding) => finding.code === "UPSTREAM_SECURITY_FLAG")) return "caution";
+  const passed = safety === "pass" || safety === "pass_low_risk";
   const evaluated = input.evalStatus === "complete" || input.evalStatus === "needs_review";
-  if (input.safetyRecommendation === "SAFE" && evaluated && (input.evalScore ?? 0) >= 70) return "validated";
-  if (input.safetyRecommendation === "SAFE" || evaluated) return "analyzed";
+  if (passed && evaluated && (input.evalScore ?? 0) >= 70) return "validated";
+  if (passed || evaluated) return "analyzed";
   return "unverified";
 }

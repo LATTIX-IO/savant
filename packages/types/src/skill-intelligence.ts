@@ -14,19 +14,25 @@ import type { CollectionResponse, ResourceResponse, SkillTier } from "./control-
 
 export type SkillRuntime =
   | "openai"
+  | "chatgpt"
   | "claude"
   | "codex"
   | "copilot"
   | "vscode"
+  | "cursor"
+  | "gemini"
   | "api"
   | "other";
 
 export const SKILL_RUNTIMES: readonly SkillRuntime[] = [
   "openai",
+  "chatgpt",
   "claude",
   "codex",
   "copilot",
   "vscode",
+  "cursor",
+  "gemini",
   "api",
   "other",
 ];

@@ -4,9 +4,10 @@ import { AiServiceError, createJevClient, createNimChatClient, readAiServiceConf
 import { logGitEvent } from "../git/redaction.ts";
 import { CASE_KINDS, EvalGenerationError, generateEvaluationSet, type CaseKind, type DraftCase } from "../evaluation/eval-generation.ts";
 import { persistGeneratedEvaluation } from "../evaluation/import-results.ts";
+import { executionLimitations, liveRunInstructions } from "../evaluation/limitations.ts";
 import { evaluateSkillPackage } from "../evaluation/scorecard.ts";
 import { packageFingerprint, runSkillSpectorScans, SafetyScanUnavailableError, SCAN_RESULT_VERSION, SCANNABLE_FILE, type ScanPackage } from "../safety/skillspector.ts";
-import { runHubEval, runHubSafety, runHubSync } from "../hub/jobs.ts";
+import { runHubEval, runHubHydrate, runHubSafety, runHubSync } from "../hub/jobs.ts";
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
 import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
@@ -188,13 +189,20 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
   const displayName = typeof metadata.display_name === "string" ? metadata.display_name : run.skillId;
   let lastSave = 0;
 
+  // The live run gets SKILL.md plus small reference docs; what it can't exercise is recorded.
+  const packageFiles = [...(await repo.listFiles()).entries()].filter(([path]) => path.startsWith(`${root}/`) && !path.startsWith(`${root}/eval/`));
+  const referencePaths = packageFiles.filter(([path, size]) => /\.(md|markdown|txt|ya?ml|json|csv)$/i.test(path) && (size ?? 0) <= 16_000 && path !== `${root}/SKILL.md` && path !== `${root}/metadata.yaml`).map(([path]) => path).slice(0, 20);
+  const references = Object.entries(await repo.readMany(referencePaths)).map(([path, content]) => ({ path: path.slice(root.length + 1), content }));
+  const context = liveRunInstructions(instructions, references);
+  const limitations = executionLimitations({ skillMd: instructions, files: packageFiles.map(([path]) => ({ path: path.slice(root.length + 1) })), referencesIncluded: context.included, referencesOmitted: context.omitted });
+
   try {
     const result = await generateEvaluationSet({
       generator: createNimChatClient(config.nim, config.nim.generationModel),
       executor: createNimChatClient(config.nim, config.nim.executionModel),
       judge: createJevClient(config.jev),
     }, {
-      skill: { skillId: run.skillId, displayName, root, instructions, version: typeof metadata.version === "string" ? metadata.version : null },
+      skill: { skillId: run.skillId, displayName, root, instructions: context.instructions, version: typeof metadata.version === "string" ? metadata.version : null },
       rubric: rubric ?? undefined,
       seedCases: existing.status === "requires_execution" ? seedCasesFrom(parse(files[`${root}/eval/dataset.yaml`])) : [],
       answerKey,
@@ -244,7 +252,7 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
       ...(result.alignment ? { alignment: result.alignment as unknown as Record<string, unknown> } : {}),
       files: mode === "generate" ? result.files : [],
       models: result.models,
-      metrics: { ...result.metrics, mode },
+      metrics: { ...result.metrics, mode, limitations, referencesIncluded: context.included },
       ...(proposalId ? { proposalId } : {}),
       error: null,
     });
@@ -280,6 +288,7 @@ export async function runBackgroundJobs(options: { budgetMs?: number; workers?: 
         const outcome = job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
           : job.kind === "eval_generation" ? await runEvalGeneration(ctx, job)
           : job.kind === "hub_sync" ? await runHubSync(ctx, job)
+          : job.kind === "hub_hydrate" ? await runHubHydrate(ctx, job)
           : job.kind === "hub_safety" ? await runHubSafety(ctx, job)
           : await runHubEval(ctx, job);
         if (outcome === "done") {
@@ -319,6 +328,20 @@ export async function kickBackgroundJobs(): Promise<void> {
 
 const MAX_CHAIN = Number(env.BACKGROUND_JOBS_MAX_CHAIN) || 60;
 
+/** Keeps the catalog backlog moving: queue fetching while listings wait, and the scans/evals the day's budgets allow. */
+async function planCatalogWork(): Promise<void> {
+  const { getControlPlaneDatabase } = await import("../control-plane/database.ts");
+  const sql = getControlPlaneDatabase();
+  const queue = createJobQueue(sql);
+  const { createBacklogStore } = await import("../hub/backlog-store.ts");
+  const backlog = createBacklogStore(sql);
+  if ((await backlog.remaining("hydrate")) > 0 && (await backlog.nextToHydrate(1)).length > 0) {
+    await queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_hydrate", dedupeKey: "pending", payload: {} });
+  }
+  const { planHubWork } = await import("../hub/jobs.ts");
+  await planHubWork({ sql, queue, deadline: Date.now() + 60_000 });
+}
+
 /**
  * Runs jobs within this invocation's budget, then — if work remains and this
  * run made progress — hands the queue to a fresh invocation of the worker
@@ -351,6 +374,7 @@ export async function runAndContinue(depth: number): Promise<void> {
   // Hand off shortly before this invocation's budget ends, even if a long job
   // is still running here: a slow job must not strand the rest of the queue.
   const handoff = setTimeout(() => void chain(), Math.max(10_000, budget - 25_000));
+  await planCatalogWork().catch((error: unknown) => logGitEvent("warn", "catalog_planning_failed", { error }));
   const stats = await runBackgroundJobs({ budgetMs: budget }).catch((error: unknown) => {
     logGitEvent("warn", "background_jobs_failed", { error });
     return { processed: 0, released: 0, failed: 0 };

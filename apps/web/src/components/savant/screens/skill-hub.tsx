@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { TRUST_LABEL, VERDICT_HINT, VERDICT_LABEL, popularityLabel } from "@/components/catalog/catalog-labels";
+import { EvalLimitationsNote, SafetyBreakdown } from "@/components/catalog/safety-breakdown";
 import { fetchRepositoryList } from "@/lib/control-plane-client";
 import {
   fetchCatalog,
@@ -96,7 +97,8 @@ export function SkillHubScreen() {
 
       {data && (
         <div className="row" style={{ gap: 24, flexWrap: "wrap", marginBottom: 16, fontSize: 12.5 }}>
-          <span><strong>{data.stats.skills}</strong> cataloged</span>
+          <span><strong>{data.stats.skills.toLocaleString("en-US")}</strong> enumerated</span>
+          <span><strong>{data.stats.fetched.toLocaleString("en-US")}</strong> fetched</span>
           <span><strong>{data.stats.scanned}</strong> safety-scanned</span>
           <span><strong>{data.stats.evaluated}</strong> evaluated live</span>
           <span><strong>{data.stats.validated}</strong> validated</span>
@@ -116,7 +118,7 @@ export function SkillHubScreen() {
         <input className="input" style={{ flex: "1 1 260px", minWidth: 0 }} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Search skills, publishers, topics…" aria-label="Search the catalog" />
         <select className="input" value={filters.source} onChange={(event) => { setOffset(0); setFilters((current) => ({ ...current, source: event.target.value })); }} aria-label="Source">
           <option value="">All sources</option>
-          {data?.sources.map((source) => <option key={source.id} value={source.id}>{source.name} ({source.skillCount})</option>)}
+          {data?.sources.map((source) => <option key={source.id} value={source.id}>{source.name} ({source.enumeratedCount.toLocaleString("en-US")})</option>)}
         </select>
         <select className="input" value={filters.verdict} onChange={(event) => { setOffset(0); setFilters((current) => ({ ...current, verdict: event.target.value })); }} aria-label="Verdict">
           <option value="">Any verdict</option>
@@ -136,7 +138,7 @@ export function SkillHubScreen() {
                 <th style={{ width: 170 }}>Source</th>
                 <th style={{ width: 130 }}>Verdict</th>
                 <th style={{ width: 90, textAlign: "right" }}>Live eval</th>
-                <th style={{ width: 80, textAlign: "right" }}>Risk</th>
+                <th style={{ width: 150, textAlign: "right" }}>SkillSpector</th>
               </tr>
             </thead>
             <tbody>
@@ -152,9 +154,12 @@ export function SkillHubScreen() {
                     <div style={{ fontSize: 12.5 }}>{skill.sourceName}</div>
                     <div className="subtle" style={{ fontSize: 11 }}>{TRUST_LABEL[skill.trust]}{popularityLabel(skill.popularity) ? ` · ${popularityLabel(skill.popularity)}` : ""}</div>
                   </td>
-                  <td><span className={`chip ${VERDICT_CHIP[skill.verdict] ?? "chip-paper"}`}>{VERDICT_LABEL[skill.verdict]}</span></td>
+                  <td><span className={`chip ${VERDICT_CHIP[skill.verdict] ?? "chip-paper"}`}>{skill.status === "listed" ? "Queued" : skill.status === "fetch_failed" ? "Fetch failed" : VERDICT_LABEL[skill.verdict]}</span></td>
                   <td style={{ textAlign: "right" }} className="mono">{skill.evalScore !== null ? Math.round(skill.evalScore) : skill.evalStatus === "running" || skill.evalStatus === "queued" ? "…" : "—"}</td>
-                  <td style={{ textAlign: "right" }} className="mono">{skill.riskScore ?? "—"}</td>
+                  <td style={{ textAlign: "right" }}>
+                    <span className="mono">{skill.riskScore ?? "—"}</span>
+                    {skill.safetyRecommendation && <div className="subtle" style={{ fontSize: 11 }}>{skill.safetyRecommendation.replace(/_/g, " ").toLowerCase()} · {skill.safetySeverity?.toLowerCase()}</div>}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -310,6 +315,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                       </div>
                     ))}
                   </div>
+                  <EvalLimitationsNote limitations={skill.evaluation?.limitations} />
                   <span className="subtle" style={{ fontSize: 12 }}>
                     {scorecard.passCount ?? 0} pass · {scorecard.investigateCount ?? 0} investigate · {scorecard.failCount ?? 0} fail
                     {skill.evaluation?.metrics?.drafted ? ` · Jev accepted ${skill.evaluation.metrics.accepted ?? 0} of ${skill.evaluation.metrics.drafted} drafts` : ""}
@@ -329,7 +335,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
             <div className="panel-bd col" style={{ gap: 6 }}>
               {skill.safety?.status === "complete" ? (
                 <>
-                  <span style={{ fontSize: 13 }}>{(skill.safety.recommendation ?? "unknown").replace(/_/g, " ").toLowerCase()} · risk {skill.safety.riskScore ?? "—"}/100</span>
+                  <SafetyBreakdown safety={skill.safety} />
                   {skill.safety.issues.slice(0, 10).map((issue, index) => (
                     <div key={`${issue.id}-${index}`} style={{ fontSize: 12.5 }}>
                       <span className="mono" style={{ fontSize: 10.5 }}>{issue.severity}</span> {issue.category}: {issue.title}

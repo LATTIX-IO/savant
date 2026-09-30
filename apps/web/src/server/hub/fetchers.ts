@@ -87,7 +87,7 @@ export function parseSkillFrontmatter(markdown: string): SkillFrontmatter {
   };
 }
 
-async function getJson(fetchImpl: FetchLike, url: string, headers: Record<string, string> = {}, timeoutMs = 20_000): Promise<{ status: number; body: unknown }> {
+export async function getJson(fetchImpl: FetchLike, url: string, headers: Record<string, string> = {}, timeoutMs = 20_000): Promise<{ status: number; body: unknown }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -105,7 +105,7 @@ async function getJson(fetchImpl: FetchLike, url: string, headers: Record<string
   }
 }
 
-async function getText(fetchImpl: FetchLike, url: string, headers: Record<string, string> = {}): Promise<string | null> {
+export async function getText(fetchImpl: FetchLike, url: string, headers: Record<string, string> = {}): Promise<string | null> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -120,7 +120,7 @@ async function getText(fetchImpl: FetchLike, url: string, headers: Record<string
   }
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   const results = new Array<R>(items.length);
   let next = 0;
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
@@ -146,7 +146,7 @@ export function capFiles(files: HubFile[]): HubFile[] {
   return kept;
 }
 
-function describe(files: HubFile[], fallbackName: string) {
+export function describe(files: HubFile[], fallbackName: string) {
   const skillMd = files.find((file) => file.path === "SKILL.md")?.content ?? "";
   const front = parseSkillFrontmatter(skillMd);
   return { front, name: front.name ?? fallbackName };
@@ -154,7 +154,7 @@ function describe(files: HubFile[], fallbackName: string) {
 
 // ── GitHub repositories ─────────────────────────────────────────────────
 
-function githubHeaders(env: Record<string, string | undefined>): Record<string, string> {
+export function githubHeaders(env: Record<string, string | undefined>): Record<string, string> {
   const token = env.GITHUB_PUBLIC_TOKEN?.trim();
   return { accept: "application/vnd.github+json", ...(token ? { authorization: `Bearer ${token}` } : {}) };
 }
@@ -328,7 +328,7 @@ export function parseGithubTreeUrl(url: string): { owner: string; repo: string; 
   return { owner: match[1] as string, repo: match[2] as string, ref: match[3] as string, path };
 }
 
-async function fetchGithubFolder(fetchImpl: FetchLike, env: Record<string, string | undefined>, location: { owner: string; repo: string; ref: string; path: string }): Promise<HubFile[]> {
+export async function fetchGithubFolder(fetchImpl: FetchLike, env: Record<string, string | undefined>, location: { owner: string; repo: string; ref: string; path: string }): Promise<HubFile[]> {
   const raw = (path: string) => `https://raw.githubusercontent.com/${location.owner}/${location.repo}/${encodeURIComponent(location.ref)}/${path.split("/").map(encodeURIComponent).join("/")}`;
   const listing = await getJson(fetchImpl, `https://api.github.com/repos/${location.owner}/${location.repo}/contents/${location.path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(location.ref)}`, githubHeaders(env));
   const files: HubFile[] = [];

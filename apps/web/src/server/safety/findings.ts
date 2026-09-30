@@ -1,6 +1,7 @@
 import type { AssessmentFinding } from "@savant/types";
 
 import { fingerprintFinding } from "../assessment/assess.ts";
+import { describeSafetyDecision, safetyDecision, safetyPassRisk } from "./policy.ts";
 
 /** A stored scan, as the assessment and skill page read it. */
 export type StoredSafetyScan = {
@@ -70,6 +71,23 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
       continue;
     }
     const blocking = scan.recommendation === "DO_NOT_INSTALL";
+    const raw = `SkillSpector: ${scan.recommendation.replace(/_/g, " ")} · severity ${scan.severity ?? "unknown"} · risk ${scan.riskScore ?? "?"}/100.`;
+    if (safetyDecision(scan.recommendation, scan.riskScore) === "pass_low_risk") {
+      findings.push({
+        fingerprint: fingerprintFinding("SAFETY_LOW_RISK", `skill:${scan.skillId}:${scan.sourcePath}`),
+        code: "SAFETY_LOW_RISK",
+        severity: "info",
+        scope: "skill",
+        skillId: scan.skillId,
+        path: scan.sourcePath,
+        title: `Passed Savant's safety policy (risk ${scan.riskScore}/100, below ${safetyPassRisk()})`,
+        detail: `${raw} ${describeSafetyDecision("pass_low_risk")}${scan.issues.length > 0 ? ` Findings: ${describeIssues(scan)}` : ""}`,
+        remediation: "No action required; review the listed patterns if they matter for how this skill is used.",
+        fix: null,
+        status: "open",
+      });
+      continue;
+    }
     findings.push({
       fingerprint: fingerprintFinding(blocking ? "SAFETY_DO_NOT_INSTALL" : "SAFETY_CAUTION", `skill:${scan.skillId}:${scan.sourcePath}`),
       code: blocking ? "SAFETY_DO_NOT_INSTALL" : "SAFETY_CAUTION",
@@ -80,7 +98,7 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
       title: blocking
         ? `SkillSpector flags this skill as unsafe to install (risk ${scan.riskScore ?? "?"}/100)`
         : `SkillSpector found security risks to review (risk ${scan.riskScore ?? "?"}/100)`,
-      detail: scan.issues.length > 0 ? describeIssues(scan) : `Overall severity ${scan.severity ?? "unknown"}.`,
+      detail: `${raw} ${scan.issues.length > 0 ? describeIssues(scan) : ""}`.trim(),
       remediation: blocking
         ? "Don't release this skill until the flagged instructions, scripts or dependencies are fixed or confirmed as false positives."
         : "Review the flagged patterns; fix them or dismiss the finding if they're intended.",

@@ -12,6 +12,8 @@ import {
   type SkillSafetyScan,
 } from "@/lib/git-connections-client";
 
+import { EvalLimitationsNote, SafetyBreakdown } from "@/components/catalog/safety-breakdown";
+
 import { SkillProposalNotice } from "./skill-assessment-findings";
 
 const RUN_CHIP: Record<SkillAutomationRun["status"], string> = {
@@ -88,6 +90,8 @@ function RunDetails({ run }: { run: SkillAutomationRun }) {
             <Metric label="Rounds" value={run.rounds} hint={metrics.durationMs ? `${Math.round(metrics.durationMs / 1000)}s · ${metrics.llmCalls ?? 0} LLM / ${metrics.judgeCalls ?? 0} Jev calls` : undefined} />
           </div>
 
+          <EvalLimitationsNote limitations={metrics.limitations} />
+
           {run.alignment && (
             <div className="note">
               <div className="col" style={{ gap: 4, fontSize: 12.5 }}>
@@ -152,9 +156,10 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
   }
   return (
     <div className="col" style={{ gap: 10 }}>
+      <SafetyBreakdown safety={scan} />
       <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span className={`chip ${SAFETY_CHIP[scan.recommendation ?? ""] ?? "chip-paper"}`}>{(scan.recommendation ?? "unknown").replace(/_/g, " ").toLowerCase()}</span>
-        <span style={{ fontSize: 13 }}>Risk {scan.riskScore ?? "—"}/100 · {scan.issues.length} issue{scan.issues.length === 1 ? "" : "s"}</span>
+        <span style={{ fontSize: 13 }}>{scan.issues.length} issue{scan.issues.length === 1 ? "" : "s"}</span>
         <span className="subtle" style={{ fontSize: 11.5 }}>
           {scan.llmUsed ? "static + LLM review" : "static analysis"} · {scan.commitSha.slice(0, 7)} · {new Date(scan.scannedAt).toLocaleString()}
         </span>

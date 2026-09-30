@@ -10,6 +10,7 @@ import type { GitRuntime } from "../git/runtime.ts";
 import { openRepositoryFiles } from "../jobs/repository-files.ts";
 import { getCatalogSkill, type CatalogSkillDetail } from "./catalog-read.ts";
 import { EVAL_ROOT_PLACEHOLDER } from "./jobs.ts";
+import { hydrateListing } from "./listing.ts";
 import { createHubStore } from "./store.ts";
 
 type Sql = import("postgres").Sql;
@@ -142,8 +143,21 @@ export async function proposeCatalogImport(sql: Sql, runtime: GitRuntime, actor:
     store.filesFor(skill.id),
     sql<{ eval_files: Array<{ path: string; content: string }> | null }[]>`select eval_files from hub_skill_analyses where hub_skill_id = ${skill.id}`,
   ]);
+  let packageFiles: ReadonlyArray<{ path: string; content: string }> = files;
+  if (!packageFiles.some((file) => file.path === "SKILL.md")) {
+    const [row] = await sql<Array<{ locator: Record<string, unknown> | null }>>`select locator from hub_skills where id = ${skill.id}`;
+    const fetched = row?.locator ? await hydrateListing({
+      externalId: skill.id, canonicalKey: null, slug: skill.slug, name: skill.name, description: skill.description, publisher: skill.publisher,
+      sourceUrl: skill.sourceUrl, repository: skill.repository, path: skill.path, version: skill.version, license: skill.license,
+      popularity: skill.popularity, popularityScore: 0, tags: skill.tags, locator: row.locator,
+    }, { skillsShToken: async () => (await import("@vercel/oidc")).getVercelOidcToken() }).catch(() => null) : null;
+    if (!fetched) {
+      throw new GitProviderError("INVALID_REQUEST", "This skill's package couldn't be fetched from its source right now. Try again shortly.", { status: 502 });
+    }
+    packageFiles = fetched.files;
+  }
   const owner = input.owner?.trim().slice(0, 80) || null;
-  const changes = buildImportFiles({ skill, files, evalFiles: evalRows[0]?.eval_files ?? [], root, owner, registry, now: new Date() });
+  const changes = buildImportFiles({ skill, files: packageFiles, evalFiles: evalRows[0]?.eval_files ?? [], root, owner, registry, now: new Date() });
 
   const lines = [
     `Imports **${skill.name}** from ${skill.sourceName}${skill.sourceUrl ? ` (${skill.sourceUrl})` : ""} into \`${root}\`.`,

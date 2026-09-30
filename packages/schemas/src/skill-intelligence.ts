@@ -6,7 +6,7 @@
 // rules. packages/schemas/fixtures/ holds a canonical worker bundle example
 // that both the TypeScript and Python test suites check against.
 
-const RUNTIMES = ["openai", "claude", "codex", "copilot", "vscode", "api", "other"] as const;
+const RUNTIMES = ["openai", "chatgpt", "claude", "codex", "copilot", "vscode", "cursor", "gemini", "api", "other"] as const;
 
 export const trajectoryStepSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",

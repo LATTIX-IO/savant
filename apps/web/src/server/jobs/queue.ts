@@ -6,7 +6,7 @@ type Sql = import("postgres").Sql;
  * of time) is claimable again, up to MAX_ATTEMPTS.
  */
 
-export type JobKind = "eval_generation" | "safety_scan" | "hub_sync" | "hub_safety" | "hub_eval";
+export type JobKind = "eval_generation" | "safety_scan" | "hub_sync" | "hub_hydrate" | "hub_safety" | "hub_eval";
 
 export type BackgroundJob = {
   id: string;

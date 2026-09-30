@@ -146,7 +146,7 @@ export type SkillAutomationRun = {
   alignment: { committedOverall: number; generatedOverall: number; overallDelta: number; coverage: number; committedCases: number; generatedCases: number; dimensionDeltas: Record<string, number> } | null;
   proposalId: string | null;
   models: { generator?: string; executor?: string; judge?: string };
-  metrics: { stage?: string; drafted?: number; accepted?: number; rejected?: number; needsReview?: number; acceptanceRate?: number; llmCalls?: number; judgeCalls?: number; durationMs?: number };
+  metrics: { stage?: string; drafted?: number; accepted?: number; rejected?: number; needsReview?: number; acceptanceRate?: number; llmCalls?: number; judgeCalls?: number; durationMs?: number; limitations?: import("@/server/evaluation/limitations").EvalLimitation[] };
   error: string | null;
   fileCount: number;
   createdAt: string;
@@ -190,7 +190,7 @@ export type CatalogListResponse = {
     items: import("@/server/hub/catalog-read").CatalogSkillSummary[];
     total: number;
     sources: import("@/server/hub/catalog-read").CatalogSource[];
-    stats: { skills: number; validated: number; evaluated: number; scanned: number; flagged: number };
+    stats: import("@/server/hub/catalog-read").CatalogStats;
   };
 };
 

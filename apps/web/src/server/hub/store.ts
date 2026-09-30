@@ -20,13 +20,14 @@ const iso = (value: Date | string | null) => (value === null ? null : new Date(v
 
 export function createHubStore(sql: Sql) {
   async function refreshVerdict(hubSkillId: string): Promise<void> {
-    const [row] = await sql<{ findings: HubFinding[]; safety: { recommendation?: string | null } | null; eval_status: string; eval: { scorecard?: { overallScore?: number } } | null }[]>`
+    const [row] = await sql<{ findings: HubFinding[]; safety: { recommendation?: string | null; riskScore?: number | null } | null; eval_status: string; eval: { scorecard?: { overallScore?: number } } | null }[]>`
       select findings, safety, eval_status, eval from hub_skill_analyses where hub_skill_id = ${hubSkillId}
     `;
     if (!row) return;
     const verdict = computeVerdict({
       findings: row.findings ?? [],
       safetyRecommendation: row.safety?.recommendation ?? null,
+      safetyRiskScore: row.safety?.riskScore ?? null,
       evalStatus: row.eval_status,
       evalScore: row.eval?.scorecard?.overallScore ?? null,
     });

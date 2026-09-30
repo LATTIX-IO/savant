@@ -1,9 +1,12 @@
 import { readAiServiceConfig, createJevClient, createNimChatClient, AiServiceError } from "../ai/clients.ts";
 import { EvalGenerationError, generateEvaluationSet } from "../evaluation/eval-generation.ts";
+import { executionLimitations, liveRunInstructions } from "../evaluation/limitations.ts";
 import { logGitEvent } from "../git/redaction.ts";
 import type { BackgroundJob, JobQueue } from "../jobs/queue.ts";
 import { runSkillSpectorScans, SafetyScanUnavailableError, type ScanPackage } from "../safety/skillspector.ts";
-import { fetchClawHubSource, fetchGithubSource, fetchSkillsMpSource, fetchSkillsShSource, HubFetchError, type FetchedHubSkill } from "./fetchers.ts";
+import { createBacklogStore } from "./backlog-store.ts";
+import { HubFetchError } from "./fetchers.ts";
+import { hydrateListing, listSourcePage } from "./listing.ts";
 import { createHubStore } from "./store.ts";
 
 type Sql = import("postgres").Sql;
@@ -38,46 +41,124 @@ export async function enqueueHubEval(sql: Sql, queue: JobQueue, hubSkillId: stri
   return queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_eval", dedupeKey: `skill:${hubSkillId}`, payload: { hubSkillId, trigger } });
 }
 
+/**
+ * Enumerates a source completely, page by page. The cursor is saved after
+ * every page, so a run that runs out of time resumes where it stopped; when
+ * the last page is in, listings not seen in this run are marked removed.
+ */
 export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promise<"done" | "released"> {
   const store = createHubStore(ctx.sql);
+  const backlog = createBacklogStore(ctx.sql);
   const sourceId = String(job.payload.sourceId);
   const source = (await store.listSources()).find((candidate) => candidate.id === sourceId);
   if (!source || !source.enabled) return "done";
 
-  let skills: FetchedHubSkill[];
+  const saved = (source as unknown as { enumeration?: Record<string, unknown> }).enumeration ?? {};
+  const resume = typeof saved.runId === "string" && !saved.completedAt;
+  const state = {
+    runId: resume ? String(saved.runId) : `run-${Date.now().toString(36)}`,
+    cursor: resume ? (saved.cursor as string | null) ?? null : null,
+    pages: resume ? Number(saved.pages) || 0 : 0,
+    seen: resume ? Number(saved.seen) || 0 : 0,
+    total: (saved.total as number | null | undefined) ?? null,
+    startedAt: resume ? String(saved.startedAt) : new Date().toISOString(),
+    completedAt: null as string | null,
+    quotaExhaustedAt: null as string | null,
+  };
+
   try {
-    skills = source.kind === "github" ? await fetchGithubSource(source)
-      : source.kind === "skills_sh" ? await fetchSkillsShSource(source, await skillsShToken())
-      : source.kind === "clawhub" ? await fetchClawHubSource(source)
-      : await fetchSkillsMpSource(source);
+    for (;;) {
+      if (timeLeft(ctx) < 45_000) {
+        await backlog.saveEnumeration(sourceId, state);
+        await ctx.queue.release(job.id, { pages: state.pages, seen: state.seen });
+        return "released";
+      }
+      const page = await listSourcePage(source, state.cursor, { skillsShToken });
+      await backlog.upsertListings(sourceId, state.runId, page.listings);
+      state.pages += 1;
+      state.seen += page.listings.length;
+      if (page.total !== undefined && page.total !== null) state.total = page.total;
+      if (page.quotaExhausted) {
+        // Keep the cursor; the next sync continues from here once the quota resets.
+        state.quotaExhaustedAt = new Date().toISOString();
+        await backlog.saveEnumeration(sourceId, state);
+        await store.recordSourceSync(sourceId, { status: "ok", error: `Paused: ${source.name} API quota reached after ${state.seen} listings; resumes on the next sync.` });
+        break;
+      }
+      state.cursor = page.nextCursor;
+      if (page.nextCursor === null) {
+        state.completedAt = new Date().toISOString();
+        await backlog.saveEnumeration(sourceId, state);
+        const count = await backlog.finishEnumeration(sourceId, state.runId);
+        await store.recordSourceSync(sourceId, { status: "ok", count });
+        break;
+      }
+      await backlog.saveEnumeration(sourceId, state);
+    }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await store.recordSourceSync(sourceId, { status: "error", error: message });
+    await backlog.saveEnumeration(sourceId, state);
+    await store.recordSourceSync(sourceId, { status: "error", error: `${message} (after ${state.seen} listings)` });
     logGitEvent("warn", "hub_source_sync_failed", { error: message });
-    return "done";
   }
 
-  const result = await store.upsertFetched(sourceId, skills);
-  await store.recordSourceSync(sourceId, { status: "ok", count: result.total });
-
-  // Follow-ups: safety scan anything new or changed; live-evaluate the top of the source.
-  await ctx.queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_safety", dedupeKey: "pending", payload: {} });
-  const autoLimit = Number(process.env.HUB_AUTO_EVAL_LIMIT ?? 3);
-  const config = readAiServiceConfig();
-  if (autoLimit > 0 && config.nim && config.jev) {
-    const [top] = await Promise.all([ctx.sql<{ id: string }[]>`
-      select hub_skills.id from hub_skills
-      join hub_skill_analyses on hub_skill_analyses.hub_skill_id = hub_skills.id
-      where hub_skills.source_id = ${sourceId} and hub_skills.status = 'active'
-        and hub_skill_analyses.eval_hash is distinct from hub_skills.content_hash
-        and hub_skill_analyses.eval_status not in ('queued', 'running')
-      order by hub_skills.rank asc limit ${autoLimit}
-    `]);
-    for (const row of top ?? []) {
-      await enqueueHubEval(ctx.sql, ctx.queue, row.id, "sync");
-    }
-  }
+  await ctx.queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_hydrate", dedupeKey: "pending", payload: {} });
   return "done";
+}
+
+/** Fetches listed packages, most popular first, within the daily hydrate budget. */
+export async function runHubHydrate(ctx: HubJobContext, job: BackgroundJob): Promise<"done" | "released"> {
+  const backlog = createBacklogStore(ctx.sql);
+  let hydrated = 0;
+  for (;;) {
+    if (timeLeft(ctx) < 60_000) {
+      await ctx.queue.release(job.id, job.progress);
+      await planHubWork(ctx, hydrated);
+      return "released";
+    }
+    const allowance = Math.min(12, await backlog.remaining("hydrate"));
+    if (allowance === 0) break;
+    const batch = await backlog.nextToHydrate(allowance);
+    if (batch.length === 0) break;
+    await Promise.all(batch.map(async (listing) => {
+      try {
+        const skill = await hydrateListing(listing, { skillsShToken });
+        if (skill) {
+          await backlog.storeHydrated(listing.id, skill);
+          hydrated += 1;
+        } else {
+          await backlog.markFetchFailed(listing.id, "No SKILL.md found at the source.");
+        }
+      } catch (error) {
+        await backlog.markFetchFailed(listing.id, error instanceof Error ? error.message : String(error));
+      }
+    }));
+    await backlog.consume("hydrate", batch.length);
+  }
+  await backlog.pruneIfNeeded().catch(() => 0);
+  await planHubWork(ctx, hydrated);
+  return "done";
+}
+
+/** Queues the next scans and live evaluations the day's budgets allow. */
+export async function planHubWork(ctx: HubJobContext, recentlyHydrated = 0): Promise<void> {
+  const backlog = createBacklogStore(ctx.sql);
+  const store = createHubStore(ctx.sql);
+  // Only queue work the day's budget can pay for; otherwise the hand-off would spin on no-op jobs.
+  if ((await backlog.remaining("scan")) > 0 && (recentlyHydrated > 0 || (await store.needingSafety(1)).length > 0)) {
+    await ctx.queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_safety", dedupeKey: "pending", payload: {} });
+  }
+  const config = readAiServiceConfig();
+  if (!config.nim || !config.jev) return;
+  const [queued] = await ctx.sql<{ count: number }[]>`select count(*)::int as count from background_jobs where kind = 'hub_eval' and status in ('queued', 'running')`;
+  // Keep a modest number queued; the rest waits for budget and popularity order.
+  const room = Math.min(await backlog.remaining("eval"), 12 - (queued?.count ?? 0));
+  if (room <= 0) return;
+  const candidates = await backlog.evalCandidates(room);
+  for (const id of candidates) {
+    await enqueueHubEval(ctx.sql, ctx.queue, id, "auto");
+  }
+  await backlog.consume("eval", candidates.length);
 }
 
 export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Promise<"done" | "released"> {
@@ -86,13 +167,23 @@ export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Prom
   const nimKey = readAiServiceConfig().nim?.apiKey ?? null;
   const llmAll = (process.env.SKILLSPECTOR_LLM ?? "flagged").toLowerCase() === "all";
 
+  const backlog = createBacklogStore(ctx.sql);
   for (;;) {
     if (timeLeft(ctx) < 150_000) {
       await ctx.queue.release(job.id, job.progress);
+      await planHubWork(ctx);
       return "released";
     }
-    const batch = await store.needingSafety(chunkSize);
-    if (batch.length === 0) return "done";
+    const allowance = Math.min(chunkSize, await backlog.remaining("scan"));
+    if (allowance === 0) {
+      await planHubWork(ctx);
+      return "done";
+    }
+    const batch = await store.needingSafety(allowance);
+    if (batch.length === 0) {
+      await planHubWork(ctx);
+      return "done";
+    }
     const packages: ScanPackage[] = [];
     for (const item of batch) {
       const files = await store.filesFor(item.id);
@@ -109,6 +200,7 @@ export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Prom
       throw error;
     }
     const hashById = new Map(batch.map((item) => [item.id, item.contentHash]));
+    await backlog.consume("scan", results.filter((result) => result.error !== "skipped").length);
     for (const result of results) {
       // Packages the sandbox had no time for come back "skipped" and stay pending.
       if (result.error === "skipped") continue;
@@ -139,13 +231,16 @@ export async function runHubEval(ctx: HubJobContext, job: BackgroundJob): Promis
   }
 
   await store.setEvalStatus(hubSkillId, "running");
+  const files = await store.filesFor(hubSkillId);
+  const context = liveRunInstructions(skill.skill_md, files);
+  const limitations = executionLimitations({ skillMd: skill.skill_md, files: files.map((file) => ({ path: file.path })), referencesIncluded: context.included, referencesOmitted: context.omitted });
   try {
     const result = await generateEvaluationSet({
       generator: createNimChatClient(config.nim, config.nim.generationModel),
       executor: createNimChatClient(config.nim, config.nim.executionModel),
       judge: createJevClient(config.jev),
     }, {
-      skill: { skillId: skill.slug, displayName: skill.name, root: EVAL_ROOT_PLACEHOLDER, instructions: skill.skill_md, version: null },
+      skill: { skillId: skill.slug, displayName: skill.name, root: EVAL_ROOT_PLACEHOLDER, instructions: context.instructions, version: null },
       costPerMillionTokens: Number(process.env.NIM_USD_PER_MTOK) || 0.5,
     });
     const verdictByCase = new Map(result.samples.map((sample) => [sample.caseId, sample.verdict]));
@@ -155,6 +250,8 @@ export async function runHubEval(ctx: HubJobContext, job: BackgroundJob): Promis
       evaluation: {
         scorecard: result.scorecard,
         metrics: { ...result.metrics, rounds: result.rounds },
+        limitations,
+        referencesIncluded: context.included,
         models: result.models,
         cases: result.cases.map((item) => ({ caseId: item.caseId, kind: item.kind, prompt: item.prompt.slice(0, 600), decision: item.validation.decision, reasons: item.validation.reasons, verdict: verdictByCase.get(item.caseId) ?? null })),
         samples: result.samples.map(({ output, ...rest }) => ({ ...rest, output: output.slice(0, 1500) })),

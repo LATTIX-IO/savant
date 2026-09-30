@@ -62,11 +62,13 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
           <p className="page-lede">
             Agent skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other reputable sources. Savant scans each one with
             NVIDIA SkillSpector and evaluates it live, with an LLM drafting and running test cases and Jev validating and scoring them.
-            Workspaces import any skill into their own repositories through a reviewed pull request.
+            Workspaces import any skill into their own repositories through a reviewed pull request. Every listing on each hub is
+            enumerated; packages are fetched, scanned and evaluated most-popular first as daily capacity allows.
           </p>
           {data.stats && (
             <div className="cat-stats">
-              <div><strong>{data.stats.skills}</strong>skills cataloged</div>
+              <div><strong>{data.stats.skills.toLocaleString("en-US")}</strong>skills enumerated</div>
+              <div><strong>{data.stats.fetched.toLocaleString("en-US")}</strong>fetched</div>
               <div><strong>{data.stats.scanned}</strong>safety-scanned</div>
               <div><strong>{data.stats.evaluated}</strong>evaluated live</div>
               <div><strong>{data.stats.validated}</strong>validated</div>
@@ -85,7 +87,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
                   <div className="cat-panel">
                     <div className="cat-meta" style={{ marginBottom: 6 }}>
                       <span className="cat-badge" data-trust={source.trust}>{TRUST_LABEL[source.trust]}</span>
-                      <span>{source.skillCount} skills</span>
+                      <span>{source.enumeratedCount.toLocaleString("en-US")} listed · {source.fetchedCount.toLocaleString("en-US")} fetched{source.enumerationComplete ? "" : " · enumerating"}</span>
                     </div>
                     <strong style={{ fontSize: 14.5 }}>{source.name}</strong>
                     <div className="cat-meta">{source.publisher}</div>
@@ -115,9 +117,9 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
             {data.items.map((skill) => (
               <Link key={skill.id} href={`/catalog/${skill.id}` as Route} className="cat-card">
                 <div className="cat-meta">
-                  <span className="cat-badge" data-verdict={skill.verdict}>{VERDICT_LABEL[skill.verdict]}</span>
+                  <span className="cat-badge" data-verdict={skill.verdict}>{skill.status === "listed" ? "Queued for analysis" : skill.status === "fetch_failed" ? "Fetch failed" : VERDICT_LABEL[skill.verdict]}</span>
                   {skill.evalScore !== null && <span>Live eval {Math.round(skill.evalScore)}/100</span>}
-                  {skill.riskScore !== null && <span>Risk {skill.riskScore}/100</span>}
+                  {skill.riskScore !== null && <span>SkillSpector {skill.riskScore}/100 · {skill.safetyRecommendation?.replace(/_/g, " ").toLowerCase()} · {skill.safetySeverity?.toLowerCase()}</span>}
                 </div>
                 <h3>{skill.name}</h3>
                 {skill.description && <p>{skill.description}</p>}

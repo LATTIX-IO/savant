@@ -31,6 +31,8 @@ const DIRECTORY_PURPOSE: Record<string, string> = {
 
 type FileState = { path: string; original: string | null; content: string };
 
+const humanize = (slug: string) => slug.split(/[-_]+/).filter(Boolean).map((token) => `${token[0]?.toUpperCase() ?? ""}${token.slice(1)}`).join(" ");
+
 type RootInfo = AssessedSkillRoot & { skillId: string; displayName: string; owner: string | null };
 
 function describeRoot(root: AssessedSkillRoot): RootInfo {
@@ -94,14 +96,20 @@ export function buildFixChanges(input: {
 
   const registerSkill = (root: RootInfo) => {
     editYaml("registry/skills.yaml", "skills", (items, document) => {
-      const exists = items.items.some((item) => isMap(item) && (item.get("package_path") === root.root || item.get("skill_id") === root.skillId));
+      const pathOf = (item: unknown) => (isMap(item) ? (item.get("package_path") ?? item.get("path")) : undefined);
+      const exists = items.items.some((item) => isMap(item) && (pathOf(item) === root.root || item.get("skill_id") === root.skillId));
       if (!exists) {
+        // Follow the repository's existing entry style (`path` vs `package_path`).
+        const usesPath = items.items.some((item) => isMap(item) && item.has("path") && !item.has("package_path"));
+        const meta = root.metadata ?? {};
         items.add(document.createNode({
+          ...(usesPath ? { path: root.root } : {}),
           skill_id: root.skillId,
-          display_name: root.displayName,
-          package_path: root.root,
+          ...(usesPath ? {} : { display_name: root.displayName, package_path: root.root }),
           tier: root.tier,
-          status: typeof root.metadata?.status === "string" ? root.metadata.status : "draft",
+          ...(root.owner ? { owner: root.owner } : {}),
+          status: typeof meta.status === "string" ? meta.status : "draft",
+          ...(usesPath && typeof meta.version === "string" ? { version: meta.version } : {}),
         }));
       }
     });
@@ -111,7 +119,20 @@ export function buildFixChanges(input: {
     if (!root.owner) {
       return;
     }
-    editYaml("registry/owners.yaml", "owners", (items, document) => {
+    const state = read("registry/owners.yaml");
+    const document = parseDocument(state.content || "version: 1\nowners: []\n");
+    const owners = isMap(document.contents) ? (document.contents as unknown as YAMLMap).get("owners", true) : null;
+
+    if (isMap(owners)) {
+      // Map style ({owner_id: {team, approver, ...}}): define the owner id if missing.
+      if (!owners.has(root.owner)) {
+        owners.set(root.owner, document.createNode({ team: humanize(root.owner), approver: "TODO: set approver", escalation_path: [] }));
+        state.content = document.toString();
+      }
+      return;
+    }
+
+    editYaml("registry/owners.yaml", "owners", (items, doc) => {
       const existing = items.items.find((item) => isMap(item) && item.get("owner") === root.owner) as YAMLMap | undefined;
       if (existing) {
         const skills = existing.get("skills", true);
@@ -120,10 +141,10 @@ export function buildFixChanges(input: {
             skills.add(root.skillId);
           }
         } else {
-          existing.set("skills", document.createNode([root.skillId]));
+          existing.set("skills", doc.createNode([root.skillId]));
         }
       } else {
-        items.add(document.createNode({ owner: root.owner, skills: [root.skillId] }));
+        items.add(doc.createNode({ owner: root.owner, skills: [root.skillId] }));
       }
     });
   };

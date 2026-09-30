@@ -120,3 +120,52 @@ test("fingerprints are stable across syncs so dismissals persist", () => {
   assert.deepEqual(first.findings.map((finding) => finding.fingerprint), second.findings.map((finding) => finding.fingerprint));
   assert.equal(new Set(first.findings.map((finding) => finding.fingerprint)).size, first.findings.length);
 });
+
+test("map-style registries (lattix-skills layout) are understood: no false positives, real gaps flagged and fixable", () => {
+  const root = "tier2/methodology/ai-engineering/agent-guardrail-design";
+  const files: Record<string, string> = {
+    "registry/skills.yaml": [
+      "version: 1",
+      "skills:",
+      `- path: ${root}`,
+      "  skill_id: ai-engineering/agent-guardrail-design",
+      "  tier: tier2",
+      "  owner: ai-engineering",
+      "  status: active",
+      "  version: 1.0.0",
+      "  dependencies:",
+      "  - tier1.review-and-qa-standards",
+    ].join("\n") + "\n",
+    "registry/owners.yaml": "owners:\n  ai-engineering:\n    team: AI Engineering\n    approver: Head of AI Engineering\n",
+    "registry/dependencies.yaml": "version: 1\ndependencies:\n  ai-engineering/agent-guardrail-design:\n  - tier1.review-and-qa-standards\n",
+    "registry/routing-policies.yaml": "version: 1\ndefaults:\n  precedence: [tier1, tier2, tier3]\npolicies:\n- policy_id: guardrails\n  precedence:\n  - ai-engineering/agent-guardrail-design\n  - tier1\n",
+    [`${root}/metadata.yaml`]: "skill_id: ai-engineering/agent-guardrail-design\ndisplay_name: Agent Guardrail Design\ntier: tier2\nowner: ai-engineering\nversion: 1.0.0\nstatus: active\n",
+    [`${root}/SKILL.md`]: LONG_SKILL,
+    [`${root}/agents/openai.yaml`]: "version: 1\n",
+    [`${root}/eval/dataset.yaml`]: "cases: []\n",
+    "tier1/standards/review-and-qa-standards/SKILL.md": LONG_SKILL,
+    "tier1/standards/review-and-qa-standards/metadata.yaml": "skill_id: tier1.review-and-qa-standards\ndisplay_name: Review And QA\ntier: tier1\nowner: ai-engineering\nversion: 1.0.0\nstatus: active\n",
+    "tier1/standards/review-and-qa-standards/agents/openai.yaml": "version: 1\n",
+    "tier1/standards/review-and-qa-standards/eval/dataset.yaml": "cases: []\n",
+  };
+  const clean = assessRepositorySnapshot({ observedPaths: withDirectories(files), files });
+  const noisy = clean.findings.filter((finding) => finding.code !== "SKILL_NOT_REGISTERED" || finding.skillId !== "tier1.review-and-qa-standards");
+  assert.deepEqual(noisy.map((finding) => `${finding.code}:${finding.skillId}`), []);
+
+  const broken = {
+    ...files,
+    [`${root}/metadata.yaml`]: "skill_id: ai-engineering/agent-guardrail-design\ndisplay_name: Agent Guardrail Design\ntier: tier2\nowner: platform-team\nversion: 1.1.0\nstatus: active\n",
+    "registry/routing-policies.yaml": "version: 1\npolicies:\n- policy_id: guardrails\n  precedence:\n  - ai-engineering/removed-skill\n",
+  };
+  const result = assessRepositorySnapshot({ observedPaths: withDirectories(broken), files: broken });
+  const codes = new Set(result.findings.map((finding) => finding.code));
+  for (const code of ["OWNER_UNDEFINED", "REGISTRY_METADATA_MISMATCH", "ROUTING_REFERENCE_UNKNOWN"]) {
+    assert.ok(codes.has(code), `missing ${code}`);
+  }
+
+  const ownerFix = result.findings.filter((finding) => finding.code === "OWNER_UNDEFINED");
+  const [ownersChange] = buildFixChanges({ findings: ownerFix, roots: result.roots, files: broken });
+  const owners = parseYaml(ownersChange?.content ?? "") as { owners: Record<string, { team: string }> };
+  assert.deepEqual(Object.keys(owners.owners), ["ai-engineering", "platform-team"]);
+  assert.equal(owners.owners["platform-team"]?.team, "Platform Team");
+});

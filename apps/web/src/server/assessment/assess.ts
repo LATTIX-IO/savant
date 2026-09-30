@@ -201,7 +201,10 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
   });
 
   const registrySkills = readList(registryDocuments.get("registry/skills.yaml"), "skills");
-  const registeredPaths = new Set(registrySkills.map((entry) => stringValue(entry.package_path)).filter((value): value is string => value !== null));
+  const entryPath = (entry: Record<string, unknown>) => stringValue(entry.package_path) ?? stringValue(entry.path);
+  const registeredPaths = new Set(registrySkills.map(entryPath).filter((value): value is string => value !== null));
+  const registryEntryFor = (root: AssessedSkillRoot, skillId: string) =>
+    registrySkills.find((entry) => entryPath(entry) === root.root || stringValue(entry.skill_id) === skillId) ?? null;
   const registeredIds = new Set(registrySkills.map((entry) => stringValue(entry.skill_id)).filter((value): value is string => value !== null));
   const knownSkillIds = new Set<string>(registeredIds);
 
@@ -327,6 +330,27 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
       });
     }
 
+    const registryEntry = registryEntryFor(root, skillId);
+    if (registryEntry && root.metadata) {
+      const mismatched = (["tier", "owner", "version"] as const).filter((field) => {
+        const inRegistry = stringValue(registryEntry[field]);
+        const inMetadata = stringValue(root.metadata?.[field]);
+        return inRegistry !== null && inMetadata !== null && inRegistry !== inMetadata;
+      });
+      if (mismatched.length > 0) {
+        add({
+          code: "REGISTRY_METADATA_MISMATCH",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/metadata.yaml`,
+          title: `${root.inferredDisplayName}: registry and metadata disagree on ${mismatched.join(", ")}`,
+          detail: mismatched.map((field) => `${field}: registry "${stringValue(registryEntry[field])}" vs metadata "${stringValue(root.metadata?.[field])}"`).join("; "),
+          remediation: "Make registry/skills.yaml and metadata.yaml agree; Savant uses the registry for routing and releases.",
+        });
+      }
+    }
+
     if (registryDocuments.has("registry/skills.yaml") && !registeredPaths.has(root.root) && !registeredIds.has(skillId)) {
       add({
         code: "SKILL_NOT_REGISTERED",
@@ -345,7 +369,7 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
   // ── Registry consistency ───────────────────────────────────────────────
   const rootSet = new Set(roots.map((root) => root.root));
   for (const entry of registrySkills) {
-    const packagePath = stringValue(entry.package_path);
+    const packagePath = entryPath(entry);
     const skillId = stringValue(entry.skill_id);
     if (packagePath && !rootSet.has(packagePath) && !hasPrefix(packagePath)) {
       add({
@@ -361,10 +385,31 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
     }
   }
 
-  for (const entry of readList(registryDocuments.get("registry/dependencies.yaml"), "dependencies")) {
-    const skillId = stringValue(entry.skill_id);
-    const dependsOn = Array.isArray(entry.depends_on) ? entry.depends_on.map(stringValue).filter((value): value is string => value !== null) : [];
-    for (const dependency of dependsOn) {
+  // Dependencies: dependencies.yaml as a list ([{skill_id, depends_on}]) or a
+  // map ({skill_id: [ids]}), plus inline `dependencies` on registry entries.
+  const declaredDependencies = new Map<string, Set<string>>();
+  const addDependency = (skillId: string | null, dependency: unknown) => {
+    const value = stringValue(dependency);
+    if (skillId && value) {
+      declaredDependencies.set(skillId, (declaredDependencies.get(skillId) ?? new Set()).add(value));
+    }
+  };
+  const dependenciesValue = asRecord(registryDocuments.get("registry/dependencies.yaml"))?.dependencies;
+  if (Array.isArray(dependenciesValue)) {
+    for (const entry of dependenciesValue.map(asRecord)) {
+      const skillId = stringValue(entry?.skill_id);
+      for (const dependency of Array.isArray(entry?.depends_on) ? entry.depends_on : []) addDependency(skillId, dependency);
+    }
+  } else {
+    for (const [skillId, list] of Object.entries(asRecord(dependenciesValue) ?? {})) {
+      for (const dependency of Array.isArray(list) ? list : []) addDependency(skillId, dependency);
+    }
+  }
+  for (const entry of registrySkills) {
+    for (const dependency of Array.isArray(entry.dependencies) ? entry.dependencies : []) addDependency(stringValue(entry.skill_id), dependency);
+  }
+  for (const [skillId, dependencies] of declaredDependencies) {
+    for (const dependency of dependencies) {
       if (!knownSkillIds.has(dependency)) {
         add({
           code: "DEPENDENCY_UNKNOWN",
@@ -372,7 +417,7 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
           scope: "skill",
           skillId,
           path: "registry/dependencies.yaml",
-          title: `${skillId ?? "A skill"} depends on unknown skill ${dependency}`,
+          title: `${skillId} depends on unknown skill ${dependency}`,
           detail: "The dependency isn't defined in this repository, so it can't be resolved at release time.",
           remediation: `Add ${dependency} or correct the dependency id.`,
         });
@@ -380,23 +425,77 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
     }
   }
 
+  // Routing policies may name skills in `precedence`; tier names are allowed.
+  for (const policy of readList(registryDocuments.get("registry/routing-policies.yaml"), "policies")) {
+    const policyId = stringValue(policy.policy_id) ?? stringValue(policy.skill_id) ?? "a routing policy";
+    for (const reference of Array.isArray(policy.precedence) ? policy.precedence.map(stringValue) : []) {
+      if (reference && !/^tier[123]$/.test(reference) && !knownSkillIds.has(reference)) {
+        add({
+          code: "ROUTING_REFERENCE_UNKNOWN",
+          severity: "warning",
+          scope: "repository",
+          path: "registry/routing-policies.yaml",
+          skillId: reference,
+          title: `Routing policy ${policyId} references unknown skill ${reference}`,
+          detail: "Requests matched by this policy can't be routed to a skill that doesn't exist.",
+          remediation: `Add ${reference} or remove it from the policy's precedence list.`,
+        });
+      }
+    }
+  }
+
+  // Owners: owners.yaml as a list ([{owner, skills}]) or a map of owner ids
+  // ({owner_id: {team, approver, ...}}) referenced from each skill's `owner`.
   const ownersDocument = registryDocuments.get("registry/owners.yaml");
   if (ownersDocument !== undefined) {
-    const owned = new Set(readList(ownersDocument, "owners").flatMap((entry) => Array.isArray(entry.skills) ? entry.skills.map(stringValue) : []));
+    const ownersValue = asRecord(ownersDocument)?.owners;
+    const listStyle = Array.isArray(ownersValue);
+    const ownerEntries = readList(ownersDocument, "owners");
+    const definedOwners = new Set<string>(
+      listStyle
+        ? ownerEntries.map((entry) => stringValue(entry.owner)).filter((value): value is string => value !== null)
+        : Object.keys(asRecord(ownersValue) ?? {}),
+    );
+    const listedSkills = new Set(listStyle ? ownerEntries.flatMap((entry) => (Array.isArray(entry.skills) ? entry.skills.map(stringValue) : [])) : []);
+
     for (const root of roots) {
       const skillId = stringValue(root.metadata?.skill_id) ?? root.inferredSkillId;
-      if (!owned.has(skillId)) {
-        const owner = stringValue(root.metadata?.owner) ?? root.inferredOwner;
+      const owner = stringValue(root.metadata?.owner) ?? stringValue(registryEntryFor(root, skillId)?.owner) ?? root.inferredOwner;
+
+      if (!owner) {
+        add({
+          code: "OWNER_UNASSIGNED",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/metadata.yaml`,
+          title: `${root.inferredDisplayName} has no owner`,
+          detail: "Owners receive reviews, escalations, and improvement recommendations.",
+          remediation: "Set owner in metadata.yaml to an owner defined in registry/owners.yaml.",
+        });
+      } else if (!definedOwners.has(owner)) {
+        add({
+          code: "OWNER_UNDEFINED",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: "registry/owners.yaml",
+          title: `${root.inferredDisplayName}: owner "${owner}" isn't defined in registry/owners.yaml`,
+          detail: "Reviews and escalations can't be routed to an owner Savant doesn't know about.",
+          remediation: `Define ${owner} in registry/owners.yaml or change the skill's owner.`,
+          fix: { kind: "add_owner_entry", description: `Define owner ${owner} in registry/owners.yaml` },
+        });
+      } else if (listStyle && !listedSkills.has(skillId)) {
         add({
           code: "OWNER_UNASSIGNED",
           severity: "info",
           scope: "skill",
           skillId,
           path: "registry/owners.yaml",
-          title: `${root.inferredDisplayName} has no owner in registry/owners.yaml`,
-          detail: "Owners receive reviews, escalations, and improvement recommendations.",
-          remediation: owner ? `Add ${skillId} under owner ${owner}.` : "Assign an owner in registry/owners.yaml.",
-          fix: owner ? { kind: "add_owner_entry", description: `Assign ${skillId} to ${owner}` } : null,
+          title: `${root.inferredDisplayName} isn't listed under owner ${owner}`,
+          detail: "registry/owners.yaml lists skills per owner; this skill is missing from its owner's list.",
+          remediation: `Add ${skillId} under owner ${owner}.`,
+          fix: { kind: "add_owner_entry", description: `List ${skillId} under ${owner}` },
         });
       }
     }

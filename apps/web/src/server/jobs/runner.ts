@@ -260,8 +260,6 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
 
 // ── Runner ──────────────────────────────────────────────────────────────
 
-let active = 0;
-
 export async function runBackgroundJobs(options: { budgetMs?: number; workers?: number } = {}): Promise<{ processed: number; released: number; failed: number }> {
   const budget = options.budgetMs ?? (Number(env.BACKGROUND_JOBS_BUDGET_MS) || 230_000);
   const { getControlPlaneDatabase } = await import("../control-plane/database.ts");
@@ -291,22 +289,16 @@ export async function runBackgroundJobs(options: { budgetMs?: number; workers?: 
     }
   };
 
-  active += 1;
-  try {
-    await Promise.all(Array.from({ length: options.workers ?? 2 }, () => worker()));
-  } finally {
-    active -= 1;
-  }
+  await Promise.all(Array.from({ length: options.workers ?? 2 }, () => worker()));
   return stats;
 }
 
 /**
  * Starts the runner after the current response (nested `after()` is
- * supported). No-op outside a request scope or if this instance is already
- * running jobs.
+ * supported). No-op outside a request scope.
  */
 export async function kickBackgroundJobs(): Promise<void> {
-  if (active > 0) return;
+  // Claims are atomic, so an extra runner never double-processes; it only picks up work others haven't.
   try {
     const { after } = await import("next/server");
     after(async () => {

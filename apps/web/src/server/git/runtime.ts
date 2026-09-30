@@ -1,5 +1,7 @@
 import "server-only";
 
+import { createAssessmentService, type AssessmentService } from "../assessment/service.ts";
+import { createDatabaseAssessmentStore } from "../assessment/store-db.ts";
 import { resolveGitActor, type GitActor, type GitMembershipStore } from "./access-control.ts";
 import { createGitConnectionService } from "./connection-service.ts";
 import { createGitCredentialBroker } from "./credential-broker.ts";
@@ -22,6 +24,7 @@ export type GitRuntime = {
   registry: ReturnType<typeof getDefaultGitProviderRegistry>;
   connections: ReturnType<typeof createGitConnectionService>;
   membership: GitMembershipStore;
+  assessments: AssessmentService;
   createRepositoryService(scheduler: RepositoryIndexScheduler): ReturnType<typeof createGitRepositoryService>;
 };
 
@@ -61,12 +64,15 @@ export function getGitRuntime(): Promise<GitRuntime> {
     const registry = getDefaultGitProviderRegistry();
     const broker = createGitCredentialBroker({ connections: stores.connections, registry, audit: stores.audit });
     const membership = await createDatabaseMembershipStore();
+    const { getControlPlaneDatabase } = await import("../control-plane/database.ts");
+    const assessments = createAssessmentService({ store: createDatabaseAssessmentStore(getControlPlaneDatabase()), git: stores, broker });
 
     return {
       stores,
       broker,
       registry,
       membership,
+      assessments,
       connections: createGitConnectionService({ stores, registry, broker }),
       createRepositoryService: (scheduler: RepositoryIndexScheduler) => createGitRepositoryService({ stores, broker, scheduler }),
     };

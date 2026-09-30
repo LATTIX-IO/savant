@@ -1,4 +1,7 @@
 import type {
+  AssessmentFinding,
+  ChangeProposalResponse,
+  RepositoryAssessmentResponse,
   ApiErrorResponse,
   GitAuthorizeRequest,
   GitAuthorizeResponse,
@@ -94,4 +97,35 @@ export function assignRepositoryConnection(repositoryId: string, connectionId: s
 
 export function removeRepository(repositoryId: string): Promise<{ data: { removedSkillCount: number } }> {
   return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}`, { method: "DELETE" });
+}
+
+export function fetchRepositoryAssessment(repositoryId: string): Promise<RepositoryAssessmentResponse> {
+  return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/assessment`);
+}
+
+export function setAssessmentFindingDismissed(repositoryId: string, fingerprint: string, dismissed: boolean, reason?: string): Promise<unknown> {
+  return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/assessment/dismissals`, {
+    method: "POST",
+    body: JSON.stringify({ fingerprint, dismissed, ...(reason ? { reason } : {}) }),
+  });
+}
+
+export function proposeAssessmentFixes(repositoryId: string, fingerprints: string[]): Promise<ChangeProposalResponse> {
+  return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/proposals`, { method: "POST", body: JSON.stringify({ fingerprints }) });
+}
+
+export function proposeFileEdits(repositoryId: string, input: { title: string; body?: string; files: Array<{ path: string; content: string }> }): Promise<ChangeProposalResponse> {
+  return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/proposals`, { method: "POST", body: JSON.stringify(input) });
+}
+
+export function approveChangeProposal(proposalId: string): Promise<ChangeProposalResponse> {
+  return requestJson(`/api/proposals/${encodeURIComponent(proposalId)}/approve`, { method: "POST" });
+}
+
+export function rejectChangeProposal(proposalId: string): Promise<ChangeProposalResponse> {
+  return requestJson(`/api/proposals/${encodeURIComponent(proposalId)}/reject`, { method: "POST" });
+}
+
+export function fetchSkillAssessment(skillId: string): Promise<{ data: { repositoryId: string | null; findings: AssessmentFinding[] } }> {
+  return requestJson(`/api/skills/${encodeURIComponent(skillId)}/assessment`);
 }

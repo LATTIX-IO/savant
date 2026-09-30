@@ -13,6 +13,7 @@ import {
   type ProviderRepository,
   type ProviderRuntimeContext,
   type RepositoryLocator,
+  type CredentialAccess,
   type RepositoryTreeEntry,
 } from "../types.ts";
 import { parseGitHubRepositoryUrl } from "../url-parsing.ts";
@@ -145,8 +146,9 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
     return missing;
   }
 
-  async function mintInstallationToken(installationId: string, context?: ProviderRuntimeContext): Promise<InstallationToken> {
-    const cached = installationTokenCache.get(installationId);
+  async function mintInstallationToken(installationId: string, context?: ProviderRuntimeContext, access: CredentialAccess = "read"): Promise<InstallationToken> {
+    const cacheKey = `${installationId}:${access}`;
+    const cached = installationTokenCache.get(cacheKey);
     if (cached && cached.expiresAt - INSTALLATION_TOKEN_SAFETY_MS > now()) {
       return cached;
     }
@@ -159,17 +161,22 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
           provider: "github",
           method: "POST",
           headers: githubHeaders({ Authorization: `Bearer ${createGitHubAppJwt(cfg, now())}`, "Content-Type": "application/json" }),
-          // Down-scope every installation token to read-only (INV-GIT-09).
-          body: JSON.stringify({ permissions: { contents: "read", metadata: "read" } }),
+          // Down-scope every token to what the operation needs: syncs are
+          // read-only; only approved change requests get contents/PR write.
+          body: JSON.stringify({
+            permissions: access === "write"
+              ? { contents: "write", pull_requests: "write", metadata: "read" }
+              : { contents: "read", metadata: "read" },
+          }),
           ...context,
         },
       );
       const token = { token: data.token, expiresAt: Date.parse(data.expires_at) || now() + 55 * 60 * 1000 };
-      installationTokenCache.set(installationId, token);
+      installationTokenCache.set(cacheKey, token);
       return token;
     } catch (error) {
       if (error instanceof GitProviderError && (error.code === "REPOSITORY_NOT_FOUND" || error.code === "TOKEN_EXPIRED" || error.code === "REPOSITORY_ACCESS_DENIED")) {
-        installationTokenCache.delete(installationId);
+        installationTokenCache.delete(cacheKey);
         throw new GitProviderError(
           "TOKEN_REVOKED",
           "The Savant GitHub App installation was removed or suspended. Reinstall the app from Settings → Source control.",
@@ -348,7 +355,7 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
           throw new GitProviderError("AUTH_REQUIRED", "This GitHub connection has no installation. Reconnect GitHub.", { provider: "github" });
         }
 
-        const token = await mintInstallationToken(input.installationId, context);
+        const token = await mintInstallationToken(input.installationId, context, input.access ?? "read");
         return createRuntimeCredential({
           provider: "github",
           connectionId: input.connectionId,
@@ -502,6 +509,79 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
         throw new GitProviderError("INVALID_PROVIDER_RESPONSE", `GitHub could not resolve '${ref}' in ${locator.fullName}.`, { provider: "github" });
       }
       return sha;
+    },
+
+    async createChangeRequest(credential, locator, input, context) {
+      const base = `${credential.apiBaseUrl}${repoPath(locator)}`;
+      const request = <T>(path: string, method: string, body?: unknown) => providerJson<T>(`${base}${path}`, {
+        provider: "github",
+        credential,
+        method,
+        headers: githubHeaders(body === undefined ? {} : { "Content-Type": "application/json" }),
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        repositoryKnown: true,
+        subject: locator.fullName,
+        maxRetries: method === "GET" ? 3 : 0,
+        inspectFailure: (response, text) => (response.status === 403 && /not accessible by integration/i.test(text) ? { insufficientScope: true } : {}),
+        ...context,
+      });
+
+      try {
+        const { data: ref } = await request<{ object: { sha: string } }>(`/git/ref/heads/${encodePathSegments(input.baseBranch)}`, "GET");
+        const baseSha = ref.object.sha;
+        const { data: baseCommit } = await request<{ tree: { sha: string } }>(`/git/commits/${baseSha}`, "GET");
+        const { data: tree } = await request<{ sha: string }>("/git/trees", "POST", {
+          base_tree: baseCommit.tree.sha,
+          tree: input.files.map((file) => ({ path: file.path, mode: "100644", type: "blob", content: file.content })),
+        });
+        const { data: commit } = await request<{ sha: string }>("/git/commits", "POST", {
+          message: input.commitMessage,
+          tree: tree.sha,
+          parents: [baseSha],
+        });
+
+        let headBranch = input.headBranch;
+        for (let attempt = 0; ; attempt += 1) {
+          try {
+            await request("/git/refs", "POST", { ref: `refs/heads/${headBranch}`, sha: commit.sha });
+            break;
+          } catch (error) {
+            // 422: the branch already exists (e.g. a retried proposal) — pick a fresh name.
+            if (attempt < 3 && error instanceof GitProviderError && error.code === "INVALID_PROVIDER_RESPONSE") {
+              headBranch = `${input.headBranch}-${Date.now().toString(36)}`;
+              continue;
+            }
+            throw error;
+          }
+        }
+
+        const { data: pull } = await request<{ number: number; html_url: string }>("/pulls", "POST", {
+          title: input.title,
+          head: headBranch,
+          base: input.baseBranch,
+          body: input.body,
+          maintainer_can_modify: true,
+        });
+
+        return { number: pull.number, url: pull.html_url, headBranch, baseCommitSha: baseSha };
+      } catch (error) {
+        if (error instanceof GitProviderError && (error.code === "INSUFFICIENT_SCOPE" || error.code === "REPOSITORY_ACCESS_DENIED")) {
+          throw new GitProviderError(
+            "INSUFFICIENT_SCOPE",
+            `The Savant GitHub App can't write to ${locator.fullName}. Give the app Contents and Pull requests write permission, then accept the permission update on the installation.`,
+            { provider: "github" },
+          );
+        }
+        throw error;
+      }
+    },
+
+    async getChangeRequest(credential, locator, number, context) {
+      const { data } = await providerJson<{ state: "open" | "closed"; merged?: boolean; merged_at?: string | null; html_url: string }>(
+        `${credential.apiBaseUrl}${repoPath(locator)}/pulls/${number}`,
+        { provider: "github", credential, headers: githubHeaders(), repositoryKnown: true, subject: `${locator.fullName}#${number}`, ...context },
+      );
+      return { state: data.merged || data.merged_at ? "merged" : data.state, url: data.html_url };
     },
 
     parseRepositoryUrl(url) {

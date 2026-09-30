@@ -27,7 +27,7 @@ function normalizePath(value: string): string {
     .replace(/\/$/, "");
 }
 
-function toYamlScalar(value: string): string {
+export function toYamlScalar(value: string): string {
   return JSON.stringify(value);
 }
 
@@ -85,7 +85,7 @@ function buildDirectories(packagePath: string): RepoScaffoldDirectory[] {
   ];
 }
 
-function buildSkillMarkdown(request: SkillScaffoldRequest): string {
+export function buildSkillMarkdown(request: SkillScaffoldRequest): string {
   return `# ${request.displayName}\n\n## Summary\n\n${request.summary}\n\n## Purpose\n\nDescribe what this skill should do, when it should be used, and what good output looks like.\n\n## Required inputs\n\n- task\n- context\n\n## Output expectations\n\n- response\n- key considerations\n- follow-up questions when context is incomplete\n\n## Constraints\n\n- stay within approved scope\n- explain assumptions when inputs are incomplete\n- follow referenced dependencies instead of duplicating them\n`;
 }
 
@@ -118,7 +118,7 @@ function buildMetadataYaml(
   ].join("\n") + "\n";
 }
 
-function buildAgentOverlay(skillId: string): string {
+export function buildAgentOverlay(skillId: string): string {
   return [
     "version: 1",
     `skill_id: ${toYamlScalar(skillId)}`,
@@ -130,7 +130,7 @@ function buildAgentOverlay(skillId: string): string {
   ].join("\n") + "\n";
 }
 
-function buildDatasetYaml(): string {
+export function buildDatasetYaml(): string {
   return [
     "version: 1",
     "dataset_id: starter-dataset",
@@ -145,7 +145,7 @@ function buildDatasetYaml(): string {
   ].join("\n") + "\n";
 }
 
-function buildRubricYaml(): string {
+export function buildRubricYaml(): string {
   return [
     "version: 1",
     "dimensions:",
@@ -161,7 +161,7 @@ function buildRubricYaml(): string {
   ].join("\n") + "\n";
 }
 
-function buildBaselineJson(skillId: string): string {
+export function buildBaselineJson(skillId: string): string {
   return JSON.stringify(
     {
       skill_id: skillId,

@@ -9,6 +9,7 @@ import type {
 
 import { buildConnectedRepositoryListItem } from "./repository-connect.ts";
 import { RepositoryProviderConnectionError } from "./repository-provider-connection.ts";
+import { describeAssessmentSummary } from "../assessment/service.ts";
 import { GitProviderError } from "../git/errors.ts";
 import { syncRepository, type IndexSnapshotInput, type IndexWriter } from "../git/repository-sync-service.ts";
 import { parseRepositoryLocator } from "./repository-provider.ts";
@@ -997,6 +998,13 @@ export async function indexRepositoryById(input: {
       audit: runtime.stores.audit,
       writer: createDatabaseIndexWriter(repository),
       readAnonymousSnapshot: () => readAnonymousIndexSnapshot(repository),
+      afterCommit: (commit) => runtime.assessments.recordAssessment({
+        organizationId: commit.organizationId,
+        repositoryId: commit.repositoryId,
+        commitSha: commit.commitSha,
+        observedPaths: commit.snapshot.observedPaths,
+        files: commit.snapshot.files,
+      }),
     }, {
       organizationId: input.organizationId,
       repositoryId: repository.id,
@@ -1006,7 +1014,16 @@ export async function indexRepositoryById(input: {
       now,
     });
 
-    return synced.result;
+    if (!synced.assessment) {
+      return synced.result;
+    }
+
+    // The sync response carries the assessment so the user sees next steps immediately.
+    return {
+      ...synced.result,
+      assessment: synced.assessment,
+      message: `${synced.result.message} ${describeAssessmentSummary(synced.assessment)}`,
+    };
   } catch (error) {
     throw toRepositoryIndexError(error);
   }

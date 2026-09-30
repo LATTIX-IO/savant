@@ -387,6 +387,12 @@ export interface SkillSourcePayload {
   mode: "repository" | "fallback";
   canSave: boolean;
   saveDisabledReason?: string | undefined;
+  /**
+   * `proposal`: saving creates a change proposal that opens a pull request once
+   * approved (managed connections). `commit`: legacy direct commit.
+   */
+  saveMode?: "commit" | "proposal" | undefined;
+  repositoryId?: string | undefined;
 }
 
 export interface SkillSourceUpdateRequest {

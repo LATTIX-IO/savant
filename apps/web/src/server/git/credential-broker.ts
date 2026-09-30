@@ -4,7 +4,7 @@ import type { GitProviderRegistry } from "./providers/registry.ts";
 import { logGitEvent } from "./redaction.ts";
 import { decryptProviderCredential, encryptProviderCredential, type Env } from "./secret-vault.ts";
 import type { GitAuditSink, GitConnectionRecord, GitConnectionStore } from "./stores.ts";
-import type { GitProvider, ProviderCredential, ProviderRuntimeContext, RuntimeCredential } from "./types.ts";
+import type { CredentialAccess, GitProvider, ProviderCredential, ProviderRuntimeContext, RuntimeCredential } from "./types.ts";
 
 /**
  * The only path from a connection id to a usable credential (spec §8).
@@ -24,7 +24,11 @@ export type ResolvedCredential = {
 };
 
 export interface GitCredentialBroker {
-  resolve(input: { organizationId: string; connectionId: string }, context?: ProviderRuntimeContext, parentSpan?: SpanHandle | null): Promise<ResolvedCredential>;
+  resolve(
+    input: { organizationId: string; connectionId: string; access?: CredentialAccess | undefined },
+    context?: ProviderRuntimeContext,
+    parentSpan?: SpanHandle | null,
+  ): Promise<ResolvedCredential>;
 }
 
 function readLegacyEnvCredential(connection: GitConnectionRecord, env: Env): ProviderCredential {
@@ -169,6 +173,7 @@ export function createGitCredentialBroker(deps: {
             installationId: connection.providerInstallationId,
             accountScope: connection.providerScope,
             credential: stored,
+            access: input.access ?? "read",
           }, context);
 
           return { credential, connection, provider };

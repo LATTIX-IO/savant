@@ -9,6 +9,7 @@
     "./repository-provider-readiness": "./src/repository-provider-readiness.ts",
     "./tenant-skill-repo": "./src/tenant-skill-repo.ts",
     "./skill-intelligence": "./src/skill-intelligence.ts",
-    "./git-providers": "./src/git-providers.ts"
+    "./git-providers": "./src/git-providers.ts",
+    "./assessments": "./src/assessments.ts"
   }
 }

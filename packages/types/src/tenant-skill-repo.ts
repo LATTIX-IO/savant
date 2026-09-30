@@ -124,6 +124,8 @@ export interface RepoSyncPayload {
   indexedSkillCount: number;
   warnings: string[];
   message: string;
+  /** Post-sync assessment summary, present when the assessment ran. */
+  assessment?: import("./assessments").AssessmentSummary | undefined;
 }
 
 export type RepoSyncResponse = ResourceResponse<RepoSyncPayload>;

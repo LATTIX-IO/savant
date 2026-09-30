@@ -257,6 +257,8 @@ export interface GitProvider {
     installationId: string | null;
     accountScope?: string | null | undefined;
     credential: ProviderCredential | null;
+    /** Defaults to read. Write is only requested to open an approved change request. */
+    access?: CredentialAccess | undefined;
   }, context?: ProviderRuntimeContext): Promise<RuntimeCredential>;
 
   getIdentity(credential: RuntimeCredential, context?: ProviderRuntimeContext): Promise<ProviderIdentity>;
@@ -314,6 +316,48 @@ export interface GitProvider {
 
   /** Returns scope warnings for a manually supplied token (e.g. write access granted). */
   inspectTokenPrivileges?(credential: RuntimeCredential, context?: ProviderRuntimeContext): Promise<string[]>;
+
+  /**
+   * Opens a pull/merge request with the given file contents on a new branch.
+   * Never pushes to the base branch, so the repository's protection and review
+   * rules apply. Requires a credential resolved with `access: "write"`.
+   */
+  createChangeRequest?(
+    credential: RuntimeCredential,
+    repository: RepositoryLocator,
+    input: ChangeRequestInput,
+    context?: ProviderRuntimeContext,
+  ): Promise<ChangeRequestResult>;
+
+  getChangeRequest?(
+    credential: RuntimeCredential,
+    repository: RepositoryLocator,
+    number: number,
+    context?: ProviderRuntimeContext,
+  ): Promise<ChangeRequestState>;
+}
+
+export type CredentialAccess = "read" | "write";
+
+export interface ChangeRequestInput {
+  baseBranch: string;
+  headBranch: string;
+  title: string;
+  body: string;
+  commitMessage: string;
+  files: Array<{ path: string; content: string }>;
+}
+
+export interface ChangeRequestResult {
+  number: number;
+  url: string;
+  headBranch: string;
+  baseCommitSha: string;
+}
+
+export interface ChangeRequestState {
+  state: "open" | "merged" | "closed";
+  url: string;
 }
 
 /** Repository row fields the git subsystem reads (normalized). */

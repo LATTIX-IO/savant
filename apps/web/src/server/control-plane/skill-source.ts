@@ -5,6 +5,9 @@ import type {
   SkillSourceUpdatePayload,
   SkillSourceUpdateRequest,
 } from "@savant/types";
+import { resolveRepositoryConnection } from "../git/connection-resolver.ts";
+import { GitProviderError } from "../git/errors.ts";
+import { toLocator } from "../git/repository-sync-service.ts";
 
 import {
   buildFallbackSkillSourceContent,
@@ -211,6 +214,49 @@ async function resolveSkillSourceConnection(
   }
 }
 
+/** The indexer stores the package directory; the editable file is its SKILL.md. */
+function skillMarkdownPath(sourcePath: string): string {
+  return /\.md$/i.test(sourcePath) ? sourcePath : `${sourcePath.replace(/\/+$/, "")}/SKILL.md`;
+}
+
+/**
+ * Reads SKILL.md through the repository's managed provider connection. Returns
+ * null for legacy (deployment-credential) connections, which keep the direct
+ * commit path. Saves for managed connections go through change proposals.
+ */
+async function readManagedSkillSource(
+  context: ResolvedTenantContext,
+  sourceRow: SkillSourceQueryRow,
+): Promise<{ content: string; path: string; branch: string } | null> {
+  if (!context.identity) {
+    return null;
+  }
+
+  const { getGitRuntime } = await import("../git/runtime.ts");
+  const runtime = await getGitRuntime();
+  const organizationId = context.tenant.organizationId;
+  const repository = await runtime.stores.repositories.getRepository(organizationId, sourceRow.repositoryId);
+  if (!repository) {
+    return null;
+  }
+
+  let resolution;
+  try {
+    resolution = await resolveRepositoryConnection(runtime.stores, { organizationId, repository });
+  } catch {
+    return null;
+  }
+  if (resolution.connection.authType === "legacy_env") {
+    return null;
+  }
+
+  const resolved = await runtime.broker.resolve({ organizationId, connectionId: resolution.connection.id });
+  const path = skillMarkdownPath(sourceRow.sourcePath);
+  const branch = sourceRow.defaultBranch?.trim() || repository.defaultBranch || "main";
+  const content = await resolved.provider.readFile(resolved.credential, toLocator(repository), sourceRow.sourceCommitSha?.trim() || branch, path);
+  return { content: content.toString("utf8"), path, branch };
+}
+
 async function readLiveSkillSourceFile(input: {
   sourceRow: SkillSourceQueryRow;
   connection: RepositoryProviderConnectionRecord | null;
@@ -247,7 +293,7 @@ async function readLiveSkillSourceFile(input: {
   switch (locator.provider) {
     case "github": {
       const file = await readGitHubRepositoryTextFile(locator, {
-        path: sourceRow.sourcePath,
+        path: skillMarkdownPath(sourceRow.sourcePath),
         ref,
         ...(fetcher ? { fetcher } : {}),
       });
@@ -261,7 +307,7 @@ async function readLiveSkillSourceFile(input: {
     }
     case "gitlab": {
       const file = await readGitLabRepositoryTextFile(locator, {
-        path: sourceRow.sourcePath,
+        path: skillMarkdownPath(sourceRow.sourcePath),
         ref,
         ...(fetcher ? { fetcher } : {}),
       });
@@ -297,6 +343,42 @@ export async function getSkillSourceResponse(
   if (!sourceRow) {
     return {
       data: toFallbackSourcePayload(skill),
+      meta: createControlPlaneMeta("mixed"),
+    };
+  }
+
+  const managed = await readManagedSkillSource(context, sourceRow).catch((error: unknown) => {
+    if (error instanceof GitProviderError) {
+      return { error };
+    }
+    throw error;
+  });
+
+  if (managed && "content" in managed) {
+    return {
+      data: {
+        skillId: skill.id,
+        skillUuid: skill.skillUuid,
+        name: skill.name,
+        repository: skill.repo,
+        repoProvider: skill.repoProvider,
+        branch: managed.branch,
+        sourcePath: managed.path,
+        sourceCommitSha: sourceRow.sourceCommitSha,
+        contentSha: null,
+        content: managed.content,
+        mode: "repository",
+        canSave: true,
+        saveMode: "proposal",
+        repositoryId: sourceRow.repositoryId,
+      },
+      meta: createControlPlaneMeta("git"),
+    };
+  }
+
+  if (managed && "error" in managed) {
+    return {
+      data: toFallbackSourcePayload(skill, { saveDisabledReason: managed.error.message }),
       meta: createControlPlaneMeta("mixed"),
     };
   }

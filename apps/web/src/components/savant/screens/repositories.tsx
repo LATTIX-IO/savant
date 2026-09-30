@@ -23,6 +23,7 @@ import {
 } from "@/lib/control-plane-client";
 import { extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 
+import { RepositoryAssessmentPanel } from "./repository-assessment-panel";
 import { RepositoryConnectionControls } from "./repository-connection-controls";
 
 type ProviderFilter = "all" | "github" | "gitlab" | "azure" | "bitbucket";
@@ -515,6 +516,15 @@ export function RepositoriesScreen() {
                     setDetail(null);
                     setReloadListToken((value) => value + 1);
                   }}
+                />
+
+                <div className="divider" />
+
+                <RepositoryAssessmentPanel
+                  key={`assessment-${sel.id}`}
+                  repositoryId={sel.id}
+                  refreshToken={reloadDetailToken}
+                  onNotice={(tone, message) => setSyncNotice({ tone: tone === "error" ? "error" : "default", message })}
                 />
 
                 <div className="divider" />

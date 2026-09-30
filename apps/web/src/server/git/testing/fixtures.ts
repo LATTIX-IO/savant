@@ -114,7 +114,12 @@ export type FakeProviderControls = {
   identity: { id: string; login: string };
   /** Authorization result returned by completeAuthorization. */
   authorization: Partial<CompletedAuthorization>;
+  /** Whether the installation has accepted write permission (Contents + Pull requests). */
+  writeGranted: boolean;
+  changeRequests: Array<{ number: number; baseBranch: string; headBranch: string; title: string; files: Array<{ path: string; content: string }>; state: "open" | "merged" | "closed" }>;
 };
+
+const writeCredentials = new WeakSet<RuntimeCredential>();
 
 function tokenOf(credential: RuntimeCredential): string {
   return credential.accessToken ?? "";
@@ -134,6 +139,8 @@ export function createFakeGitProvider(options?: {
     calls: [],
     identity: { id: "4242", login: "lattix-bot" },
     authorization: options?.authorization ?? {},
+    writeGranted: true,
+    changeRequests: [],
   };
 
   function checkToken(credential: RuntimeCredential, operation: string) {
@@ -257,7 +264,7 @@ export function createFakeGitProvider(options?: {
       if (!token) {
         throw new GitProviderError("AUTH_REQUIRED", "No credential (fixture).", { provider: type });
       }
-      return createRuntimeCredential({
+      const credential = createRuntimeCredential({
         provider: type,
         connectionId: input.connectionId,
         organizationId: input.organizationId,
@@ -266,6 +273,10 @@ export function createFakeGitProvider(options?: {
         accessToken: token,
         ...(input.installationId ? { installationId: input.installationId } : {}),
       });
+      if (input.access === "write") {
+        writeCredentials.add(credential);
+      }
+      return credential;
     },
 
     async getIdentity(credential) {
@@ -331,6 +342,29 @@ export function createFakeGitProvider(options?: {
     },
 
     parseRepositoryUrl: () => null,
+
+    async createChangeRequest(credential, locator, input) {
+      checkToken(credential, "createChangeRequest");
+      find(credential, locator);
+      if (!writeCredentials.has(credential)) {
+        throw new GitProviderError("INSUFFICIENT_SCOPE", "Credential was not resolved for write (fixture).", { provider: type });
+      }
+      if (!controls.writeGranted) {
+        throw new GitProviderError("INSUFFICIENT_SCOPE", "The app needs Contents and Pull requests write permission (fixture).", { provider: type });
+      }
+      const number = controls.changeRequests.length + 1;
+      controls.changeRequests.push({ number, baseBranch: input.baseBranch, headBranch: input.headBranch, title: input.title, files: input.files, state: "open" });
+      return { number, url: `https://${type}.fixture/${locator.fullName}/pull/${number}`, headBranch: input.headBranch, baseCommitSha: "0123456789abcdef0123456789abcdef01234567" };
+    },
+
+    async getChangeRequest(credential, locator, number) {
+      checkToken(credential, "getChangeRequest");
+      const request = controls.changeRequests.find((entry) => entry.number === number);
+      if (!request) {
+        throw new GitProviderError("REPOSITORY_NOT_FOUND", "No such pull request (fixture).", { provider: type });
+      }
+      return { state: request.state, url: `https://${type}.fixture/${locator.fullName}/pull/${number}` };
+    },
   };
 
   return { provider, controls };

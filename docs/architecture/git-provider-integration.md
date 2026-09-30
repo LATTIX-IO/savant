@@ -34,7 +34,7 @@ All provider-specific code sits behind the `GitProvider` contract in `apps/web/s
 
 | Provider | Primary flow | Access requested | Persisted |
 | --- | --- | --- | --- |
-| GitHub | GitHub App installation | Contents: Read, Metadata: Read. Installation tokens are also down-scoped per request | Installation id and account only. Installation tokens are minted on demand and never stored |
+| GitHub | GitHub App installation | Contents: Read & write, Pull requests: Read & write, Metadata: Read. Installation tokens are down-scoped per request: read-only for syncs, write only to open an approved pull request | Installation id and account only. Installation tokens are minted on demand and never stored |
 | GitLab | OAuth 2.0 + PKCE; self-managed via an instance OAuth app | `read_repository`, `read_api` (project discovery), `read_user` | Encrypted access and refresh tokens, plus the instance client for self-managed |
 | Bitbucket Cloud | OAuth 2.0 client | Repositories: Read, Account: Read, Workspace membership: Read | Encrypted access and refresh tokens |
 | Azure Repos | Microsoft Entra ID OAuth v2 + PKCE (not the deprecated Azure DevOps OAuth) | `499b84ac-1321-427f-aa17-267ca6975798/vso.code`, `offline_access` | Encrypted tokens, tenant id and object id |
@@ -73,7 +73,7 @@ A public repository with no connection may still be read anonymously. A reposito
 - **Phase C:** the UI labels legacy connections ("Legacy credential — reauthorize using the Savant integration"). Reauthorizing a legacy connection converts its reads in place to the managed credential; its `credentials_ref` is kept so repository write operations continue to work.
 - **Phase D:** nothing in the application creates `legacy_env` rows. Deployment secrets are not deleted automatically.
 
-Repository write operations (provisioning, scaffold commits) still use `legacy_env` credentials, because managed connections are read-only (INV-GIT-09).
+Legacy write operations (repository provisioning and scaffold apply) still use `legacy_env` credentials and commit directly. Managed connections only write through approved pull requests (see *Assessments and write-back*).
 
 ### LATTIX-IO/lattix-skills recovery
 
@@ -106,6 +106,26 @@ PUT    /api/repositories/:id/connection
 | Admin | workspace owner, `platform-admins` | connect, disconnect and reauthorize providers; assign connections |
 | Repository manager | `repository-managers` | connect, sync and remove repositories; validate connections |
 | Member | everyone else | view |
+
+## Assessments and write-back
+
+Every successful sync runs a deterministic **repository assessment** (`server/assessment/assess.ts`) after the index is committed. A failure here never fails the sync. It reports:
+
+- **What is missing:** contract directories, registry files, and each required package file of a skipped skill, named exactly (`SKILL.md`, `metadata.yaml`, `agents/` or `eval/`).
+- **What is inconsistent:** packages missing from the registry, registry entries without packages, unknown dependencies, owners, metadata fields, tier mismatches.
+- **What limits quality:** thin or placeholder SKILL.md content, and no evaluation cases.
+
+Findings are stored in `repository_assessments` (`0007`) with stable fingerprints, so dismissals survive later syncs. The sync response carries the summary, and the Repositories screen and the skill page show the findings with their next steps.
+
+**Write-back** always goes through a change proposal:
+
+1. A fixable finding, or an edit made in the skill Builder, becomes a `repository_change_proposals` row with the full file contents and a diff. Nothing is written to the repository yet.
+2. One Savant admin or repository manager approves it.
+3. Savant re-reads the base branch and refuses to continue if any affected file changed since the proposal was made.
+4. Savant resolves a write-scoped token, creates a `savant/<id>` branch, commits, and opens a pull request against the default branch. It never pushes to the default branch, so the repository's branch protection, required reviews and status checks decide whether and when it merges.
+5. The pull request's state (open, merged or closed) is refreshed on every sync and whenever the assessment is viewed.
+
+Opening pull requests is currently implemented for GitHub. Other providers' proposals fail with a clear message until their adapters implement `createChangeRequest`.
 
 ## Error model and states
 

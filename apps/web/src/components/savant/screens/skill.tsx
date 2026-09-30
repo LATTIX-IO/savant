@@ -7,6 +7,7 @@ import { useEffect, useMemo, useReducer, useState } from "react";
 
 import type {
   ActivityEventItem,
+  ChangeProposal,
   EvalRunSummary,
   FlaggedCaseItem,
   ReviewerComment,
@@ -29,6 +30,7 @@ import {
   fetchSkillSource,
   updateSkillSource,
 } from "@/lib/control-plane-client";
+import { proposeFileEdits } from "@/lib/git-connections-client";
 import {
   buildSkillRecommendationQueueScope,
   buildSkillRecommendationQueueStorageKey,
@@ -42,6 +44,7 @@ import {
 import { buildRepositoryWebUrl } from "@/lib/repository-links";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 
+import { SkillAssessmentFindings, SkillProposalNotice } from "./skill-assessment-findings";
 import {
   ImprovementsTab,
   InsightsTab,
@@ -151,6 +154,7 @@ export function SkillScreen({ skillId }: { skillId: string }) {
   const [draft, setDraft] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [pendingProposal, setPendingProposal] = useState<ChangeProposal | null>(null);
   const [builderFeedback, setBuilderFeedback] = useState<BuilderFeedback | null>(null);
   const [, bumpQueuedRecommendationsVersion] = useReducer(
     (current: number) => current + 1,
@@ -303,6 +307,20 @@ export function SkillScreen({ skillId }: { skillId: string }) {
     setBuilderFeedback(null);
 
     try {
+      if (activeSource.saveMode === "proposal" && activeSource.repositoryId) {
+        // Managed connections never commit directly: the edit becomes a change
+        // proposal that opens a pull request once approved.
+        const proposed = await proposeFileEdits(activeSource.repositoryId, {
+          title: `Savant: update ${activeSource.name} instructions`,
+          body: `Edited in the Savant Builder for ${activeSource.name} (${activeSource.sourcePath}).`,
+          files: [{ path: activeSource.sourcePath, content: draft }],
+        });
+        setPendingProposal(proposed.data);
+        setSaveStatus("success");
+        setSaveMessage("Change proposed. Approve it to open a pull request; it merges through the repository's review rules.");
+        return;
+      }
+
       const response = await updateSkillSource(skillId, {
         content: draft,
       });
@@ -447,6 +465,8 @@ export function SkillScreen({ skillId }: { skillId: string }) {
         </div>
       </div>
 
+      <SkillAssessmentFindings skillId={skillId} refreshToken={reloadToken} />
+
       <div style={{ marginBottom: 24 }}>
         <div className="eyebrow" style={{ marginBottom: 8 }}>
           Lifecycle
@@ -491,6 +511,17 @@ export function SkillScreen({ skillId }: { skillId: string }) {
       </div>
 
       {tab === "evaluation" && <EvaluationTab detail={detail} pathname={pathname} />}
+      {tab === "builder" && pendingProposal && (
+        <SkillProposalNotice
+          proposal={pendingProposal}
+          onUpdated={(proposal) => {
+            setPendingProposal(proposal);
+            if (proposal.status === "pr_open") {
+              setSaveMessage(`Pull request #${proposal.pullRequestNumber} opened. Savant re-indexes the skill after it merges.`);
+            }
+          }}
+        />
+      )}
       {tab === "builder" && (
         <BuilderTab
           detail={detail}
@@ -921,7 +952,7 @@ function BuilderTab({
                     disabled={!isDirty || !source.canSave || saveStatus === "saving"}
                   >
                     {saveStatus === "saving" ? <Ic.Spinner className="b-icon" /> : <Ic.Check className="b-icon" />}
-                    Save SKILL.md
+                    {source.saveMode === "proposal" ? "Propose change" : "Save SKILL.md"}
                   </button>
                 </div>
               </div>

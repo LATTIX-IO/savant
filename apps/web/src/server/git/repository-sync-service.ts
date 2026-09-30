@@ -1,3 +1,5 @@
+import type { AssessmentSummary } from "@savant/types";
+
 import { resolveRepositoryConnection } from "./connection-resolver.ts";
 import type { GitCredentialBroker } from "./credential-broker.ts";
 import { describeGitRemediation, GitProviderError, isConnectionAuthFailure } from "./errors.ts";
@@ -66,6 +68,16 @@ export type RepositorySyncDeps<TParsed, TResult> = {
   limits?: RepositoryReadLimits | undefined;
   context?: ProviderRuntimeContext | undefined;
   staleSyncAfterMs?: number | undefined;
+  /**
+   * Post-commit step (repository assessment). Runs after the index is
+   * committed; a failure here is logged and never fails the sync.
+   */
+  afterCommit?: ((input: {
+    organizationId: string;
+    repositoryId: string;
+    commitSha: string;
+    snapshot: IndexSnapshotInput;
+  }) => Promise<AssessmentSummary | null>) | undefined;
 };
 
 export type RepositorySyncResult<TResult> = {
@@ -75,6 +87,7 @@ export type RepositorySyncResult<TResult> = {
   commitSha: string;
   connectionId: string | null;
   durationMs: number;
+  assessment: AssessmentSummary | null;
 };
 
 const DEFAULT_STALE_SYNC_MS = 10 * 60 * 1000;
@@ -248,6 +261,16 @@ export async function syncRepository<TParsed, TResult>(
         await deps.repositories.bindRepository(input.organizationId, repository.id, bindAfterSuccess.connectionId, bindAfterSuccess.providerRepositoryId);
       }
 
+      let assessment: AssessmentSummary | null = null;
+      if (deps.afterCommit) {
+        try {
+          assessment = await withGitSpan("repository.assess", { provider: repository.provider }, async () =>
+            deps.afterCommit!({ organizationId: input.organizationId, repositoryId: repository.id, commitSha: snapshot.commitSha, snapshot }), span);
+        } catch (error) {
+          logGitEvent("warn", "repository_assessment_failed", { repository_id: repository.id, error });
+        }
+      }
+
       const durationMs = Date.now() - startedAt;
       incrementGitMetric("git_repository_sync_total", { provider: repository.provider, result: "success" });
       observeGitMetric("git_repository_sync_duration_seconds", { provider: repository.provider }, durationMs / 1000);
@@ -267,7 +290,7 @@ export async function syncRepository<TParsed, TResult>(
         },
       }).catch(() => undefined);
 
-      return { repositoryId: repository.id, result, skillCount, commitSha: snapshot.commitSha, connectionId, durationMs };
+      return { repositoryId: repository.id, result, skillCount, commitSha: snapshot.commitSha, connectionId, durationMs, assessment };
     } catch (caught) {
       const error = normalizeSyncError(caught);
       const status = syncFailureStatus(error.code);

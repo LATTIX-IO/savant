@@ -60,7 +60,7 @@ test("skills.sh and ClawHub page through their catalogs; quota exhaustion pauses
 
 test("SkillsMP walks each configured query page by page", async () => {
   const source = { id: "skillsmp", kind: "skillsmp" as const, publisher: "SkillsMP", config: { queries: ["agent", "security"] }, maxSkills: 100000 };
-  const full = Array.from({ length: 100 }, (_, index) => ({ id: `s${index}`, name: `s${index}`, githubUrl: `https://github.com/o/r/tree/main/skills/s${index}`, stars: 100 - index }));
+  const full = Array.from({ length: 50 }, (_, index) => ({ id: `s${index}`, name: `s${index}`, githubUrl: `https://github.com/o/r/tree/main/skills/s${index}`, stars: 100 - index }));
   const first = await listSourcePage(source, null, { fetchImpl: fakeFetch(() => ({ data: { skills: full } })), env: {} });
   assert.deepEqual(JSON.parse(first.nextCursor ?? "{}"), { q: 0, page: 2 });
   const last = await listSourcePage(source, JSON.stringify({ q: 1, page: 1 }), { fetchImpl: fakeFetch(() => ({ data: { skills: full.slice(0, 3) } })), env: {} });

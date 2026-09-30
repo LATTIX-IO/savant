@@ -225,7 +225,7 @@ async function listSkillsMp(source: HubSourceConfig, cursor: string | null, deps
   const state = (cursor ? JSON.parse(cursor) : { q: 0, page: 1 }) as { q: number; page: number };
   if (state.q >= queries.length) return { listings: [], nextCursor: null };
   const key = deps.env.SKILLSMP_API_KEY?.trim();
-  const result = await getJson(deps.fetchImpl, `https://skillsmp.com/api/v1/skills/search?q=${encodeURIComponent(queries[state.q] as string)}&limit=100&page=${state.page}&sort_by=stars`, key ? { authorization: `Bearer ${key}` } : {});
+  const result = await getJson(deps.fetchImpl, `https://skillsmp.com/api/v1/skills/search?q=${encodeURIComponent(queries[state.q] as string)}&limit=50&page=${state.page}&sort_by=stars`, key ? { authorization: `Bearer ${key}` } : {});
   if (result.status === 429) return { listings: [], nextCursor: JSON.stringify(state), quotaExhausted: true };
   if (result.status !== 200) throw new HubFetchError(`SkillsMP returned ${result.status}.`);
   const items = ((result.body as { data?: { skills?: Array<{ id: string; name: string; author?: string; description?: string; githubUrl?: string; stars?: number }> } }).data?.skills ?? []);
@@ -252,7 +252,7 @@ async function listSkillsMp(source: HubSourceConfig, cursor: string | null, deps
       locator: { kind: "skillsmp", ...location },
     }];
   });
-  const next = items.length < 100 ? { q: state.q + 1, page: 1 } : { q: state.q, page: state.page + 1 };
+  const next = items.length < 50 ? { q: state.q + 1, page: 1 } : { q: state.q, page: state.page + 1 };
   return { listings, nextCursor: next.q >= queries.length ? null : JSON.stringify(next) };
 }
 
@@ -286,8 +286,28 @@ function finish(listing: HubListing, files: HubFile[], upstreamSecurity: unknown
   };
 }
 
+export class HubTransientError extends HubFetchError {}
+
+/** Retries transient upstream failures (5xx, 508 loop/limit pages, network errors) with backoff. */
+function retrying(fetchImpl: FetchLike): FetchLike {
+  return async (input, init) => {
+    let last: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        const response = await fetchImpl(input, init);
+        if (response.status < 500) return response;
+        last = response;
+      } catch (error) {
+        if (attempt === 2) throw new HubTransientError(`Network error: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt));
+    }
+    return last as Response;
+  };
+}
+
 export async function listSourcePage(source: HubSourceConfig, cursor: string | null, deps: ListingDeps = {}): Promise<ListPage> {
-  const resolved = { ...deps, fetchImpl: deps.fetchImpl ?? fetch, env: deps.env ?? process.env };
+  const resolved = { ...deps, fetchImpl: retrying(deps.fetchImpl ?? fetch), env: deps.env ?? process.env };
   switch (source.kind) {
     case "github": return cursor ? { listings: [], nextCursor: null } : listGithub(source, resolved);
     case "skills_sh": return listSkillsSh(source, cursor, resolved);

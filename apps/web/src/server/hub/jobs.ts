@@ -6,7 +6,7 @@ import type { BackgroundJob, JobQueue } from "../jobs/queue.ts";
 import { runSkillSpectorScans, SafetyScanUnavailableError, type ScanPackage } from "../safety/skillspector.ts";
 import { createBacklogStore } from "./backlog-store.ts";
 import { HubFetchError } from "./fetchers.ts";
-import { hydrateListing, listSourcePage } from "./listing.ts";
+import { HubTransientError, hydrateListing, listSourcePage } from "./listing.ts";
 import { createHubStore } from "./store.ts";
 
 type Sql = import("postgres").Sql;
@@ -98,8 +98,14 @@ export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promis
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await backlog.saveEnumeration(sourceId, state);
-    await store.recordSourceSync(sourceId, { status: "error", error: `${message} (after ${state.seen} listings)` });
+    // Upstream hiccups (5xx) resume from the saved cursor on a later run rather than waiting for tomorrow's sync.
+    const transient = error instanceof HubTransientError || /returned 5\d\d/.test(message);
+    await store.recordSourceSync(sourceId, { status: "error", error: `${message} (after ${state.seen} listings${transient ? "; retrying" : ""})` });
     logGitEvent("warn", "hub_source_sync_failed", { error: message });
+    if (transient && job.attempts < 4) {
+      await ctx.queue.release(job.id, { pages: state.pages, seen: state.seen, retry: true });
+      return "released";
+    }
   }
 
   await ctx.queue.enqueue({ organizationId: null, repositoryId: null, kind: "hub_hydrate", dedupeKey: "pending", payload: {} });

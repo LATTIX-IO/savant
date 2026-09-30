@@ -2926,7 +2926,7 @@ export async function readSkillDetailFromDatabase(
       from indexed_eval_results
       left join indexed_eval_assets dataset_asset
         on dataset_asset.id = indexed_eval_results.dataset_asset_id
-      where indexed_skill_id in (
+      where indexed_eval_results.indexed_skill_id in (
         select id
         from indexed_skills
         where organization_id = ${context.tenant.organizationId}

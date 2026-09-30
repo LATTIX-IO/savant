@@ -31,6 +31,7 @@ create table if not exists hub_budget_usage (
   primary key (day, kind)
 );
 
+-- Keep in sync with 0010 (both re-run on every deploy).
 alter table background_jobs drop constraint if exists background_jobs_kind_check;
 alter table background_jobs add constraint background_jobs_kind_check
   check (kind in ('eval_generation', 'safety_scan', 'hub_sync', 'hub_hydrate', 'hub_safety', 'hub_eval'));

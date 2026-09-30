@@ -189,3 +189,31 @@ Tests against live providers should live in a separate, opt-in suite.
 - A GitLab instance served under a relative URL root (such as `/gitlab`) loses the path after the first exchange.
 - Some Bitbucket and Azure API details are still unconfirmed against the live APIs: Bitbucket's post-CHANGE-2770 workspace listing and its `max_depth` recursion, and the Azure accounts and items API versions. Their adapter tests encode the assumptions.
 - Host validation resolves DNS before each request, but it does not pin the resolved address for the connection itself.
+
+### Evaluation generation (LLM ↔ Jev) and skill safety (SkillSpector)
+
+Many repositories don't have an answer key. For those, Savant generates one after sync, as a background job (`background_jobs`, `0009`). By default it does this for up to `EVAL_GENERATION_AUTO_LIMIT` skills per sync, and it can also be started from the skill's Evaluation tab. The loop is `server/evaluation/eval-generation.ts`.
+
+1. **Draft.** NVIDIA NIM (`NIM_GENERATION_MODEL`) drafts positive, edge, negative and escalation cases from SKILL.md.
+2. **Validate.** Jev checks each draft with typed questions:
+   - in scope
+   - which behaviour it tests
+   - expected behaviour grounded in SKILL.md
+   - clear
+   - discriminating
+
+   Code applies the thresholds. Rejected drafts go back to the LLM with their reasons, and borderline ones are held for review. Near-duplicates are dropped.
+3. **Execute.** NIM runs the skill (SKILL.md as the system prompt) on each accepted case.
+4. **Score.** Jev scores each output: quality, format and policy compliance, grounding, actionability, expected behaviour met, and revisions needed. Verdicts use the rubric's thresholds.
+5. **Record.**
+   - The output is `dataset.yaml`, `rubric.yaml` and `baseline.json` in the repository's scored-sample format. It round-trips through the import-time scorer.
+   - The result is stored as a provisional baseline (`indexed_eval_results.source = 'generated'`) and proposed as a pull request.
+   - Skills that already have a scored dataset get an **alignment** run instead. It compares the generated scorecard, and how many committed cases the generated set covers, with the committed answer key, and it never overwrites the committed dataset.
+   - Run metrics include how many drafts Jev accepted. Without Jev, every draft would ship, which gives the with/without comparison.
+
+**Safety.** NVIDIA SkillSpector scans every changed package after sync, inside a named, persistent Vercel Sandbox (`server/safety/skillspector.ts`).
+- The static scan covers every package. Packages it flags get the LLM pass via NIM (`SKILLSPECTOR_LLM`).
+- Results (`skill_safety_scans`) are merged into the repository assessment: `SAFETY_DO_NOT_INSTALL` is a blocker, and `SAFETY_CAUTION` is a warning.
+- Package files are copied into the sandbox; repository credentials never enter it.
+
+**Timing.** Jobs run in `after()` with a time budget. Work that doesn't fit is released back to the queue, and continues on the next sync, a skill-page poll, or `/api/internal/jobs/run` (Bearer `SAVANT_WORKER_TOKEN` or `CRON_SECRET`).

@@ -28,6 +28,8 @@ export type AssessmentServiceDeps = {
   git: GitStores;
   broker: GitCredentialBroker;
   context?: ProviderRuntimeContext | undefined;
+  /** Findings produced outside the sync (e.g. SkillSpector safety scans), merged into the latest assessment. */
+  extraFindings?: ((organizationId: string, repositoryId: string) => Promise<AssessmentFinding[]>) | undefined;
 };
 
 function withStatuses(findings: AssessmentFinding[], dismissed: Set<string>, proposed: Set<string>): AssessmentFinding[] {
@@ -155,8 +157,23 @@ export function createAssessmentService(deps: AssessmentServiceDeps) {
         store.listProposals(actor.organizationId, repositoryId),
       ]);
       const proposed = new Set(proposals.filter((proposal) => ["pending_approval", "opening_pr", "pr_open"].includes(proposal.status)).flatMap((proposal) => proposal.findingFingerprints));
+      const extra = latest && deps.extraFindings
+        ? await deps.extraFindings(actor.organizationId, repositoryId).catch((error: unknown) => {
+            logGitEvent("warn", "extra_findings_failed", { repository_id: repositoryId, error });
+            return [] as AssessmentFinding[];
+          })
+        : [];
+      if (!latest) {
+        return { assessment: null, proposals };
+      }
+      const findings = withStatuses([...latest.findings, ...extra], dismissed, proposed);
+      const count = (severity: AssessmentFinding["severity"]) => extra.filter((finding) => finding.severity === severity).length;
       return {
-        assessment: latest ? { ...latest, findings: withStatuses(latest.findings, dismissed, proposed) } : null,
+        assessment: {
+          ...latest,
+          summary: { ...latest.summary, blockers: latest.summary.blockers + count("blocker"), warnings: latest.summary.warnings + count("warning"), infos: latest.summary.infos + count("info") },
+          findings,
+        },
         proposals,
       };
     },

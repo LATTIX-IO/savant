@@ -129,3 +129,56 @@ export function rejectChangeProposal(proposalId: string): Promise<ChangeProposal
 export function fetchSkillAssessment(skillId: string): Promise<{ data: { repositoryId: string | null; findings: AssessmentFinding[] } }> {
   return requestJson(`/api/skills/${encodeURIComponent(skillId)}/assessment`);
 }
+
+export function fetchChangeProposal(proposalId: string): Promise<ChangeProposalResponse> {
+  return requestJson(`/api/proposals/${encodeURIComponent(proposalId)}`);
+}
+
+export type SkillAutomationRun = {
+  id: string;
+  mode: "generate" | "alignment";
+  status: "queued" | "running" | "complete" | "needs_review" | "failed";
+  trigger: string;
+  rounds: number;
+  cases: Array<{ caseId: string; kind: string; prompt: string; round: number; validation: { decision: "accepted" | "rejected" | "needs_review"; reasons: string[]; inScope: number; grounded: number; discriminating: number } }>;
+  samples: Array<{ caseId: string; kind: string; verdict: string; quality: number; policyCompliance: boolean; expectedMet: number; judgeConfidence: number }>;
+  scorecard: { overallScore?: number; passCount?: number; investigateCount?: number; failCount?: number; qualityScore?: number; complianceScore?: number; groundingScore?: number; actionabilityScore?: number; efficiencyScore?: number } | null;
+  alignment: { committedOverall: number; generatedOverall: number; overallDelta: number; coverage: number; committedCases: number; generatedCases: number; dimensionDeltas: Record<string, number> } | null;
+  proposalId: string | null;
+  models: { generator?: string; executor?: string; judge?: string };
+  metrics: { stage?: string; drafted?: number; accepted?: number; rejected?: number; needsReview?: number; acceptanceRate?: number; llmCalls?: number; judgeCalls?: number; durationMs?: number };
+  error: string | null;
+  fileCount: number;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type SkillSafetyScan = {
+  status: "complete" | "failed" | "unavailable";
+  riskScore: number | null;
+  severity: string | null;
+  recommendation: string | null;
+  issues: Array<{ id: string; category: string; severity: string; title: string; file: string | null; line: number | null }>;
+  llmUsed: boolean;
+  scannerVersion: string | null;
+  error: string | null;
+  scannedAt: string;
+  commitSha: string;
+};
+
+export type SkillAutomation = {
+  skillId: string;
+  services: { nim: boolean; jev: boolean; generationModel: string | null; judgeModel: string | null };
+  canGenerate: boolean;
+  hasAnswerKey: boolean;
+  runs: SkillAutomationRun[];
+  safety: SkillSafetyScan | null;
+};
+
+export function fetchSkillAutomation(skillId: string): Promise<{ data: SkillAutomation }> {
+  return requestJson(`/api/skills/${encodeURIComponent(skillId)}/automation`);
+}
+
+export function startSkillEvalGeneration(skillId: string): Promise<{ data: SkillAutomationRun }> {
+  return requestJson(`/api/skills/${encodeURIComponent(skillId)}/automation/generate`, { method: "POST" });
+}

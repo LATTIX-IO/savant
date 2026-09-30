@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { SkillPackageEvaluation } from "../assessment/assess.ts";
+import type { EvalSample, Scorecard } from "./scorecard.ts";
 
 /**
  * Persists import-time evaluations as indexed evaluation assets and results,
@@ -150,4 +151,56 @@ export async function persistImportEvaluations(sql: Sql, input: {
   });
 
   return summary;
+}
+
+/**
+ * Records a generated evaluation (LLM-drafted, Jev-validated and scored) as a
+ * provisional baseline for a skill that has no scored dataset of its own, so
+ * the Evaluation tab and Skill Intelligence have something to start from
+ * before the generated files are reviewed and merged.
+ */
+export async function persistGeneratedEvaluation(sql: Sql, input: {
+  repositoryId: string;
+  root: string;
+  commitSha: string;
+  scorecard: Scorecard;
+  samples: ReadonlyArray<EvalSample & { kind?: string; expectedMet?: number; judgeConfidence?: number }>;
+  now: Date;
+}): Promise<void> {
+  const [skill] = await sql<{ id: string }[]>`
+    select id from indexed_skills where repository_id = ${input.repositoryId} and source_path = ${input.root} limit 1
+  `;
+  if (!skill) {
+    return;
+  }
+  const s = input.scorecard;
+  const runExternalId = `generated-${input.commitSha.slice(0, 12)}`;
+  const caseResults = input.samples.map((sample) => ({
+    caseId: sample.caseId,
+    prompt: sample.prompt,
+    kind: sample.kind ?? null,
+    verdict: sample.verdict,
+    quality: Math.round(sample.quality * 100),
+    compliance: Math.round(((sample.formatCompliance + (sample.policyCompliance ? 1 : 0)) / 2) * 100),
+    grounding: sample.groundingRelevant ? Math.round(sample.groundingScore * 100) : null,
+    actionability: Math.round(sample.actionability * 100),
+    policyCompliance: sample.policyCompliance,
+    expectedMet: sample.expectedMet ?? null,
+    judgeConfidence: sample.judgeConfidence ?? null,
+    latencyMs: sample.latencyMs,
+  }));
+  await sql.begin(async (tx) => {
+    await tx`delete from indexed_eval_results where indexed_skill_id = ${skill.id} and run_external_id = ${runExternalId} and source = 'generated'`;
+    await tx`
+      insert into indexed_eval_results (
+        indexed_skill_id, repository_id, run_external_id, comparison_artifact_path, comparison_commit_sha,
+        total_cases, passed_cases, failed_cases, score_delta, status, executed_at, indexed_at,
+        overall_score, scorecard, case_results, source
+      ) values (
+        ${skill.id}, ${input.repositoryId}, ${runExternalId}, ${`${input.root}/eval/dataset.yaml`}, ${input.commitSha},
+        ${s.sampleCount}, ${s.passCount}, ${s.failCount}, null, 'complete_baseline', ${input.now}, ${input.now},
+        ${s.overallScore}, ${tx.json({ ...s, method: "llm-jev-generated", provisional: true } as never)}, ${tx.json(caseResults as never)}, 'generated'
+      )
+    `;
+  });
 }

@@ -45,6 +45,7 @@ import { buildRepositoryWebUrl } from "@/lib/repository-links";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 
 import { SkillAssessmentFindings, SkillProposalNotice } from "./skill-assessment-findings";
+import { SkillAutomationPanel } from "./skill-automation-panel";
 import {
   ImprovementsTab,
   InsightsTab,
@@ -715,6 +716,8 @@ function EvaluationTab({
         </div>
 
         <RecentEvaluationsPanel evaluations={detail.evaluations} pathname={pathname} />
+
+        <SkillAutomationPanel skillId={detail.skill.id} />
 
         <div className="panel">
           <div className="panel-hd">

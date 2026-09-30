@@ -1042,6 +1042,8 @@ export async function indexRepositoryById(input: {
   const runtime = await getGitRuntime();
 
   let evaluationSummary: ImportEvaluationSummary | null = null;
+  let generationQueued = 0;
+  let backgroundQueued = false;
 
   try {
     const synced = await syncRepository({
@@ -1067,6 +1069,25 @@ export async function indexRepositoryById(input: {
             evaluations: result.evaluations,
             now,
           });
+
+          // Background follow-ups: SkillSpector safety scan of the commit, and
+          // LLM↔Jev evaluation generation for skills without a scored dataset.
+          const sql = getControlPlaneDatabase();
+          const { queueAutoEvalGeneration, queueSafetyScan } = await import("../jobs/enqueue.ts");
+          await queueSafetyScan(sql, { organizationId: commit.organizationId, repositoryId: commit.repositoryId, commitSha: commit.commitSha });
+          const scored = new Set(result.evaluations.filter((entry) => entry.evaluation.status === "scored").map((entry) => entry.root));
+          generationQueued = await queueAutoEvalGeneration(sql, {
+            organizationId: commit.organizationId,
+            repositoryId: commit.repositoryId,
+            requestedBy: input.actor.ref,
+            candidates: result.roots
+              .filter((root) => !scored.has(root.root) && !root.missing.includes("SKILL.md"))
+              .map((root) => ({
+                skillId: typeof root.metadata?.skill_id === "string" ? root.metadata.skill_id : root.inferredSkillId,
+                sourcePath: root.root,
+              })),
+          });
+          backgroundQueued = true;
         },
       }),
     }, {
@@ -1078,6 +1099,11 @@ export async function indexRepositoryById(input: {
       now,
     });
 
+    if (backgroundQueued) {
+      const { kickBackgroundJobs } = await import("../jobs/runner.ts");
+      await kickBackgroundJobs();
+    }
+
     if (!synced.assessment) {
       return synced.result;
     }
@@ -1086,7 +1112,13 @@ export async function indexRepositoryById(input: {
     return {
       ...synced.result,
       assessment: synced.assessment,
-      message: [synced.result.message, describeAssessmentSummary(synced.assessment), evaluationSummary ? describeImportEvaluations(evaluationSummary) : ""]
+      message: [
+        synced.result.message,
+        describeAssessmentSummary(synced.assessment),
+        evaluationSummary ? describeImportEvaluations(evaluationSummary) : "",
+        generationQueued > 0 ? `Generating evaluations for ${generationQueued} skill${generationQueued === 1 ? "" : "s"} without one.` : "",
+        backgroundQueued ? "A safety scan is running in the background." : "",
+      ]
         .filter(Boolean)
         .join(" "),
     };

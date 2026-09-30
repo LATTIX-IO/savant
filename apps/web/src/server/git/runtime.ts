@@ -65,7 +65,15 @@ export function getGitRuntime(): Promise<GitRuntime> {
     const broker = createGitCredentialBroker({ connections: stores.connections, registry, audit: stores.audit });
     const membership = await createDatabaseMembershipStore();
     const { getControlPlaneDatabase } = await import("../control-plane/database.ts");
-    const assessments = createAssessmentService({ store: createDatabaseAssessmentStore(getControlPlaneDatabase()), git: stores, broker });
+    const { createSafetyScanStore } = await import("../jobs/stores.ts");
+    const { safetyFindings } = await import("../safety/findings.ts");
+    const safetyScans = createSafetyScanStore(getControlPlaneDatabase());
+    const assessments = createAssessmentService({
+      store: createDatabaseAssessmentStore(getControlPlaneDatabase()),
+      git: stores,
+      broker,
+      extraFindings: async (organizationId, repositoryId) => safetyFindings(await safetyScans.latestForRepository(organizationId, repositoryId)),
+    });
 
     return {
       stores,

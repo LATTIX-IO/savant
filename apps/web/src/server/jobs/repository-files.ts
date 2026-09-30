@@ -7,7 +7,7 @@ import type { GitRuntime } from "../git/runtime.ts";
  * Read-only access to a connected repository at its current default-branch
  * commit, for background jobs (safety scans, evaluation generation).
  */
-export async function openRepositoryFiles(runtime: GitRuntime, organizationId: string, repositoryId: string) {
+export async function openRepositoryFiles(runtime: GitRuntime, organizationId: string, repositoryId: string, revision?: string | null) {
   const repository = await runtime.stores.repositories.getRepository(organizationId, repositoryId);
   if (!repository) {
     throw new GitProviderError("REPOSITORY_NOT_FOUND", "The repository was not found in this workspace.", { status: 404 });
@@ -15,7 +15,8 @@ export async function openRepositoryFiles(runtime: GitRuntime, organizationId: s
   const resolution = await resolveRepositoryConnection(runtime.stores, { organizationId, repository });
   const resolved = await runtime.broker.resolve({ organizationId, connectionId: resolution.connection.id });
   const locator = toLocator(repository);
-  const commitSha = await resolved.provider.resolveRevision(resolved.credential, locator, repository.defaultBranch || "main");
+  // A pinned revision (e.g. the indexed commit a governed skill was approved at) skips branch resolution.
+  const commitSha = revision?.trim() || await resolved.provider.resolveRevision(resolved.credential, locator, repository.defaultBranch || "main");
   let tree: Map<string, number | undefined> | null = null;
 
   const listFiles = async (): Promise<Map<string, number | undefined>> => {

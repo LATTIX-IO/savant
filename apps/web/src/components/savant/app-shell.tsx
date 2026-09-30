@@ -88,6 +88,7 @@ function Sidebar({ viewer, shellData }: { viewer: AuthViewer; shellData?: Savant
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/evaluations") : "/evaluations") as Route, label: "Evaluations", icon: Ic.Eval, count: counts.evaluations, match: (p) => p.startsWith("/evaluations") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/releases") : "/releases") as Route, label: "Releases", icon: Ic.Release, count: counts.releases, match: (p) => p.startsWith("/releases") },
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/intelligence") : "/intelligence") as Route, label: "Intelligence", icon: Ic.Eval, count: null, match: (p) => p.startsWith("/intelligence") },
+    { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/router") : "/router") as Route, label: "Skill router", icon: Ic.Connectors, count: null, match: (p) => p.startsWith("/router") },
   ];
   const govItems: Item[] = [
     { href: (workspaceSlug ? buildTenantAppPath(workspaceSlug, "/policies") : "/policies") as Route, label: "Policies", icon: Ic.Policy, count: counts.policies, match: (p) => p.startsWith("/policies") },

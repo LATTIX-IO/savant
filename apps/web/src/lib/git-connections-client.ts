@@ -219,3 +219,17 @@ export function importCatalogSkill(id: string, input: { repositoryId: string; ta
 export function requestCatalogSync(): Promise<{ data: { queued: string[] } }> {
   return requestJson("/api/catalog/sync", { method: "POST" });
 }
+
+// ── Skill router ───────────────────────────────────────────────────────
+
+export type RouterSummary = {
+  governedSkills: number;
+  byRuntime: Array<{ runtime: string; runs: number }>;
+  outcomes: Record<string, number>;
+  routing: Array<{ method: string; decisions: number; matched: number }>;
+  recent: Array<{ run_id: string; skill_id: string; runtime: string; model: string | null; started_at: string; task_outcome: string | null; human_accepted: boolean | null }>;
+};
+
+export function fetchRouterSummary(): Promise<{ data: RouterSummary }> {
+  return requestJson("/api/router/summary");
+}

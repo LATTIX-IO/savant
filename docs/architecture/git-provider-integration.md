@@ -257,3 +257,29 @@ Pipeline (platform `background_jobs` with a null organization):
 Approval opens a pull request. Unsafe skills can't be imported.
 
 **Job runner.** It responds immediately and works in `after()`. When work remains, it hands the queue to a fresh invocation, authenticated with an internal token derived from `GIT_CREDENTIAL_ENCRYPTION_KEY`. This lets backlogs drain on the Hobby plan's daily crons.
+
+### Skill router (live telemetry from ChatGPT, Claude, Copilot, Gemini and Cursor)
+
+The router is a remote MCP server (Streamable HTTP, stateless) at `/api/mcp`. It authenticates with a workspace telemetry token (`svt_…`), sent either as `Authorization: Bearer`, or embedded in the URL (`/api/mcp/t/<token>`) for claude.ai and ChatGPT connectors, which only accept a URL. Tools:
+
+- `find_skill` — Jev chooses the governed skill that fits the task, or none. A lexical prefilter limits the candidates to 40, and routing falls back to lexical matching if Jev is unavailable. Each decision is recorded in `skill_route_decisions`.
+- `load_skill` — serves the SKILL.md pinned to the skill's **indexed commit**, and starts a live run in `skill_runs`:
+  - `task_archetype = 'skill-router'`
+  - runtime detected from MCP `clientInfo`: `claude`, `chatgpt`, `copilot`, `vscode`, `gemini`, `cursor`, `codex`
+  - stored under the workspace telemetry policy and redaction
+- `report_skill_outcome` — records the outcome, acceptance and rating (`skill_outcomes`, `skill_feedback`).
+- `list_skills`
+
+Live runs are the primary input to skill health and SkillOpt. Import-time and generated evaluations are the fallback where there's no live data yet.
+
+Setup is on the workspace's **Skill router** page, which gives per-client instructions. The same page shows the last 30 days of routed telemetry.
+
+**Catalog budgets.** Catalog enumeration is unbounded. Fetching packages, sandbox scans and live evaluations are capped per UTC day, so the platform stays inside its hosting limits:
+
+| Variable | Default |
+|---|---|
+| `HUB_DAILY_HYDRATE_CAP` | 1500 |
+| `HUB_DAILY_SCAN_CAP` | 100 |
+| `HUB_DAILY_EVAL_CAP` | 40 |
+
+Package files are pruned under `HUB_DB_SOFT_LIMIT_MB` (default 380). SkillSpector `CAUTION` results below `SKILLSPECTOR_PASS_RISK` (default 20) pass the safety policy, and the raw scanner output is always shown next to the decision.

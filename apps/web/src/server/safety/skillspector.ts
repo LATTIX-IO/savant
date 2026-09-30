@@ -110,17 +110,21 @@ export function parseSkillSpectorReport(report: unknown): Pick<SafetyScanResult,
 
 /** A small driver run inside the sandbox: scans each package directory and prints one JSON document. */
 export const DRIVER_SCRIPT = String.raw`
-import json, os, subprocess, sys
+import json, os, subprocess, sys, time
 manifest = json.load(open(sys.argv[1]))
+deadline = time.time() + manifest.get("deadline", 10**6)
 results = []
 for item in manifest["packages"]:
+    if time.time() + 15 > deadline:
+        results.append({"root": item["root"], "exit": -2, "report": None, "stderr": "skipped"})
+        continue
     out = item["dir"] + ".report.json"
     args = ["skillspector", "scan", item["dir"], "-f", "json", "-o", out]
     env = dict(os.environ)
     if not item.get("llm"):
         args.append("--no-llm")
     try:
-        proc = subprocess.run(args, capture_output=True, text=True, timeout=item.get("timeout", 240), env=env)
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=max(10, min(item.get("timeout", 240), deadline - time.time())), env=env)
         report = json.load(open(out)) if os.path.exists(out) else None
         results.append({"root": item["root"], "exit": proc.returncode, "report": report, "stderr": proc.stderr[-800:]})
     except subprocess.TimeoutExpired:
@@ -178,6 +182,8 @@ export async function runSkillSpectorScans(packages: readonly ScanPackage[], opt
   nimApiKey?: string | null;
   llmModel?: string | null;
   perPackageTimeoutSec?: number;
+  /** Stop starting new packages after this many seconds; the rest return error "skipped". */
+  deadlineSec?: number;
 }): Promise<SafetyScanResult[]> {
   if (packages.length === 0) {
     return [];
@@ -196,7 +202,7 @@ export async function runSkillSpectorScans(packages: readonly ScanPackage[], opt
     }));
     await sandbox.writeFiles([
       { path: `${base}/driver.py`, content: DRIVER_SCRIPT },
-      { path: `${base}/manifest.json`, content: JSON.stringify({ packages: manifest }) },
+      { path: `${base}/manifest.json`, content: JSON.stringify({ packages: manifest, deadline: Math.max(30, options.deadlineSec ?? 1_000_000) }) },
       ...packages.flatMap((item, index) => Object.entries(item.files).map(([path, content]) => ({ path: `${base}/${index}/${path}`, content }))),
     ]);
 
@@ -219,6 +225,12 @@ export async function runSkillSpectorScans(packages: readonly ScanPackage[], opt
     return packages.map((item, index) => {
       const result = byRoot.get(item.root);
       const fingerprint = packageFingerprint(item.files);
+      if (result?.stderr === "skipped") {
+        return {
+          root: item.root, skillId: item.skillId, fingerprint, status: "failed" as const,
+          riskScore: null, severity: null, recommendation: null, issues: [], llmUsed: false, scannerVersion: null, error: "skipped",
+        };
+      }
       if (!result || !result.report) {
         return {
           root: item.root, skillId: item.skillId, fingerprint, status: "failed" as const,

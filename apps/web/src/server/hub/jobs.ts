@@ -82,7 +82,7 @@ export async function runHubSync(ctx: HubJobContext, job: BackgroundJob): Promis
 
 export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Promise<"done" | "released"> {
   const store = createHubStore(ctx.sql);
-  const chunkSize = Number(process.env.HUB_SAFETY_CHUNK ?? 40);
+  const chunkSize = Number(process.env.HUB_SAFETY_CHUNK ?? 12);
   const nimKey = readAiServiceConfig().nim?.apiKey ?? null;
   const llmAll = (process.env.SKILLSPECTOR_LLM ?? "flagged").toLowerCase() === "all";
 
@@ -100,7 +100,7 @@ export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Prom
     }
     let results;
     try {
-      results = await runSkillSpectorScans(packages, { llmRoots: llmAll ? new Set(packages.map((item) => item.root)) : new Set(), nimApiKey: nimKey });
+      results = await runSkillSpectorScans(packages, { llmRoots: llmAll ? new Set(packages.map((item) => item.root)) : new Set(), nimApiKey: nimKey, deadlineSec: Math.floor((timeLeft(ctx) - 60_000) / 1000) });
     } catch (error) {
       if (error instanceof SafetyScanUnavailableError) {
         await store.recordSafetyUnavailable(batch.map((item) => item.id), error.message);
@@ -110,7 +110,13 @@ export async function runHubSafety(ctx: HubJobContext, job: BackgroundJob): Prom
     }
     const hashById = new Map(batch.map((item) => [item.id, item.contentHash]));
     for (const result of results) {
+      // Packages the sandbox had no time for come back "skipped" and stay pending.
+      if (result.error === "skipped") continue;
       await store.recordSafety(result.root, hashById.get(result.root) as string, result);
+    }
+    if (results.every((result) => result.error === "skipped")) {
+      await ctx.queue.release(job.id, job.progress);
+      return "released";
     }
     await ctx.queue.saveProgress(job.id, { scanned: ((job.progress.scanned as number) ?? 0) + results.length });
   }

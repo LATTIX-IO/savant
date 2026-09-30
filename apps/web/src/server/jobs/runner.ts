@@ -36,7 +36,7 @@ const timeLeft = (ctx: Context) => ctx.deadline - Date.now();
 const MAX_PACKAGE_FILES = 150;
 const MAX_FILE_BYTES = 256 * 1024;
 const MAX_PACKAGE_BYTES = 3 * 1024 * 1024;
-const SCAN_CHUNK = Number(env.SKILLSPECTOR_CHUNK_SIZE) || 40;
+const SCAN_CHUNK = Number(env.SKILLSPECTOR_CHUNK_SIZE) || 12;
 
 async function runSafetyScan(ctx: Context, job: BackgroundJob): Promise<"done" | "released"> {
   const organizationId = job.organizationId as string;
@@ -90,7 +90,7 @@ async function runSafetyScan(ctx: Context, job: BackgroundJob): Promise<"done" |
 
     let results;
     try {
-      results = await runSkillSpectorScans(packages, { llmRoots: llmMode === "all" ? new Set(packages.map((item) => item.root)) : new Set(), nimApiKey: nimKey });
+      results = await runSkillSpectorScans(packages, { llmRoots: llmMode === "all" ? new Set(packages.map((item) => item.root)) : new Set(), nimApiKey: nimKey, deadlineSec: Math.floor((timeLeft(ctx) - 60_000) / 1000) });
     } catch (error) {
       if (error instanceof SafetyScanUnavailableError) {
         await store.recordUnavailable(organizationId, repositoryId, repo.commitSha, error.message);
@@ -101,6 +101,7 @@ async function runSafetyScan(ctx: Context, job: BackgroundJob): Promise<"done" |
     }
     await store.clearUnavailable(organizationId, repositoryId);
     for (const result of results) {
+      if (result.error === "skipped") continue; // Out of sandbox time; picked up next run.
       await store.record(organizationId, repositoryId, repo.commitSha, result);
       done.add(result.root);
       if (llmMode === "flagged" && result.status === "complete" && result.recommendation !== "SAFE" && flagged.length < llmLimit) {
@@ -324,28 +325,38 @@ const MAX_CHAIN = Number(env.BACKGROUND_JOBS_MAX_CHAIN) || 60;
  * endpoint, so long backlogs drain without a frequent cron.
  */
 export async function runAndContinue(depth: number): Promise<void> {
-  const stats = await runBackgroundJobs().catch((error: unknown) => {
+  const budget = Number(env.BACKGROUND_JOBS_BUDGET_MS) || 230_000;
+  let chained = false;
+  const chain = async () => {
+    if (chained || depth >= MAX_CHAIN) return;
+    if (!(await hasPendingJobs().catch(() => false))) return;
+    const base = selfBaseUrl();
+    const token = internalWorkerToken();
+    if (!base || !token) return;
+    chained = true;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15_000);
+    try {
+      await fetch(`${base}/api/internal/jobs/run`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "x-savant-chain": String(depth + 1) },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      logGitEvent("warn", "background_jobs_chain_failed", { error });
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  // Hand off shortly before this invocation's budget ends, even if a long job
+  // is still running here: a slow job must not strand the rest of the queue.
+  const handoff = setTimeout(() => void chain(), Math.max(10_000, budget - 25_000));
+  const stats = await runBackgroundJobs({ budgetMs: budget }).catch((error: unknown) => {
     logGitEvent("warn", "background_jobs_failed", { error });
     return { processed: 0, released: 0, failed: 0 };
   });
-  if (depth >= MAX_CHAIN || stats.processed + stats.released === 0) return;
-  if (!(await hasPendingJobs().catch(() => false))) return;
-  const base = selfBaseUrl();
-  const token = internalWorkerToken();
-  if (!base || !token) return;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 15_000);
-  try {
-    await fetch(`${base}/api/internal/jobs/run`, {
-      method: "POST",
-      headers: { authorization: `Bearer ${token}`, "x-savant-chain": String(depth + 1) },
-      signal: controller.signal,
-    });
-  } catch (error) {
-    logGitEvent("warn", "background_jobs_chain_failed", { error });
-  } finally {
-    clearTimeout(timer);
-  }
+  clearTimeout(handoff);
+  if (stats.processed + stats.released > 0) await chain();
 }
 
 export async function enqueueJob(input: Parameters<JobQueue["enqueue"]>[0]) {

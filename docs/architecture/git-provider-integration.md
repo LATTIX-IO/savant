@@ -117,6 +117,24 @@ Every successful sync runs a deterministic **repository assessment** (`server/as
 
 Findings are stored in `repository_assessments` (`0007`) with stable fingerprints, so dismissals survive later syncs. The sync response carries the summary, and the Repositories screen and the skill page show the findings with their next steps.
 
+### Import-time evaluation (baseline)
+
+Each sync also reads every package's `eval/dataset.yaml`, `eval/rubric.yaml` and `eval/baseline.json`.
+
+- **Scored datasets.** Datasets with scored `samples` (the lattix-skills framework) are scored by `server/evaluation/scorecard.ts`, a port of the repository's own `scripts/run_eval.py`. It reproduces committed baselines exactly.
+- **Where results go.** Results are written to `indexed_eval_assets` and `indexed_eval_results` (`0008`). Each result row holds `overall_score`, the full `scorecard`, per-case `case_results`, and `source = 'import'`, and is keyed on the indexed skill id. That id stays the same across syncs.
+- **Who reads them.** These rows feed:
+  - the Evaluations screen
+  - the skill Evaluation tab (score, rubric breakdown, flagged cases)
+  - version history
+  - Skill Intelligence health (`evalBenchmark`, `regressionStability`, `authoredEvalCases`), which is SkillOpt's baseline
+- **Findings.** A sync can raise these findings:
+  - `EVAL_BASELINE_MISSING` or `EVAL_BASELINE_STALE`, fixable by a PR that updates `baseline.json`
+  - `EVAL_BELOW_THRESHOLD` or `EVAL_BELOW_PASS`, which are reported but don't lower the readiness score
+  - `EVAL_DATASET_INVALID`
+  - `EVAL_REQUIRES_EXECUTION`, for unscored `cases`, which need a live run on the workspace's AI provider
+- **What is not ingested.** Import evaluations are not ingested as `skill_runs`, so they don't blend into production telemetry.
+
 **Write-back** always goes through a change proposal:
 
 1. A fixable finding, or an edit made in the skill Builder, becomes a `repository_change_proposals` row with the full file contents and a diff. Nothing is written to the repository yet.

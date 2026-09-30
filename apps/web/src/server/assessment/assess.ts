@@ -4,6 +4,7 @@ import { tenantSkillRepoContract } from "@savant/schemas/tenant-skill-repo-contr
 import type { AssessmentFinding, AssessmentFixKind, AssessmentSeverity, AssessmentSummary } from "@savant/types";
 import { parse as parseYaml } from "yaml";
 
+import { evaluateSkillPackage, type SkillEvaluation } from "../evaluation/scorecard.ts";
 import { inferSkillPackageRoots } from "../git/repository-reader.ts";
 
 /**
@@ -38,7 +39,25 @@ export type AssessmentResult = {
   findings: AssessmentFinding[];
   summary: AssessmentSummary;
   roots: AssessedSkillRoot[];
+  /** Import-time evaluation per skill package that ships an eval dataset. */
+  evaluations: SkillPackageEvaluation[];
 };
+
+export type SkillPackageEvaluation = { root: string; skillId: string; evaluation: SkillEvaluation };
+
+function weakestDimension(evaluation: Extract<SkillEvaluation, { status: "scored" }>): string {
+  const s = evaluation.scorecard;
+  const dimensions: Array<[string, number]> = [
+    ["quality", s.qualityScore],
+    ["compliance", s.complianceScore],
+    ["grounding", s.groundingScore],
+    ["actionability", s.actionabilityScore],
+    ["efficiency", s.efficiencyScore],
+  ];
+  dimensions.sort((left, right) => left[1] - right[1]);
+  const [name, value] = dimensions[0] as [string, number];
+  return `${name} (${value})`;
+}
 
 const REQUIRED_METADATA_FIELDS = ["skill_id", "display_name", "tier", "owner", "version", "status"] as const;
 const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
@@ -109,6 +128,7 @@ function stringValue(value: unknown): string | null {
 
 export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResult {
   const findings: AssessmentFinding[] = [];
+  const evaluations: SkillPackageEvaluation[] = [];
   const paths = new Set(input.observedPaths);
   const hasPrefix = (prefix: string) => input.observedPaths.some((path) => path === prefix || path.startsWith(`${prefix}/`));
 
@@ -336,6 +356,91 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
       });
     }
 
+    const evaluation = evaluateSkillPackage(root.root, input.files);
+    if (evaluation.status !== "missing") {
+      evaluations.push({ root: root.root, skillId, evaluation });
+    }
+
+    if (evaluation.status === "invalid") {
+      add({
+        code: "EVAL_DATASET_INVALID",
+        severity: "warning",
+        scope: "skill",
+        skillId,
+        path: `${root.root}/eval/dataset.yaml`,
+        title: `${root.inferredDisplayName}: evaluation dataset can't be scored`,
+        detail: evaluation.reason,
+        remediation: "Fix eval/dataset.yaml so every sample carries the scored fields the rubric uses.",
+      });
+    } else if (evaluation.status === "requires_execution") {
+      add({
+        code: "EVAL_REQUIRES_EXECUTION",
+        severity: "info",
+        scope: "skill",
+        skillId,
+        path: `${root.root}/eval/dataset.yaml`,
+        title: `${root.inferredDisplayName}: ${evaluation.caseCount} evaluation case${evaluation.caseCount === 1 ? "" : "s"} need a live run`,
+        detail: evaluation.reason,
+        remediation: "Connect an AI provider in Settings → AI providers so Savant can run and score these cases.",
+      });
+    } else if (evaluation.status === "scored") {
+      const score = evaluation.scorecard.overallScore;
+      const { pass, investigate } = evaluation.scorecard.thresholds;
+
+      if (!evaluation.committedBaseline) {
+        add({
+          code: "EVAL_BASELINE_MISSING",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/eval/baseline.json`,
+          title: `${root.inferredDisplayName} has no committed baseline`,
+          detail: `Savant scored the dataset at ${score}/100, but there is no eval/baseline.json to compare future changes against.`,
+          remediation: "Commit the import-time scorecard as eval/baseline.json.",
+          fix: { kind: "update_eval_baseline", description: `Write ${root.root}/eval/baseline.json (${score}/100)` },
+        });
+      } else if (Math.abs(evaluation.baselineDelta ?? 0) >= 0.5) {
+        const delta = evaluation.baselineDelta ?? 0;
+        add({
+          code: "EVAL_BASELINE_STALE",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/eval/baseline.json`,
+          title: `${root.inferredDisplayName}: committed baseline is out of date`,
+          detail: `The dataset now scores ${score}/100; eval/baseline.json records ${evaluation.committedBaseline.overallScore}/100 (${delta > 0 ? "+" : ""}${delta}).`,
+          remediation: "Refresh eval/baseline.json so regression checks compare against the current dataset.",
+          fix: { kind: "update_eval_baseline", description: `Update ${root.root}/eval/baseline.json to ${score}/100` },
+        });
+      }
+
+      const counts = `${evaluation.scorecard.passCount} pass · ${evaluation.scorecard.investigateCount} investigate · ${evaluation.scorecard.failCount} fail`;
+      if (investigate !== null && score < investigate) {
+        const failing = evaluation.samples.filter((sample) => sample.verdict === "fail").map((sample) => sample.caseId);
+        add({
+          code: "EVAL_BELOW_THRESHOLD",
+          severity: "warning",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/eval/`,
+          title: `${root.inferredDisplayName} scores ${score}/100, below its investigate threshold of ${investigate}`,
+          detail: `${counts}${failing.length > 0 ? ` (failing: ${failing.join(", ")})` : ""}. Weakest dimension: ${weakestDimension(evaluation)}.`,
+          remediation: "Review the failing cases; SkillOpt uses this baseline to propose and gate SKILL.md improvements.",
+        });
+      } else if (pass !== null && score < pass) {
+        add({
+          code: "EVAL_BELOW_PASS",
+          severity: "info",
+          scope: "skill",
+          skillId,
+          path: `${root.root}/eval/`,
+          title: `${root.inferredDisplayName} scores ${score}/100, below its pass threshold of ${pass}`,
+          detail: `${counts}. Weakest dimension: ${weakestDimension(evaluation)}.`,
+          remediation: "SkillOpt can propose improvements against this baseline.",
+        });
+      }
+    }
+
     const registryEntry = registryEntryFor(root, skillId);
     if (registryEntry && root.metadata) {
       const mismatched = (["tier", "owner", "version"] as const).filter((field) => {
@@ -513,7 +618,9 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
   const infos = findings.length - blockers - warnings;
   const skillScores = roots.map((root) => {
     const skillId = stringValue(root.metadata?.skill_id) ?? root.inferredSkillId;
-    const own = findings.filter((finding) => finding.scope === "skill" && finding.skillId === skillId);
+    // The score measures repository readiness; how well a skill performs on
+    // its own evaluation is reported, but is SkillOpt's job, not a defect.
+    const own = findings.filter((finding) => finding.scope === "skill" && finding.skillId === skillId && !finding.code.startsWith("EVAL_BELOW_"));
     const penalty = own.reduce((sum, finding) => sum + (finding.severity === "blocker" ? 40 : finding.severity === "warning" ? 10 : 2), 0);
     return Math.max(0, 100 - penalty);
   });
@@ -526,6 +633,7 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
   return {
     findings,
     roots,
+    evaluations,
     summary: {
       score: Math.max(0, Math.min(100, Math.round(base - repoPenalty))),
       blockers,

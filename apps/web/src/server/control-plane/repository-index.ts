@@ -10,6 +10,7 @@ import type {
 import { buildConnectedRepositoryListItem } from "./repository-connect.ts";
 import { RepositoryProviderConnectionError } from "./repository-provider-connection.ts";
 import { describeAssessmentSummary } from "../assessment/service.ts";
+import { describeImportEvaluations, persistImportEvaluations, type ImportEvaluationSummary } from "../evaluation/import-results.ts";
 import { GitProviderError } from "../git/errors.ts";
 import { syncRepository, type IndexSnapshotInput, type IndexWriter } from "../git/repository-sync-service.ts";
 import { parseRepositoryLocator } from "./repository-provider.ts";
@@ -623,13 +624,43 @@ async function persistRepositoryIndex(input: {
   const syncStatus = input.parsed.skills.length === 0 || input.parsed.warnings.length > 0 ? "warn" : "ok";
 
   return sql.begin(async (tx) => {
+    // Skill rows are updated in place so their ids — skill URLs and everything
+    // keyed on them (evaluation assets/results) — stay stable across syncs.
+    // Skills no longer in the repository are removed; the whole replacement is
+    // one transaction, so a failed sync leaves the previous index intact.
+    const existingRows = await tx<{ id: string; skill_id: string; content_hash: string }[]>`
+      select id, skill_id, content_hash from indexed_skills
+      where repository_id = ${input.repository.id}
+    `;
+    const existingBySkillId = new Map(existingRows.map((row) => [row.skill_id, row]));
+    const keptSkillIds = input.parsed.skills.map((skill) => skill.skillId);
+
     await tx`
       delete from indexed_skills
       where repository_id = ${input.repository.id}
+        and not (skill_id = any(${keptSkillIds}::text[]))
     `;
 
     for (const skill of input.parsed.skills) {
-      const insertedRows = await tx<{ id: string }[]>`
+      const existing = existingBySkillId.get(skill.skillId);
+      const insertedRows = existing
+        ? await tx<{ id: string }[]>`
+            update indexed_skills set
+              display_name = ${skill.displayName},
+              tier = ${skill.tier},
+              owner = ${skill.owner},
+              status = ${skill.status},
+              source_path = ${skill.sourcePath},
+              metadata_version = ${skill.metadataVersion},
+              source_commit_sha = ${input.snapshot.commitSha},
+              default_branch = ${input.snapshot.defaultBranch},
+              content_hash = ${skill.contentHash},
+              manifest = ${tx.json(skill.manifest)},
+              last_indexed_at = ${input.now}
+            where id = ${existing.id}
+            returning id
+          `
+        : await tx<{ id: string }[]>`
         insert into indexed_skills (
           organization_id,
           repository_id,
@@ -676,6 +707,11 @@ async function persistRepositoryIndex(input: {
       }
 
       await tx`
+        update indexed_skill_versions
+        set is_current_candidate = false, is_current_baseline = false
+        where indexed_skill_id = ${indexedSkillId}
+      `;
+      await tx`
         insert into indexed_skill_versions (
           indexed_skill_id,
           repository_id,
@@ -700,8 +736,17 @@ async function persistRepositoryIndex(input: {
           ${skill.channel === "production"},
           ${input.now}
         )
+        on conflict (repository_id, skill_id, commit_sha) do update set
+          indexed_skill_id = excluded.indexed_skill_id,
+          version_ref = excluded.version_ref,
+          branch_name = excluded.branch_name,
+          channel = excluded.channel,
+          is_current_candidate = excluded.is_current_candidate,
+          is_current_baseline = excluded.is_current_baseline,
+          observed_at = excluded.observed_at
       `;
 
+      await tx`delete from indexed_skill_dependencies where indexed_skill_id = ${indexedSkillId}`;
       for (const dependencySkillId of skill.dependencies.dependencies) {
         await tx`
           insert into indexed_skill_dependencies (
@@ -718,37 +763,43 @@ async function persistRepositoryIndex(input: {
             ${input.snapshot.commitSha},
             ${input.now}
           )
+          on conflict do nothing
         `;
       }
 
-      await tx`
-        insert into audit_events (
-          organization_id,
-          actor_type,
-          actor_ref,
-          category,
-          action,
-          target_type,
-          target_ref,
-          payload_redacted
-        )
-        values (
-          ${input.organizationId},
-          ${input.actor.type},
-          ${input.actor.ref},
-          'repo',
-          'skill_indexed',
-          'skill',
-          ${skill.skillId},
-          ${tx.json({
-            repositoryId: input.repository.id,
-            repositoryName: `${input.repository.ownerName}/${input.repository.repoName}`,
-            sourcePath: skill.sourcePath,
-            commitSha: input.snapshot.commitSha,
-            channel: skill.channel,
-          })}
-        )
-      `;
+      // Audit only new or changed skills; re-syncing an unchanged repository
+      // shouldn't add one event per skill.
+      if (!existing || existing.content_hash !== skill.contentHash) {
+        await tx`
+          insert into audit_events (
+            organization_id,
+            actor_type,
+            actor_ref,
+            category,
+            action,
+            target_type,
+            target_ref,
+            payload_redacted
+          )
+          values (
+            ${input.organizationId},
+            ${input.actor.type},
+            ${input.actor.ref},
+            'repo',
+            'skill_indexed',
+            'skill',
+            ${skill.skillId},
+            ${tx.json({
+              repositoryId: input.repository.id,
+              repositoryName: `${input.repository.ownerName}/${input.repository.repoName}`,
+              sourcePath: skill.sourcePath,
+              commitSha: input.snapshot.commitSha,
+              channel: skill.channel,
+              change: existing ? "updated" : "added",
+            })}
+          )
+        `;
+      }
     }
 
     const syncStateRows = await tx<PersistedRepositorySyncState[]>`
@@ -990,6 +1041,8 @@ export async function indexRepositoryById(input: {
   const { getGitRuntime } = await import("../git/runtime.ts");
   const runtime = await getGitRuntime();
 
+  let evaluationSummary: ImportEvaluationSummary | null = null;
+
   try {
     const synced = await syncRepository({
       connections: runtime.stores.connections,
@@ -1004,6 +1057,17 @@ export async function indexRepositoryById(input: {
         commitSha: commit.commitSha,
         observedPaths: commit.snapshot.observedPaths,
         files: commit.snapshot.files,
+        // Import-time evaluation: the baseline Skill Intelligence and SkillOpt start from.
+        onResult: async (result) => {
+          const { getControlPlaneDatabase } = await import("./database.ts");
+          evaluationSummary = await persistImportEvaluations(getControlPlaneDatabase(), {
+            repositoryId: commit.repositoryId,
+            commitSha: commit.commitSha,
+            files: commit.snapshot.files,
+            evaluations: result.evaluations,
+            now,
+          });
+        },
       }),
     }, {
       organizationId: input.organizationId,
@@ -1022,7 +1086,9 @@ export async function indexRepositoryById(input: {
     return {
       ...synced.result,
       assessment: synced.assessment,
-      message: `${synced.result.message} ${describeAssessmentSummary(synced.assessment)}`,
+      message: [synced.result.message, describeAssessmentSummary(synced.assessment), evaluationSummary ? describeImportEvaluations(evaluationSummary) : ""]
+        .filter(Boolean)
+        .join(" "),
     };
   } catch (error) {
     throw toRepositoryIndexError(error);

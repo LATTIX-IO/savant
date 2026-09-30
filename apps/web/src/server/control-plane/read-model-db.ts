@@ -56,6 +56,7 @@ import type {
 import { getInitials } from "../../lib/auth0-session.ts";
 import { buildRepositoryWebUrl } from "../../lib/repository-links.ts";
 import { findSkillByIdentifier } from "../../lib/skill-paths.ts";
+import { buildFlaggedCases, buildRubricBaseline } from "../evaluation/detail.ts";
 import type { ResolvedTenantContext } from "./tenant-context.ts";
 
 export type TenantReadContext = {
@@ -302,6 +303,10 @@ type EvaluationRow = {
   executed_at: Date | string | null;
   indexed_at: Date | string;
   score_delta: number | null;
+  /** Weighted rubric score when the result carries a scorecard (import-time evaluation). */
+  overall_score?: number | null;
+  scorecard?: unknown;
+  case_results?: unknown;
   comparison_commit_sha: string | null;
 };
 
@@ -597,7 +602,7 @@ function mapIndexedEvaluationStatus(status: string): EvaluationRunListItem["stat
 
 export function buildEvaluationRunListItem(row: EvaluationDashboardRow): EvaluationRunListItem {
   const startedAt = serializeControlPlaneTimestamp(row.executed_at ?? row.indexed_at);
-  const passRate = roundScore((row.passed_cases * 100) / Math.max(row.total_cases, 1)) ?? 0;
+  const passRate = roundScore(row.overall_score ?? (row.passed_cases * 100) / Math.max(row.total_cases, 1)) ?? 0;
 
   return {
     id: row.result_id ?? row.run_external_id ?? `${row.skill_id}:${row.comparison_commit_sha ?? startedAt ?? "indexed-eval"}`,
@@ -1864,6 +1869,7 @@ async function queryEvaluationDashboardRows(
       indexed_eval_results.executed_at,
       indexed_eval_results.indexed_at,
       indexed_eval_results.score_delta::float8 as score_delta,
+      indexed_eval_results.overall_score::float8 as overall_score,
       indexed_eval_results.comparison_commit_sha
     from indexed_eval_results
     inner join latest_skills on latest_skills.indexed_skill_id = indexed_eval_results.indexed_skill_id
@@ -1998,14 +2004,14 @@ async function querySkills(organizationId: string): Promise<SkillRow[]> {
     ) candidate on true
     left join lateral (
       select
-        round((latest_result.passed_cases::numeric * 100) / greatest(latest_result.total_cases, 1), 1)::float8 as latest_score,
+        coalesce(latest_result.overall_score::float8, round((latest_result.passed_cases::numeric * 100) / greatest(latest_result.total_cases, 1), 1)::float8) as latest_score,
         (
           select array_agg(
-            round((recent_result.passed_cases::numeric * 100) / greatest(recent_result.total_cases, 1), 1)::float8
+            coalesce(recent_result.overall_score::float8, round((recent_result.passed_cases::numeric * 100) / greatest(recent_result.total_cases, 1), 1)::float8)
             order by recent_result.executed_at asc nulls first, recent_result.indexed_at asc
           )
           from (
-            select passed_cases, total_cases, executed_at, indexed_at
+            select passed_cases, total_cases, overall_score, executed_at, indexed_at
             from indexed_eval_results
             where indexed_skill_id = latest_skills.indexed_skill_id
             order by executed_at desc nulls last, indexed_at desc
@@ -2014,7 +2020,7 @@ async function querySkills(organizationId: string): Promise<SkillRow[]> {
         ) as trend_scores,
         latest_result.executed_at as last_executed_at
       from lateral (
-        select passed_cases, total_cases, executed_at, indexed_at
+        select passed_cases, total_cases, overall_score, executed_at, indexed_at
         from indexed_eval_results
         where indexed_skill_id = latest_skills.indexed_skill_id
         order by executed_at desc nulls last, indexed_at desc
@@ -2922,6 +2928,9 @@ export async function readSkillDetailFromDatabase(
         executed_at,
         indexed_at,
         score_delta::float8 as score_delta,
+        overall_score::float8 as overall_score,
+        scorecard,
+        case_results,
         comparison_commit_sha
       from indexed_eval_results
       left join indexed_eval_assets dataset_asset
@@ -2959,7 +2968,7 @@ export async function readSkillDetailFromDatabase(
       from indexed_skill_versions
       left join lateral (
         select
-          round((indexed_eval_results.passed_cases::numeric * 100) / greatest(indexed_eval_results.total_cases, 1), 1)::float8 as score_pct
+          coalesce(indexed_eval_results.overall_score::float8, round((indexed_eval_results.passed_cases::numeric * 100) / greatest(indexed_eval_results.total_cases, 1), 1)::float8) as score_pct
         from indexed_eval_results
         inner join indexed_skills on indexed_skills.id = indexed_eval_results.indexed_skill_id
         where indexed_skills.organization_id = ${context.tenant.organizationId}
@@ -3166,14 +3175,17 @@ export async function readSkillDetailFromDatabase(
 
   const auditHighlights = buildAuditHighlights(auditRows, context, new Map([[skill.id, skill]]));
 
+  // Results that carry a scorecard (import-time evaluations), newest first.
+  const scoredEvaluations = evaluationRows.filter((row) => row.scorecard !== null && row.scorecard !== undefined);
+
   const payload: SkillDetailPayload = {
     skill,
     evaluations,
-    rubricBaseline: [] satisfies RubricComparisonRow[],
+    rubricBaseline: buildRubricBaseline(scoredEvaluations[0], scoredEvaluations[1]) satisfies RubricComparisonRow[],
     approvalTimeline,
     requiredApprovals,
     reviewerComments,
-    flaggedCases: [] satisfies FlaggedCaseItem[],
+    flaggedCases: buildFlaggedCases(scoredEvaluations[0], scoredEvaluations[1]) satisfies FlaggedCaseItem[],
     versionHistory,
     accessGrants,
     accessPolicyRules,

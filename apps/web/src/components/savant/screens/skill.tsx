@@ -201,14 +201,17 @@ export function SkillScreen({ skillId }: { skillId: string }) {
     };
   }, [reloadToken, skillId]);
 
+  // Load SKILL.md once per skill when the Builder is open. The loading status
+  // must not be a dependency: setting it would re-run the effect, whose cleanup
+  // aborts the in-flight request and leaves the Builder stuck on "Loading…".
+  const needsSource = tab === "builder"
+    && detailStatus === "success"
+    && detail !== null
+    && sourceSkillId !== detail.skill.id
+    && sourceSkillUuid !== detail.skill.skillUuid;
+
   useEffect(() => {
-    if (tab !== "builder" || detailStatus !== "success" || !detail) {
-      return;
-    }
-
-    const activeSourceMatchesCurrentSkill = sourceSkillId === detail.skill.id || sourceSkillUuid === detail.skill.skillUuid;
-
-    if (sourceStatus === "loading" || activeSourceMatchesCurrentSkill) {
+    if (!needsSource) {
       return;
     }
 
@@ -250,15 +253,7 @@ export function SkillScreen({ skillId }: { skillId: string }) {
       active = false;
       controller.abort();
     };
-  }, [
-    detail,
-    detailStatus,
-    skillId,
-    sourceSkillId,
-    sourceSkillUuid,
-    sourceStatus,
-    tab,
-  ]);
+  }, [needsSource, skillId, reloadToken]);
 
   const skill = detail?.skill ?? null;
   const latestEval = detail?.evaluations[0] ?? null;

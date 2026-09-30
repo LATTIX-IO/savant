@@ -11,7 +11,8 @@ export type AssessmentFixKind =
   | "add_owner_entry"
   | "scaffold_skill_file"
   | "complete_metadata"
-  | "scaffold_eval";
+  | "scaffold_eval"
+  | "update_eval_baseline";
 
 export interface AssessmentFinding {
   /** Stable across syncs: code + scope + path. Dismissals are keyed on it. */

@@ -142,14 +142,14 @@ test("map-style registries (lattix-skills layout) are understood: no false posit
     [`${root}/metadata.yaml`]: "skill_id: ai-engineering/agent-guardrail-design\ndisplay_name: Agent Guardrail Design\ntier: tier2\nowner: ai-engineering\nversion: 1.0.0\nstatus: active\n",
     [`${root}/SKILL.md`]: LONG_SKILL,
     [`${root}/agents/openai.yaml`]: "version: 1\n",
-    [`${root}/eval/dataset.yaml`]: "cases: []\n",
+    [`${root}/eval/dataset.yaml`]: "cases:\n  - case_id: a\n    input: {task: t}\n",
     "tier1/standards/review-and-qa-standards/SKILL.md": LONG_SKILL,
     "tier1/standards/review-and-qa-standards/metadata.yaml": "skill_id: tier1.review-and-qa-standards\ndisplay_name: Review And QA\ntier: tier1\nowner: ai-engineering\nversion: 1.0.0\nstatus: active\n",
     "tier1/standards/review-and-qa-standards/agents/openai.yaml": "version: 1\n",
-    "tier1/standards/review-and-qa-standards/eval/dataset.yaml": "cases: []\n",
+    "tier1/standards/review-and-qa-standards/eval/dataset.yaml": "cases:\n  - case_id: a\n    input: {task: t}\n",
   };
   const clean = assessRepositorySnapshot({ observedPaths: withDirectories(files), files });
-  const noisy = clean.findings.filter((finding) => finding.code !== "SKILL_NOT_REGISTERED" || finding.skillId !== "tier1.review-and-qa-standards");
+  const noisy = clean.findings.filter((finding) => finding.severity !== "info" && (finding.code !== "SKILL_NOT_REGISTERED" || finding.skillId !== "tier1.review-and-qa-standards"));
   assert.deepEqual(noisy.map((finding) => `${finding.code}:${finding.skillId}`), []);
 
   const broken = {
@@ -181,4 +181,40 @@ test("placeholder detection ignores TODO mentioned in code but flags real marker
   assert.equal(check(`${LONG_SKILL}\nTODO: describe escalation.\n`), true);
   assert.equal(check(`${LONG_SKILL}\n- TBD: owner\n`), true);
   assert.equal(check(`${LONG_SKILL}\nInput: <REPLACE_TASK>\n`), true);
+});
+
+test("import-time evaluation scores lattix-style datasets and raises baseline and threshold findings", async () => {
+  const { LATTIX_EVAL_FILES } = await import("../evaluation/scorecard.test.ts");
+  const root = "tier1/standards/ai-output-safety-and-escalation";
+  const base: Record<string, string> = {
+    ...LATTIX_EVAL_FILES,
+    [`${root}/SKILL.md`]: LONG_SKILL,
+    [`${root}/metadata.yaml`]: "skill_id: tier1.ai-output-safety-and-escalation\ndisplay_name: AI Output Safety\ntier: tier1\nowner: platform\nversion: 1.0.0\nstatus: production\n",
+    [`${root}/agents/openai.yaml`]: "name: x\n",
+  };
+
+  const current = assessRepositorySnapshot({ observedPaths: withDirectories(base), files: base });
+  const evaluation = current.evaluations.find((entry) => entry.root === root)?.evaluation;
+  assert.equal(evaluation?.status, "scored");
+  const codes = current.findings.map((finding) => finding.code);
+  assert.ok(codes.includes("EVAL_BELOW_THRESHOLD"), codes.join(","));
+  assert.ok(!codes.includes("EVAL_BASELINE_STALE") && !codes.includes("EVAL_BASELINE_MISSING"));
+  const below = current.findings.find((finding) => finding.code === "EVAL_BELOW_THRESHOLD");
+  assert.match(below?.detail ?? "", /failing: negative-1/);
+
+  const stale = { ...base, [`${root}/eval/dataset.yaml`]: (base[`${root}/eval/dataset.yaml`] as string).replace("quality: 0.56", "quality: 0.96") };
+  const staleResult = assessRepositorySnapshot({ observedPaths: withDirectories(stale), files: stale });
+  const staleFinding = staleResult.findings.find((finding) => finding.code === "EVAL_BASELINE_STALE");
+  assert.equal(staleFinding?.fix?.kind, "update_eval_baseline");
+
+  const changes = buildFixChanges({ findings: [staleFinding!], roots: staleResult.roots, files: stale });
+  const baseline = JSON.parse(changes.find((change) => change.path === `${root}/eval/baseline.json`)?.content ?? "{}") as { overall_score: number; skill_id: string };
+  const scored = staleResult.evaluations[0]?.evaluation;
+  assert.equal(baseline.overall_score, scored?.status === "scored" ? scored.scorecard.overallScore : NaN);
+  assert.equal(baseline.skill_id, "tier1.ai-output-safety-and-escalation");
+
+  const unscored = { ...base, [`${root}/eval/dataset.yaml`]: "version: 1\ncases:\n  - case_id: a\n    input: {task: t}\n" };
+  delete (unscored as Record<string, string>)[`${root}/eval/baseline.json`];
+  const unscoredCodes = assessRepositorySnapshot({ observedPaths: withDirectories(unscored), files: unscored }).findings.map((finding) => finding.code);
+  assert.ok(unscoredCodes.includes("EVAL_REQUIRES_EXECUTION"), unscoredCodes.join(","));
 });

@@ -8,6 +8,7 @@ import {
   buildRubricYaml,
   buildSkillMarkdown,
 } from "../control-plane/skill-scaffold.ts";
+import { buildBaselineDocument, evaluateSkillPackage } from "../evaluation/scorecard.ts";
 import type { AssessedSkillRoot } from "./assess.ts";
 
 /**
@@ -226,6 +227,27 @@ export function buildFixChanges(input: {
         if (!root) break;
         create(`${root.root}/eval/dataset.yaml`, buildDatasetYaml());
         create(`${root.root}/eval/rubric.yaml`, buildRubricYaml());
+        break;
+      }
+
+      case "update_eval_baseline": {
+        const root = rootFor(finding);
+        if (!root) break;
+        const evaluation = evaluateSkillPackage(root.root, input.files);
+        if (evaluation.status !== "scored") {
+          throw new FixGenerationError(`${root.root}/eval/dataset.yaml can't be scored, so no baseline can be generated.`);
+        }
+        const meta = root.metadata ?? {};
+        const text = (key: string) => (typeof meta[key] === "string" ? meta[key] as string : null);
+        read(`${root.root}/eval/baseline.json`).content = buildBaselineDocument({
+          skillId: root.skillId,
+          skillVersion: text("version"),
+          evalSetVersion: evaluation.evalSetVersion ?? text("eval_set_version"),
+          rubricVersion: evaluation.rubricVersion ?? text("rubric_version"),
+          runId: `savant-${Date.now().toString(36)}`,
+          timestamp: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+          scorecard: evaluation.scorecard,
+        });
         break;
       }
 

@@ -134,7 +134,14 @@ export async function readRepositorySnapshot(input: {
 
     const wanted = [
       ...tenantSkillRepoContract.requiredRegistryFiles,
-      ...skillRoots.flatMap((root) => [`${root}/metadata.yaml`, `${root}/SKILL.md`]),
+      ...skillRoots.flatMap((root) => [
+        `${root}/metadata.yaml`,
+        `${root}/SKILL.md`,
+        // Evaluation assets for the import-time baseline.
+        `${root}/eval/dataset.yaml`,
+        `${root}/eval/rubric.yaml`,
+        `${root}/eval/baseline.json`,
+      ]),
     ].filter((path, index, all) => observed.has(path) && all.indexOf(path) === index);
 
     const contents = new Map<string, string>();

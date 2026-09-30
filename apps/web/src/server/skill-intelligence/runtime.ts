@@ -207,7 +207,7 @@ async function loadVersionHistory(organizationId: string, skillId: string): Prom
       indexed_skill_versions.observed_at,
       indexed_skill_versions.channel,
       (
-        select round((results.passed_cases::numeric * 100) / greatest(results.total_cases, 1), 1)::float8
+        select coalesce(results.overall_score::float8, round((results.passed_cases::numeric * 100) / greatest(results.total_cases, 1), 1)::float8)
         from indexed_eval_results results
         inner join indexed_skills on indexed_skills.id = results.indexed_skill_id
         where indexed_skills.organization_id = ${organizationId}

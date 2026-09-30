@@ -9,7 +9,7 @@ import { readRepositorySnapshot } from "../git/repository-reader.ts";
 import { toLocator } from "../git/repository-sync-service.ts";
 import type { GitStores } from "../git/stores.ts";
 import type { ProviderRuntimeContext } from "../git/types.ts";
-import { assessRepositorySnapshot } from "./assess.ts";
+import { assessRepositorySnapshot, type AssessmentResult } from "./assess.ts";
 import { buildFixChanges, FixGenerationError } from "./fixes.ts";
 import type { AssessmentStore } from "./store.ts";
 
@@ -119,8 +119,13 @@ export function createAssessmentService(deps: AssessmentServiceDeps) {
       commitSha: string;
       observedPaths: readonly string[];
       files: Readonly<Record<string, string>>;
+      /** Receives the full result (e.g. to persist import-time evaluations) before the summary is returned. */
+      onResult?: ((result: AssessmentResult) => Promise<void>) | undefined;
     }): Promise<AssessmentSummary> {
       const result = assessRepositorySnapshot({ observedPaths: input.observedPaths, files: input.files });
+      if (input.onResult) {
+        await input.onResult(result).catch((error: unknown) => logGitEvent("warn", "assessment_result_hook_failed", { repository_id: input.repositoryId, error }));
+      }
       await store.saveAssessment(input.organizationId, {
         repositoryId: input.repositoryId,
         commitSha: input.commitSha,

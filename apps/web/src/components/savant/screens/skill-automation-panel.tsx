@@ -164,6 +164,11 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
           <span className="mono" style={{ fontSize: 10.5 }}>{issue.severity}</span>
           <span>{issue.category.replace(/_/g, " ")}: {issue.title}</span>
           {issue.file && <span className="subtle mono" style={{ fontSize: 11 }}>{issue.file}{issue.line ? `:${issue.line}` : ""}</span>}
+          {(issue.explanation || issue.remediation) && (
+            <div className="subtle" style={{ fontSize: 11.5, flexBasis: "100%" }}>
+              {issue.explanation}{issue.explanation && issue.remediation ? " " : ""}{issue.remediation ? `Fix: ${issue.remediation}` : ""}
+            </div>
+          )}
         </div>
       ))}
     </div>

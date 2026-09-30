@@ -31,6 +31,8 @@ export type SafetyIssue = {
   title: string;
   file: string | null;
   line: number | null;
+  explanation?: string | null;
+  remediation?: string | null;
 };
 
 export type SafetyScanResult = {
@@ -54,12 +56,15 @@ export class SafetyScanUnavailableError extends Error {
 /** Text files SkillSpector analyses; binaries and images are skipped. */
 export const SCANNABLE_FILE = /\.(md|markdown|txt|ya?ml|json|toml|py|sh|bash|zsh|js|mjs|cjs|ts|ps1|rb|pl|cfg|ini|env\.example)$|(^|\/)(requirements[^/]*\.txt|Dockerfile|Makefile)$/i;
 
+/** Bumped when report parsing changes, so stored results are refreshed on the next scan. */
+export const SCAN_RESULT_VERSION = "v2";
+
 export function packageFingerprint(files: Record<string, string>): string {
   const hash = createHash("sha256");
   for (const path of Object.keys(files).sort()) {
     hash.update(path).update("\u0000").update(files[path] as string).update("\u0000");
   }
-  return hash.digest("hex").slice(0, 32);
+  return `${SCAN_RESULT_VERSION}:${hash.digest("hex").slice(0, 32)}`;
 }
 
 function text(value: unknown): string | null {
@@ -91,7 +96,9 @@ export function parseSkillSpectorReport(report: unknown): Pick<SafetyScanResult,
         category: text(issue.category) ?? "unknown",
         severity: (text(issue.severity) ?? "UNKNOWN").toUpperCase(),
         confidence: num(issue.confidence),
-        title: (text(issue.title) ?? text(issue.message) ?? text(issue.description) ?? text(issue.name) ?? text(issue.id) ?? "Issue").slice(0, 300),
+        title: (text(issue.finding) ?? text(issue.title) ?? text(issue.pattern) ?? text(issue.message) ?? text(issue.description) ?? text(issue.name) ?? text(issue.id) ?? "Issue").slice(0, 300),
+        explanation: (text(issue.explanation) ?? text(issue.intent))?.slice(0, 600) ?? null,
+        remediation: text(issue.remediation)?.slice(0, 400) ?? null,
         file: text(location.file) ?? text(issue.file),
         line: num(location.start_line ?? location.line ?? issue.line),
       };

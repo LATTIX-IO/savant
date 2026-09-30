@@ -9,7 +9,7 @@ const REPORT = {
   risk_assessment: { score: 72, severity: "HIGH", recommendation: "DO_NOT_INSTALL" },
   issues: [
     { id: "DE-003", category: "data_exfiltration", severity: "HIGH", confidence: 0.9, title: "Uploads workspace files to an external URL", location: { file: "scripts/sync.py", start_line: 14 } },
-    { id: "PI-001", category: "prompt_injection", severity: "MEDIUM", confidence: 0.6, message: "Instruction to ignore prior rules", location: { file: "SKILL.md", start_line: 3 } },
+    { id: "PI-001", category: "prompt_injection", severity: "MEDIUM", confidence: 0.6, pattern: "PI1", finding: "Instruction to ignore prior rules", explanation: "Overrides the host agent", remediation: "Remove the override", location: { file: "SKILL.md", start_line: 3 } },
   ],
   metadata: { skillspector_version: "1.4.0", llm_requested: false, llm_available: false },
 };
@@ -19,6 +19,7 @@ test("parses SkillSpector JSON reports", () => {
   assert.equal(parsed.recommendation, "DO_NOT_INSTALL");
   assert.equal(parsed.riskScore, 72);
   assert.equal(parsed.issues[1]?.title, "Instruction to ignore prior rules");
+  assert.equal(parsed.issues[1]?.remediation, "Remove the override");
   assert.equal(parsed.issues[0]?.file, "scripts/sync.py");
   assert.equal(parsed.llmUsed, false);
   assert.equal(parsed.scannerVersion, "1.4.0");

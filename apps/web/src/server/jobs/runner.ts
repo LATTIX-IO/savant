@@ -5,7 +5,7 @@ import { logGitEvent } from "../git/redaction.ts";
 import { CASE_KINDS, EvalGenerationError, generateEvaluationSet, type CaseKind, type DraftCase } from "../evaluation/eval-generation.ts";
 import { persistGeneratedEvaluation } from "../evaluation/import-results.ts";
 import { evaluateSkillPackage } from "../evaluation/scorecard.ts";
-import { runSkillSpectorScans, SafetyScanUnavailableError, SCANNABLE_FILE, packageFingerprint, type ScanPackage } from "../safety/skillspector.ts";
+import { packageFingerprint, runSkillSpectorScans, SafetyScanUnavailableError, SCAN_RESULT_VERSION, SCANNABLE_FILE, type ScanPackage } from "../safety/skillspector.ts";
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
@@ -49,7 +49,8 @@ async function runSafetyScan(ctx: Context, job: BackgroundJob): Promise<"done" |
   const latest = new Map((await store.latestForRepository(organizationId, repositoryId)).map((scan) => [scan.sourcePath, scan]));
   const tree = await repo.listFiles();
   const pending = skills.filter((skill) => !done.has(skill.source_path)
-    && !(latest.get(skill.source_path)?.commitSha === repo.commitSha && latest.get(skill.source_path)?.status === "complete"));
+    && !(latest.get(skill.source_path)?.commitSha === repo.commitSha && latest.get(skill.source_path)?.status === "complete"
+      && latest.get(skill.source_path)?.fingerprint.startsWith(`${SCAN_RESULT_VERSION}:`)));
 
   const llmMode = (env.SKILLSPECTOR_LLM ?? "flagged").toLowerCase();
   const llmLimit = Number(env.SKILLSPECTOR_LLM_LIMIT) || 5;

@@ -158,7 +158,7 @@ export type SkillSafetyScan = {
   riskScore: number | null;
   severity: string | null;
   recommendation: string | null;
-  issues: Array<{ id: string; category: string; severity: string; title: string; file: string | null; line: number | null }>;
+  issues: Array<{ id: string; category: string; severity: string; title: string; file: string | null; line: number | null; explanation?: string | null; remediation?: string | null }>;
   llmUsed: boolean;
   scannerVersion: string | null;
   error: string | null;

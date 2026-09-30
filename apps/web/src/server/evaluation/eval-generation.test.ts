@@ -54,17 +54,20 @@ const judge: JudgeClient & { calls: number } = {
   calls: 0,
   async ask(state, questions) {
     judge.calls += 1;
-    const record = state as { case: { kind: string; prompt: string } };
-    const offTopic = record.case.prompt.includes("haiku");
+    const record = state as { case?: { kind: string; prompt: string } };
+    const offTopic = record.case?.prompt.includes("haiku") ?? false;
     const answers: Record<string, JevAnswer> = {};
-    if ("in_scope" in questions) {
+    if ("match" in questions) {
+      const first = Object.keys((questions.match as { criteria: Record<string, string> }).criteria)[0] as string;
+      answers.match = choice(first);
+    } else if ("in_scope" in questions) {
       answers.in_scope = noul(offTopic ? 0.05 : 0.95);
-      answers.behavior = choice(offTopic ? "none" : record.case.kind);
+      answers.behavior = choice(offTopic ? "none" : record.case?.kind ?? "none");
       answers.grounded = noul(0.9);
       answers.clear = noul(0.9);
       answers.discriminating = score(2.6);
     } else {
-      const weak = record.case.kind === "negative";
+      const weak = record.case?.kind === "negative";
       answers.quality = score(weak ? 1.5 : 3.8);
       answers.format_compliance = score(weak ? 2 : 4);
       answers.policy_compliance = noul(weak ? 0.2 : 0.95);

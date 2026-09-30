@@ -79,6 +79,8 @@ export type GenerationAlignment = {
   /** Committed cases a generated case covers (token overlap), 0-1. */
   coverage: number;
   verdictMix: { committed: Record<string, number>; generated: Record<string, number> };
+  /** Committed case id to the generated case Jev matched to it (null: not covered). */
+  matches?: Record<string, string | null>;
 };
 
 export type GenerationMetrics = {
@@ -92,6 +94,8 @@ export type GenerationMetrics = {
   judgeCalls: number;
   llmTokens: number;
   judgeTokens: number;
+  /** Draft responses that didn't parse (before the repair attempt). */
+  draftFailures: number;
   durationMs: number;
 };
 
@@ -248,8 +252,8 @@ export function validationQuestions(): Record<string, JevQuestion> {
     },
     grounded: {
       type: "noul",
-      instructions: "Does `case.expected_behavior` follow from what `skill.instructions` actually says to do, rather than from general knowledge or invented requirements?",
-      criteria: { true: "The expected behaviour is what the skill instructions prescribe", false: "The expected behaviour contradicts, exceeds, or is unsupported by the skill instructions" },
+      instructions: "Is `case.expected_behavior` consistent with `skill.instructions`: what the skill prescribes for this situation, or, for a request outside the skill's purpose, declining or redirecting it, rather than invented requirements?",
+      criteria: { true: "The expected behaviour is what the skill instructions prescribe or clearly imply", false: "The expected behaviour contradicts the skill instructions or adds requirements they don't support" },
     },
     clear: {
       type: "noul",
@@ -284,7 +288,8 @@ export function decideValidation(kind: CaseKind, answers: Record<string, Paramet
     else if (value < threshold) borderline.push(reason);
   };
   check(inScope, 0.7, 0.2, "not in the skill's scope");
-  check(grounded, 0.7, 0.2, "expected behaviour isn't supported by SKILL.md");
+  // Declining out-of-scope requests is rarely spelled out in a skill, so negative cases get a lower bar.
+  check(grounded, kind === "negative" ? 0.4 : 0.65, 0.2, "expected behaviour isn't supported by SKILL.md");
   check(clear, 0.6, 0.2, "not self-contained or ambiguous");
   check(discriminating, 1.5, 0.5, "doesn't discriminate between following and ignoring the skill");
   if (behavior.choice === "none") reasons.push("doesn't test a behaviour of this skill");
@@ -373,10 +378,46 @@ export function verdictFor(sample: Omit<EvalSample, "verdict">, expectedMet: num
 
 // ── Alignment with an answer key ────────────────────────────────────────
 
-export function alignWithAnswerKey(key: AnswerKey, generated: Scorecard, samples: readonly GeneratedSample[]): GenerationAlignment {
+/**
+ * For each committed case, Jev selects the generated case that tests the same
+ * scenario (or none). Committed prompts are often abstract while generated
+ * ones are concrete, so word overlap can't tell.
+ */
+export async function matchCommittedCases(
+  judge: JudgeClient,
+  committed: AnswerKey["samples"],
+  generated: ReadonlyArray<Pick<DraftCase, "caseId" | "kind" | "prompt">>,
+): Promise<{ matches: Record<string, string | null>; calls: number; tokens: number }> {
+  const matches: Record<string, string | null> = {};
+  let calls = 0;
+  let tokensUsed = 0;
+  if (generated.length === 0) {
+    return { matches, calls, tokens: tokensUsed };
+  }
+  const criteria: Record<string, string> = Object.fromEntries(generated.slice(0, 250).map((item) => [item.caseId, `(${item.kind}) ${item.prompt.slice(0, 300)}`]));
+  criteria.none = "None of these cases tests the same scenario or behaviour";
+  await mapLimit(committed.filter((sample) => sample.prompt), 4, async (sample) => {
+    const result = await judge.ask({ committed_case: sample.prompt }, {
+      match: {
+        type: "choice",
+        instructions: "Which generated case tests the same scenario and behaviour as `committed_case` (the situation and what a correct response must do, even if the wording or specific details differ)?",
+        criteria,
+      },
+    });
+    calls += 1;
+    tokensUsed += result.usage.inputTokens + result.usage.outputTokens;
+    const pick = choiceOf(result.answers.match);
+    matches[sample.caseId] = pick.choice && pick.choice !== "none" && (pick.probabilities[pick.choice] ?? pick.confidence) >= 0.4 ? pick.choice : null;
+  });
+  return { matches, calls, tokens: tokensUsed };
+}
+
+export function alignWithAnswerKey(key: AnswerKey, generated: Scorecard, samples: readonly GeneratedSample[], matches?: Record<string, string | null>): GenerationAlignment {
   const mix = (verdicts: string[]) => verdicts.reduce<Record<string, number>>((acc, verdict) => ({ ...acc, [verdict]: (acc[verdict] ?? 0) + 1 }), {});
-  const covered = key.samples.filter((sample) => sample.prompt && samples.some((item) => similarity(sample.prompt as string, `${item.prompt ?? ""} ${item.context ?? ""}`) >= 0.2)).length;
   const withPrompts = key.samples.filter((sample) => sample.prompt).length;
+  const covered = matches
+    ? Object.values(matches).filter(Boolean).length
+    : key.samples.filter((sample) => sample.prompt && samples.some((item) => similarity(sample.prompt as string, `${item.prompt ?? ""} ${item.context ?? ""}`) >= 0.2)).length;
   return {
     committedOverall: key.scorecard.overallScore,
     generatedOverall: generated.overallScore,
@@ -392,6 +433,7 @@ export function alignWithAnswerKey(key: AnswerKey, generated: Scorecard, samples
     generatedCases: samples.length,
     coverage: withPrompts > 0 ? round2(covered / withPrompts) : 0,
     verdictMix: { committed: mix(key.samples.map((sample) => sample.verdict)), generated: mix(samples.map((sample) => sample.verdict)) },
+    ...(matches ? { matches } : {}),
   };
 }
 
@@ -468,7 +510,7 @@ export async function generateEvaluationSet(
   const concurrency = input.concurrency ?? 4;
   const costPerToken = (input.costPerMillionTokens ?? 0.5) / 1_000_000;
   const skillState = { name: input.skill.displayName, instructions: input.skill.instructions.slice(0, MAX_INSTRUCTIONS) };
-  const metrics = { llmCalls: 0, judgeCalls: 0, llmTokens: 0, judgeTokens: 0 };
+  const metrics = { llmCalls: 0, judgeCalls: 0, llmTokens: 0, judgeTokens: 0, draftFailures: 0 };
   const cases: GeneratedCase[] = [];
   const taken = new Set<string>();
   const report = async (progress: Omit<GenerationProgress, "cases">) => {
@@ -511,14 +553,31 @@ export async function generateEvaluationSet(
     const completion = await clients.generator.complete([
       { role: "system", content: "You write rigorous evaluation cases for AI agent skills. You always answer with valid JSON only." },
       { role: "user", content: buildDraftPrompt({ skill: input.skill, needed: ask, accepted: cases.filter((item) => item.validation.decision !== "rejected"), rejected: cases.filter((item) => item.validation.decision === "rejected") }) },
-    ], { maxTokens: 3000, temperature: 0.7 });
+    ], { maxTokens: 4000, temperature: 0.7 });
     metrics.llmCalls += 1;
     metrics.llmTokens += completion.usage.promptTokens + completion.usage.completionTokens;
-    let drafts: DraftCase[];
+    let drafts: DraftCase[] = [];
     try {
       drafts = parseDraftCases(completion.content, round, taken);
     } catch {
       drafts = [];
+    }
+    if (drafts.length === 0) {
+      // One repair attempt: truncated or malformed JSON is the usual cause.
+      metrics.draftFailures += 1;
+      const repair = await clients.generator.complete([
+        { role: "system", content: "You convert text into valid JSON. Answer with JSON only." },
+        { role: "user", content: `Rewrite the following as valid JSON of the form {"cases":[{"kind":"...","prompt":"...","context":"... or null","expected_behavior":"..."}]}. Keep at most 8 cases.\n\n${completion.content.slice(0, 12_000)}` },
+      ], { maxTokens: 4000, temperature: 0 }).catch(() => null);
+      if (repair) {
+        metrics.llmCalls += 1;
+        metrics.llmTokens += repair.usage.promptTokens + repair.usage.completionTokens;
+        try {
+          drafts = parseDraftCases(repair.content, round, taken);
+        } catch {
+          drafts = [];
+        }
+      }
     }
     if (drafts.length === 0) continue;
     await report({ stage: "validating", round, samples: [] });
@@ -582,6 +641,14 @@ export async function generateEvaluationSet(
 
   samples.sort((left, right) => CASE_KINDS.indexOf(left.kind) - CASE_KINDS.indexOf(right.kind) || left.caseId.localeCompare(right.caseId));
   const scorecard = computeScorecard(samples, rubric);
+  let alignmentMatches: Record<string, string | null> | undefined;
+  if (input.answerKey) {
+    // Match against every non-rejected draft: coverage is about the scenarios the loop found.
+    const matched = await matchCommittedCases(clients.judge, input.answerKey.samples, cases.filter((item) => item.validation.decision !== "rejected"));
+    metrics.judgeCalls += matched.calls;
+    metrics.judgeTokens += matched.tokens;
+    alignmentMatches = matched.matches;
+  }
   const models = { generator: clients.generator.model, executor: clients.executor.model, judge: clients.judge.model };
   const needsReview = cases.filter((item) => item.validation.decision === "needs_review").length;
   const files = buildGeneratedFiles({
@@ -600,7 +667,7 @@ export async function generateEvaluationSet(
     cases,
     samples,
     scorecard,
-    alignment: input.answerKey ? alignWithAnswerKey(input.answerKey, scorecard, samples) : null,
+    alignment: input.answerKey ? alignWithAnswerKey(input.answerKey, scorecard, samples, alignmentMatches) : null,
     files,
     metrics: {
       drafted: cases.length,

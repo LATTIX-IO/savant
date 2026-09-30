@@ -36,8 +36,13 @@ export type AiServiceConfig = {
 };
 
 /** Optional JSON merged into NIM requests (e.g. `{"chat_template_kwargs":{"enable_thinking":false}}`). */
+// Nemotron 3 reasons by default; for drafting and executing cases that costs
+// 2-3x the latency and can exhaust max_tokens before the answer is written.
+export const DEFAULT_NIM_EXTRA_BODY = { chat_template_kwargs: { enable_thinking: false } };
+
 function parseExtraBody(value: string | undefined): Record<string, unknown> {
-  if (!value?.trim()) return {};
+  if (value === undefined) return DEFAULT_NIM_EXTRA_BODY;
+  if (!value.trim()) return {};
   try {
     const parsed = JSON.parse(value) as unknown;
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};

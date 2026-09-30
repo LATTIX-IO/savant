@@ -82,7 +82,12 @@ export function createJobQueue(sql: Sql) {
         where id = (
           select id from background_jobs
           where status = 'queued' or (status = 'running' and lease_until < now())
-          order by created_at asc
+          -- Tenant work first, then cheap catalog steps that unblock others; slow live evals last.
+          order by case kind
+              when 'safety_scan' then 0 when 'eval_generation' then 1
+              when 'hub_sync' then 2 when 'hub_hydrate' then 3 when 'hub_safety' then 4
+              else 5 end,
+            created_at asc
           for update skip locked
           limit 1
         )

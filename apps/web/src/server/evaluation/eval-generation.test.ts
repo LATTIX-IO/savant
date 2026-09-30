@@ -33,7 +33,7 @@ function fakeGenerator(rounds: string[][]): ChatClient & { prompts: string[] } {
         context: "Draft: revenue will grow 40% next quarter.",
         expected_behavior: `Handles the ${kind} case as the safety standard requires`,
       }));
-      return { content: `<think>planning</think>\n\`\`\`json\n${JSON.stringify({ cases: cases.map((item) => ({ ...item, kind: item.kind === "offtopic" ? "positive" : item.kind })) })}\n\`\`\``, model: "nvidia/test-generator", latencyMs: 5, usage: { promptTokens: 100, completionTokens: 200 } };
+      return { content: `<think>planning</think>\n\`\`\`json\n${JSON.stringify({ cases: cases.map((item) => ({ ...item, kind: item.kind === "offtopic" ? "positive" : item.kind })) })}\n\`\`\``, model: "nvidia/test-generator", latencyMs: 5, usage: { promptTokens: 100, completionTokens: 200 }, finishReason: "stop", reasoningChars: 0 };
     },
   };
 }
@@ -41,7 +41,7 @@ function fakeGenerator(rounds: string[][]): ChatClient & { prompts: string[] } {
 const executor: ChatClient = {
   model: "nvidia/test-executor",
   async complete() {
-    return { content: "Uncertainty: high. Escalating to a human reviewer.", model: "nvidia/test-executor", latencyMs: 800, usage: { promptTokens: 300, completionTokens: 60 } };
+    return { content: "Uncertainty: high. Escalating to a human reviewer.", model: "nvidia/test-executor", latencyMs: 800, usage: { promptTokens: 300, completionTokens: 60 }, finishReason: "stop", reasoningChars: 0 };
   },
 };
 

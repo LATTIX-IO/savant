@@ -31,9 +31,20 @@ export class AiServiceError extends Error {
 }
 
 export type AiServiceConfig = {
-  nim: { apiKey: string; baseUrl: string; generationModel: string; executionModel: string } | null;
+  nim: { apiKey: string; baseUrl: string; generationModel: string; executionModel: string; extraBody: Record<string, unknown> } | null;
   jev: { apiKey: string; baseUrl: string; model: string } | null;
 };
+
+/** Optional JSON merged into NIM requests (e.g. `{"chat_template_kwargs":{"enable_thinking":false}}`). */
+function parseExtraBody(value: string | undefined): Record<string, unknown> {
+  if (!value?.trim()) return {};
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
 
 export function readAiServiceConfig(env: Env = process.env): AiServiceConfig {
   const nimKey = env.NVIDIA_NIM_API_KEY?.trim();
@@ -46,6 +57,7 @@ export function readAiServiceConfig(env: Env = process.env): AiServiceConfig {
           baseUrl: (env.NIM_BASE_URL?.trim() || DEFAULT_NIM_BASE_URL).replace(/\/+$/, ""),
           generationModel,
           executionModel: env.NIM_EXECUTION_MODEL?.trim() || generationModel,
+          extraBody: parseExtraBody(env.NIM_EXTRA_BODY),
         }
       : null,
     jev: jevKey
@@ -114,11 +126,13 @@ export type ChatResult = {
   model: string;
   latencyMs: number;
   usage: { promptTokens: number; completionTokens: number };
+  finishReason: string | null;
+  reasoningChars: number;
 };
 
 export type ChatClient = {
   readonly model: string;
-  complete(messages: ChatMessage[], options?: { maxTokens?: number; temperature?: number; timeoutMs?: number }): Promise<ChatResult>;
+  complete(messages: ChatMessage[], options?: { maxTokens?: number; temperature?: number; timeoutMs?: number; extraBody?: Record<string, unknown> }): Promise<ChatResult>;
 };
 
 /** Removes reasoning traces some NIM models emit before the answer. */
@@ -142,21 +156,26 @@ export function createNimChatClient(
         temperature: options.temperature ?? 0.4,
         top_p: 0.95,
         stream: false,
+        ...config.extraBody,
+        ...options.extraBody,
       }, options.timeoutMs ?? 120_000) as {
         model?: string;
-        choices?: Array<{ message?: { content?: string | null; reasoning_content?: string | null } }>;
+        choices?: Array<{ finish_reason?: string | null; message?: { content?: string | null; reasoning_content?: string | null } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
-      const message = data.choices?.[0]?.message;
+      const choice = data.choices?.[0];
+      const message = choice?.message;
       const content = stripReasoning(message?.content ?? "");
       if (!content) {
-        throw new AiServiceError("nim", "NVIDIA NIM returned an empty completion.");
+        throw new AiServiceError("nim", `NVIDIA NIM returned an empty completion (finish reason: ${choice?.finish_reason ?? "unknown"}${message?.reasoning_content ? `, ${message.reasoning_content.length} characters of reasoning` : ""}).`, 422);
       }
       return {
         content,
         model: data.model ?? model,
         latencyMs: Date.now() - started,
         usage: { promptTokens: data.usage?.prompt_tokens ?? 0, completionTokens: data.usage?.completion_tokens ?? 0 },
+        finishReason: choice?.finish_reason ?? null,
+        reasoningChars: message?.reasoning_content?.length ?? 0,
       };
     },
   };

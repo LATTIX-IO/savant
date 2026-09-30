@@ -42,7 +42,13 @@ export type AssessmentResult = {
 
 const REQUIRED_METADATA_FIELDS = ["skill_id", "display_name", "tier", "owner", "version", "status"] as const;
 const SEMVER = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/;
-const PLACEHOLDER = /<REPLACE[_A-Z]*>|\bTODO\b|\bTBD\b|lorem ipsum/i;
+// Placeholder markers used as instructions, not words mentioned in code
+// (a skill may legitimately document `TODO` as something it detects).
+const PLACEHOLDER = /<REPLACE[_A-Z]*>|(?:^|[\s>*-])(?:TODO|TBD|FIXME)\s*:|lorem ipsum/im;
+
+function withoutCode(markdown: string): string {
+  return markdown.replace(/```[\s\S]*?```/g, " ").replace(/~~~[\s\S]*?~~~/g, " ").replace(/`[^`\n]*`/g, " ");
+}
 const EVAL_DATASET_FILE = /\/eval\/[^/]+\.(?:ya?ml|jsonl?|csv)$/i;
 
 export function fingerprintFinding(code: string, scopeKey: string): string {
@@ -302,7 +308,7 @@ export function assessRepositorySnapshot(input: AssessmentInput): AssessmentResu
           remediation: "Describe purpose, required inputs, expected output, and constraints. Skill Intelligence can propose an improved version once runs are recorded.",
         });
       }
-      if (PLACEHOLDER.test(markdown)) {
+      if (PLACEHOLDER.test(withoutCode(markdown))) {
         add({
           code: "SKILL_PLACEHOLDER_CONTENT",
           severity: "warning",

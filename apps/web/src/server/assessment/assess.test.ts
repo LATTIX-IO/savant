@@ -169,3 +169,16 @@ test("map-style registries (lattix-skills layout) are understood: no false posit
   assert.deepEqual(Object.keys(owners.owners), ["ai-engineering", "platform-team"]);
   assert.equal(owners.owners["platform-team"]?.team, "Platform Team");
 });
+
+test("placeholder detection ignores TODO mentioned in code but flags real markers", () => {
+  const root = "tier2/methodology/legal/contract-review-assistant";
+  const base = { ...VALID_SKILL_FILES };
+  const check = (markdown: string) => {
+    const files = { ...base, [`${root}/SKILL.md`]: markdown };
+    return assessRepositorySnapshot({ observedPaths: withDirectories(files), files }).findings.some((finding) => finding.code === "SKILL_PLACEHOLDER_CONTENT");
+  };
+  assert.equal(check(`${LONG_SKILL}\n| **Stubbed** | \`TODO\`, \`unimplemented!()\` |\n\n\`\`\`ts\n// TODO: example\n\`\`\`\n`), false);
+  assert.equal(check(`${LONG_SKILL}\nTODO: describe escalation.\n`), true);
+  assert.equal(check(`${LONG_SKILL}\n- TBD: owner\n`), true);
+  assert.equal(check(`${LONG_SKILL}\nInput: <REPLACE_TASK>\n`), true);
+});

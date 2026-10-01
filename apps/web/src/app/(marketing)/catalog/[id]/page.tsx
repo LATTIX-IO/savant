@@ -76,7 +76,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
           <div style={{ minWidth: 0 }}>
             <div className="cat-panel">
               <h2>Savant verdict: {VERDICT_LABEL[skill.verdict]}</h2>
-              <p style={{ margin: 0, fontSize: 13.5, color: "var(--ink-2)" }}>{VERDICT_HINT[skill.verdict]}</p>
+              <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-secondary)" }}>{VERDICT_HINT[skill.verdict]}</p>
             </div>
 
             <div className="cat-panel">
@@ -92,7 +92,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
                     <div><strong>{pct(scorecard.efficiencyScore)}</strong>efficiency</div>
                   </div>
                   <div style={{ margin: "0 0 12px" }}><EvalLimitationsNote limitations={skill.evaluation?.limitations} /></div>
-                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--muted)" }}>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
                     {scorecard.passCount ?? 0} pass · {scorecard.investigateCount ?? 0} investigate · {scorecard.failCount ?? 0} fail across {scorecard.sampleCount ?? 0} cases.
                     {metrics?.drafted ? ` Jev accepted ${metrics.accepted ?? 0} of ${metrics.drafted} LLM-drafted cases.` : ""}
                     {skill.evaluation?.models?.judge ? ` Drafted and run by ${skill.evaluation.models.generator}, validated and scored by ${skill.evaluation.models.judge}.` : ""}
@@ -109,7 +109,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
                   )}
                 </>
               ) : (
-                <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>
+                <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>
                   {skill.evalStatus === "queued" || skill.evalStatus === "running" ? "A live evaluation is running." : skill.evalStatus === "failed" ? `The last live evaluation didn't complete${skill.evalError ? `: ${skill.evalError}` : "."}` : "Not evaluated yet. Workspaces can request a live evaluation."}
                 </p>
               )}
@@ -120,7 +120,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
               {skill.safety && skill.safety.status === "complete" ? (
                 <>
                   <div style={{ marginBottom: 12 }}><SafetyBreakdown safety={skill.safety} /></div>
-                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--muted)" }}>{skill.safety.issues.length} pattern{skill.safety.issues.length === 1 ? "" : "s"} found</p>
+                  <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>{skill.safety.issues.length} pattern{skill.safety.issues.length === 1 ? "" : "s"} found</p>
                   {skill.safety.issues.length > 0 && (
                     <ul className="cat-list">
                       {skill.safety.issues.slice(0, 10).map((issue, index) => (
@@ -133,7 +133,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
                   )}
                 </>
               ) : (
-                <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>{skill.safety?.status === "unavailable" ? "Safety scanning is temporarily unavailable." : "Scan pending."}</p>
+                <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>{skill.safety?.status === "unavailable" ? "Safety scanning is temporarily unavailable." : "Scan pending."}</p>
               )}
             </div>
 
@@ -150,7 +150,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
 
             <div className="cat-panel">
               <h2>SKILL.md</h2>
-              {skill.skillMd ? <pre className="cat-source">{skill.skillMd}</pre> : <p style={{ margin: 0, fontSize: 13.5, color: "var(--muted)" }}>This listing is enumerated but its package hasn&apos;t been fetched yet; it&apos;s queued by popularity.</p>}
+              {skill.skillMd ? <pre className="cat-source">{skill.skillMd}</pre> : <p style={{ margin: 0, fontSize: 13.5, color: "var(--text-muted)" }}>This listing is enumerated but its package hasn&apos;t been fetched yet; it&apos;s queued by popularity.</p>}
             </div>
           </div>
 

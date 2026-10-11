@@ -1,9 +1,14 @@
 import type { WorkflowSpecification, WorkflowNode, WorkflowPort } from "@savant/types/workflow-specification";
 
 export class WorkflowSpecError extends Error {
-  constructor(public readonly code: string, public readonly path: string) {
+  readonly code: string;
+  readonly path: string;
+
+  constructor(code: string, path: string) {
     super(`${code}: ${path}`);
     this.name = "WorkflowSpecError";
+    this.code = code;
+    this.path = path;
   }
 }
 

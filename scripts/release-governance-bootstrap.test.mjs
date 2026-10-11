@@ -13,9 +13,10 @@ const plan=()=>compileGovernancePlan(inputs);
 function fixture() {
   const state={
     mainProtected:false,flag:null,environment:null,policies:[],rulesets:[],writes:[],
-    checkRuns:REQUIRED_RELEASE_CHECKS.map(name=>({name,status:"completed",conclusion:"success"}))
+    checkRuns:REQUIRED_RELEASE_CHECKS.map(name=>({name,status:"completed",conclusion:"success",app:{id:15368,slug:"github-actions"}}))
   };
   const read=async path=>{
+    if(path==="/user")return {id:300,login:"release-operator"};
     if(path===BASE)return {full_name:REPO,default_branch:"main"};
     if(path===BASE+"/branches/main")return {name:"main",protected:state.mainProtected,commit:{sha:SHA}};
     if(path===BASE+"/commits/"+SHA+"/check-runs?per_page=100")
@@ -87,6 +88,7 @@ test("PER-1221 declarative plan contains active no-bypass branch/tag rules and m
   const required=body.rules.find(x=>x.type==="required_status_checks");
   assert.equal(required.parameters.strict_required_status_checks_policy,true);
   assert.deepEqual(required.parameters.required_status_checks.map(x=>x.context),REQUIRED_RELEASE_CHECKS);
+  assert.ok(required.parameters.required_status_checks.every(x=>x.integration_id===15368));
   assert.ok(REQUIRED_RELEASE_CHECKS.length>=9);
   const tags=p.operations[2].body;
   assert.equal(tags.target,"tag");
@@ -151,7 +153,9 @@ test("PER-1221 preflight rejects protected/drifted config, unverified CI and ena
     s=>s.checkRuns.pop(),
     s=>s.checkRuns[0].conclusion="failure",
     s=>s.checkRuns[0].status="queued",
-    s=>s.checkRuns[0].name="attacker-forged-ci"
+    s=>s.checkRuns[0].name="attacker-forged-ci",
+    s=>s.checkRuns[0].app.id=999,
+    s=>s.checkRuns[0].app.slug="attacker-app"
   ];
   for(const update of changes){
     const f=fixture();update(f.state);
@@ -164,6 +168,20 @@ test("PER-1221 preflight rejects protected/drifted config, unverified CI and ena
     return f.read(path);
   }),e=>e.status===403);
   assert.equal(f.state.writes.length,0);
+});
+test("PER-1221 operator identity is bound to the live GitHub account and team membership cannot be assumed",async()=>{
+  const f=fixture();
+  await assert.rejects(preflight(plan(),async path=>{
+    if(path==="/user")return {id:999,login:"another-operator"};
+    return f.read(path);
+  }),/operator_identity_mismatch/);
+  assert.equal(f.state.writes.length,0);
+  await assert.rejects(preflight(compileGovernancePlan({...inputs,reviewerType:"Team"}),f.read),
+    /team_reviewer_membership_unverified/);
+  await assert.rejects(preflight(plan(),async path=>{
+    if(path==="/user")throw new BootstrapError("missing_user_identity",403);
+    return f.read(path);
+  }),e=>e.status===403);
 });
 test("PER-1221 guarded apply provisions only disabled variable/protections and verifies a live readback",async()=>{
   const f=fixture();
@@ -223,6 +241,8 @@ test("PER-1221 API adapter is endpoint-scoped, GET-only in preflight and redacts
   assert.equal(observed[0].url,"https://api.github.com"+BASE);
   assert.equal(observed[0].method,"GET");
   assert.equal(observed[0].auth,"Bearer "+token);
+  await adapter("GET","/user");
+  assert.equal(observed[1].url,"https://api.github.com/user");
   await assert.rejects(adapter("POST","/repos/attacker/x/rulesets",{}),/invalid_admin_request/);
   await assert.rejects(adapter("GET",BASE+"/../users"),/invalid_admin_request/);
   await assert.rejects(adapter("DELETE",BASE),/invalid_admin_request/);
@@ -285,4 +305,14 @@ test("PER-1221 verified post-apply checks detect silent reviewer or required-con
     }
   }),/post_apply_control_drift/);
   assert.equal(lostCheck.state.flag,"false");
+  const forgedSource=fixture();
+  await assert.rejects(applyGovernancePlan(plan(),{
+    read:forgedSource.read,confirmation:"PROTECT-LATTIX-IO-savant",
+    write:async(...args)=>{
+      const response=await forgedSource.write(...args);
+      if(args[1].endsWith("/rulesets") && args[2].target==="branch")
+        forgedSource.state.rulesets[0].rules.find(r=>r.type==="required_status_checks").parameters.required_status_checks[0].integration_id=42;
+      return response;
+    }
+  }),/post_apply_control_drift/);
 });

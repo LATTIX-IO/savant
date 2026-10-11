@@ -25,11 +25,9 @@ function fixture() {
   return {dir,request,manifest,dispose:()=>rmSync(dir,{recursive:true,force:true})};
 }
 function existing(request,manifest) {
-  return {tagName:request.version,isDraft:false,isPrerelease:false,assets:[
-    {name:archiveName(request.version),size:manifest.bytes,digest:"sha256:"+manifest.sha256},
-    {name:"SHA256SUMS",size:84,digest:"sha256:"+ "b".repeat(64)},
-    {name:"release-provenance.json",size:200,digest:"sha256:"+ "c".repeat(64)}
-  ]};
+  return {tagName:request.version,isDraft:false,isPrerelease:false,assets:
+    Object.entries(manifest.files).map(([name,entry])=>({name,size:entry.bytes,digest:"sha256:"+entry.sha256}))
+  };
 }
 test("PER-1207: fail closed for unapproved, wrong-branch, malformed or forged releases",()=>{
   assert.deepEqual(validatePublishRequest(valid()),req());
@@ -38,7 +36,7 @@ test("PER-1207: fail closed for unapproved, wrong-branch, malformed or forged re
     {ref:"refs/heads/feature"},{ref:"refs/tags/v0.1.0"},
     {commit:"bad"},{commit:"A".repeat(40)},{mainCommit:"b".repeat(40)}, {version:"v0.1.0;rm -rf /"},
     {version:"v1.0.0\nINJECT=1"},{version:"v0.1.0\n"},{repository:"evil host/path"},
-    {runId:"0"}
+    {runId:"0"},{repository:"owner/.."},{repository:"./repo"}
   ])assert.throws(()=>validatePublishRequest({...valid(),...mutation}));
 });
 test("PER-1207: strict tag-to-commit and ancestry binding rejects replay or forged tag",()=>{
@@ -90,6 +88,23 @@ test("PER-1207: same digest and artifact set is replay-only, changed assets fail
       {assets:[]},{assets:existing(f.request,f.manifest).assets.map(x=>({...x,digest:"sha256:"+ "d".repeat(64)}))}
     ]) assert.throws(()=>classifyExistingRelease({...existing(f.request,f.manifest),...mutation},f.request,f.manifest),/conflict/);
   }finally{f.dispose();}
+});
+test("PER-1207: reject mutated remote checksums, provenance, size, absent digests and wrong run identity",()=>{
+  const f=fixture();
+  try {
+    for(const name of ["SHA256SUMS","release-provenance.json"]){
+      const remote=existing(f.request,f.manifest);
+      remote.assets.find(x=>x.name===name).digest="sha256:"+"e".repeat(64);
+      assert.throws(()=>classifyExistingRelease(remote,f.request,f.manifest),/conflict/);
+      const wrongSize=existing(f.request,f.manifest);
+      wrongSize.assets.find(x=>x.name===name).size++;
+      assert.throws(()=>classifyExistingRelease(wrongSize,f.request,f.manifest),/conflict/);
+      const missingDigest=existing(f.request,f.manifest);
+      delete missingDigest.assets.find(x=>x.name===name).digest;
+      assert.throws(()=>classifyExistingRelease(missingDigest,f.request,f.manifest),/conflict/);
+    }
+    assert.throws(()=>validateBundle(f.dir,{...f.request,runId:"999"}),/integrity_failed/);
+  } finally {f.dispose();}
 });
 test("PER-1207: release lookup distinguishes 404, denial and server failures",async()=>{
   assert.equal(await inspectExistingRelease(req(),"dummy",async()=>new Response(null,{status:404})),null);
@@ -170,7 +185,7 @@ test("PER-1207: publication race accepts identical remote and rejects changed di
     await assert.rejects(publishSourceRelease(f.request,{dir:f.dir,git:fakeGit,token:"dummy",
       fetcher:async()=>++after===1?new Response(null,{status:404}):
         new Response(JSON.stringify({tag_name:f.request.version,draft:false,prerelease:false,
-          assets:existing(f.request,{...f.manifest,sha256:"e".repeat(64)}).assets}),{status:200}),
+          assets:existing(f.request,{...f.manifest,files:{...f.manifest.files,[archiveName(f.request.version)]:{...f.manifest.files[archiveName(f.request.version)],sha256:"e".repeat(64)}}}).assets}),{status:200}),
       runGh:()=>{throw Error("raced");}
     }),/conflict/);
   }finally{f.dispose();}

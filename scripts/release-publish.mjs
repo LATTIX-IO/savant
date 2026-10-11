@@ -21,7 +21,7 @@ export async function publishSourceRelease(request, options = {}) {
   const fetcher = options.fetcher || fetch;
   const existing = await inspectExistingRelease(request, token, fetcher);
   const { classifyExistingRelease } = await import("./release-publication.mjs");
-  const decision = classifyExistingRelease(existing, request, bundle.provenance);
+  const decision = classifyExistingRelease(existing, request, bundle);
   if (decision === "unchanged") return { state: "existing_verified", sha256: bundle.digest };
   const cwd = options.dir || "dist/source-release";
   const paths = [archiveName(request.version), "SHA256SUMS", "release-provenance.json"].map(n => cwd + "/" + n);
@@ -33,13 +33,13 @@ export async function publishSourceRelease(request, options = {}) {
   catch (error) {
     // A competing publisher may win. We accept ONLY identical published assets.
     const raced = await inspectExistingRelease(request, token, fetcher);
-    if (raced && classifyExistingRelease(raced, request, bundle.provenance) === "unchanged")
+    if (raced && classifyExistingRelease(raced, request, bundle) === "unchanged")
       return { state: "existing_verified", sha256: bundle.digest };
     throw error;
   }
   // Read back and compare server asset digests before reporting a successful release.
   const published = await inspectExistingRelease(request, token, fetcher);
-  if (classifyExistingRelease(published, request, bundle.provenance) !== "unchanged") throw Error("published_release_integrity_failed");
+  if (classifyExistingRelease(published, request, bundle) !== "unchanged") throw Error("published_release_integrity_failed");
   return { state: "published_verified", sha256: bundle.digest };
 }
 if (process.argv[1]?.endsWith("/release-publish.mjs")) {

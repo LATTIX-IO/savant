@@ -1,0 +1,118 @@
+name: Publish governed source release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing immutable version tag, matching package.json at tagged commit
+        type: string
+        required: true
+      commit_sha:
+        description: Exact 40-character SHA that the version tag resolves to
+        type: string
+        required: true
+      confirmation:
+        description: Enter PUBLISH followed by a space and the version (example PUBLISH v0.1.0)
+        type: string
+        required: true
+
+# No push, pull_request, workflow_run or automatic tag-creation publication triggers.
+# Configure SAVANT_RELEASE_PUBLISH_ENABLED and protected savant-release environment.
+permissions:
+  contents: read
+
+concurrency:
+  group: savant-source-publish-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Verify, test and attest tagged source
+    if: github.ref == 'refs/heads/main' && vars.SAVANT_RELEASE_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      SAVANT_PUBLISH_VERSION: ${{ inputs.version }}
+      SAVANT_PUBLISH_COMMIT: ${{ inputs.commit_sha }}
+      SAVANT_PUBLISH_CONFIRMATION: ${{ inputs.confirmation }}
+      SAVANT_RELEASE_PUBLISH_ENABLED: ${{ vars.SAVANT_RELEASE_PUBLISH_ENABLED }}
+    steps:
+      - name: Checkout trusted release scripts and full tags
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+          run_install: false
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Unit, regression and security tests
+        run: pnpm test
+      - name: Lint
+        run: pnpm lint
+      - name: Typecheck
+        run: pnpm typecheck
+      - name: Production build
+        run: pnpm build
+      - name: Dependency and secret checks
+        run: pnpm security:scan
+      - name: Produce immutable tagged archive and checksums
+        run: node scripts/release-stage.mjs
+      - name: Create GitHub-hosted signed build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-path: dist/source-release/savant-${{ inputs.version }}.tar.gz
+      - name: Upload attested source bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: savant-source-release
+          path: dist/source-release/
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    name: Publish only after protected environment approval
+    needs: prepare
+    if: github.ref == 'refs/heads/main' && vars.SAVANT_RELEASE_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: savant-release
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SAVANT_PUBLISH_VERSION: ${{ inputs.version }}
+      SAVANT_PUBLISH_COMMIT: ${{ inputs.commit_sha }}
+      SAVANT_PUBLISH_CONFIRMATION: ${{ inputs.confirmation }}
+      SAVANT_RELEASE_PUBLISH_ENABLED: ${{ vars.SAVANT_RELEASE_PUBLISH_ENABLED }}
+    steps:
+      - name: Checkout trusted publication scripts and full tag history
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - name: Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Download exact staged artifact
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: savant-source-release
+          path: dist/source-release
+      - name: Recheck tag, integrity and publish or verify identical replay
+        run: node scripts/release-publish.mjs

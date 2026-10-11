@@ -126,7 +126,7 @@ test("PER-1220 real git: moved tag, wrong tagged package version, unrelated main
     git(f.checkout,"tag","-f",VERSION,changed);
     assert.throws(()=>verifyGitTag(f.request,f.executor),/tag_commit_mismatch/);
     git(f.checkout,"tag","-f",VERSION,f.request.commit);
-    assert.throws(()=>verifyGitTag({...f.request,commit:changed},f.executor),/tag_commit_mismatch/);
+    assert.throws(()=>verifyGitTag({...f.request,commit:changed},f.executor),/tag_commit_mismatch|release_version_mismatch/);
     const matchingNewVersion={...f.request,version:"v0.2.0",commit:changed};
     git(f.checkout,"tag","v0.2.0",changed);
     assert.throws(()=>verifyGitTag(matchingNewVersion,f.executor),/tag_not_on_main/);

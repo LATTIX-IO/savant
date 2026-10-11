@@ -18,7 +18,7 @@ export interface CapabilityResolverPorts {
   authorize(actor:CapabilityResolveActor,reference:CapabilityReferenceV1):Promise<void>;
   /** Must read the pinned revision with the managed read-scoped provider broker. */
   workflow(actor:CapabilityResolveActor,reference:CapabilityReferenceV1):Promise<{
-    specification:{workflowId:string;version:string;[key:string]:unknown};
+    specification:{workflowId:string;version:string};
     digest:string;commitSha:string;
   }>;
   /** Must check tenant/indexed skill ID/path/version/commit before pinned provider read. */

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   CapabilityReferenceError,
+  capabilityReferenceJsonSchema,
   canonicalizeCapabilityReference,
   makeWorkflowCapabilityProjection,
   migrateLegacySkillReference,
@@ -81,4 +82,29 @@ test("SAV-14: workflow projection is derived from trusted control-plane identiti
     version: "latest", commitSha: SHA, digest: HASH,
   });
   assert.deepEqual(unsupported, { status: "unavailable", reason: "version_invalid" });
+});
+
+test("SAV-14: JSON Schema v1 major and SemVer constraints agree with runtime parser", () => {
+  assert.equal(capabilityReferenceJsonSchema.$id, "https://savant.dev/schemas/capability-reference/v1.json");
+  assert.deepEqual(capabilityReferenceJsonSchema.properties.locator.oneOf[0].required, ["source", "repositoryId", "path", "commitSha"]);
+  const versionPattern = new RegExp(capabilityReferenceJsonSchema.properties.version.pattern);
+  for (const version of ["1.0.0", "3.22.9-rc.1+build.18", "0.0.0-legacy"]) assert.equal(versionPattern.test(version), true, version);
+  for (const version of ["latest", "1.2", "01.2.3", "1.0.0-foo..bar", "1.0.0-01"]) assert.equal(versionPattern.test(version), false, version);
+});
+test("SAV-14: hostile object prototypes, getters, unsafe extension keys and non-JSON values never execute", () => {
+  const input = reference();
+  Object.defineProperty(input, "secret", { enumerable: true, get() { throw Error("must never execute"); } });
+  assert.throws(() => parseCapabilityReference(input), fails("invalid_json"));
+  assert.throws(() => parseCapabilityReference({ ...reference(), extensions: JSON.parse('{"__proto__":{"root":true}}') }), fails("invalid_json"));
+  assert.throws(() => parseCapabilityReference({ ...reference(), extensions: { value: Number.NaN } }), fails("invalid_json"));
+  assert.throws(() => parseCapabilityReference({ ...reference(), extensions: { date: new Date("2026-01-01T00:00:00Z") } }), fails("invalid_json"));
+});
+test("SAV-14: organizational scope and revision remain immutable in the original input", () => {
+  const input = reference();
+  const parsed = parseCapabilityReference(input);
+  input.organizationId = "tenant-elsewhere";
+  input.locator.repositoryId = "foreign";
+  assert.equal(parsed.organizationId, "tenant-a");
+  assert.equal(parsed.locator.source, "git");
+  if (parsed.locator.source === "git") assert.equal(parsed.locator.repositoryId, "repo-a");
 });

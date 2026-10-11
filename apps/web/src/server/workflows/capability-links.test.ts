@@ -10,7 +10,7 @@ const reference = (id: string, repo = "repo-a") => ({
   artifactId: id, version: "1.0.0", contentHash: "sha256:" + digest,
   locator: { source: "git", repositoryId: repo, path: `workflows/${id}.json`, commitSha: sha },
 });
-const link = (from = reference("first"), to = reference("second")) => ({
+const link = (from: unknown = reference("first"), to: unknown = reference("second")) => ({
   relation: "depends_on", from, to,
 });
 const denied = (code: string) => (error: unknown) =>

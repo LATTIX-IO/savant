@@ -6,6 +6,8 @@ import { getGitRuntime } from "../git/runtime.ts";
 import { resolveRepositoryConnection } from "../git/connection-resolver.ts";
 import type { ConnectedRepositoryRecord } from "../git/types.ts";
 import { workflowArtifacts } from "./runtime.ts";
+import { WorkflowArtifactError } from "./workflow-artifacts.ts";
+import { GitProviderError } from "../git/errors.ts";
 import { CapabilityResolveError, createCapabilityResolver, type CapabilityResolveActor } from "./capability-resolver.ts";
 import { authorizeCapabilityRepository } from "./capability-access.ts";
 
@@ -47,9 +49,15 @@ async function pinnedSkillContent(actor:CapabilityResolveActor,reference:Capabil
   const access=await resolved.provider.validateRepositoryAccess(resolved.credential,locator);
   if(!access.accessible||access.repository?.providerRepositoryId!==repo.providerRepositoryId)
     throw new CapabilityResolveError("not_found",404);
-  const bytes=await resolved.provider.readFile(
-    resolved.credential,locator,reference.locator.commitSha,reference.locator.path,{maxBytes:MAX_SKILL_BYTES},
-  );
+  let bytes:Buffer;
+  try{
+    bytes=await resolved.provider.readFile(
+      resolved.credential,locator,reference.locator.commitSha,reference.locator.path,{maxBytes:MAX_SKILL_BYTES},
+    );
+  }catch(error){
+    if(error instanceof GitProviderError&&error.status===404)throw new CapabilityResolveError("not_found",404);
+    throw error;
+  }
   if(bytes.byteLength>MAX_SKILL_BYTES)throw new CapabilityResolveError("content_oversized",413);
   let content:string;
   try{content=new TextDecoder("utf-8",{fatal:true}).decode(bytes);}
@@ -65,8 +73,16 @@ export const capabilityResolver=createCapabilityResolver({
   },
   async workflow(actor,reference){
     if(reference.locator.source!=="git")throw new CapabilityResolveError("not_found",404);
-    const result=await workflowArtifacts.get({organizationId:actor.organizationId,actor:actor.subject},reference.locator.repositoryId,reference.artifactId,reference.locator.commitSha);
-    return {specification:result.specification,digest:result.digest,commitSha:result.commitSha};
+    try{
+      const result=await workflowArtifacts.get({organizationId:actor.organizationId,actor:actor.subject},reference.locator.repositoryId,reference.artifactId,reference.locator.commitSha);
+      return {specification:result.specification,digest:result.digest,commitSha:result.commitSha};
+    }catch(error){
+      if(error instanceof WorkflowArtifactError){
+        if(error.status===404)throw new CapabilityResolveError("not_found",404);
+        if(error.code==="workflow_integrity_failed")throw new CapabilityResolveError("integrity_mismatch",409);
+      }
+      throw error;
+    }
   },
   skill:pinnedSkillContent,
 });

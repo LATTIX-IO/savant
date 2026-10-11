@@ -10,6 +10,7 @@ import { WorkflowArtifactError } from "./workflow-artifacts.ts";
 import { GitProviderError } from "../git/errors.ts";
 import { CapabilityResolveError, createCapabilityResolver, type CapabilityResolveActor } from "./capability-resolver.ts";
 import { authorizeCapabilityRepository } from "./capability-access.ts";
+import { authorizeCapabilityArtifact } from "./capability-artifact-access.ts";
 
 const MAX_SKILL_BYTES=512_000;
 async function authorizeIndexedSkill(actor:CapabilityResolveActor,reference:CapabilityReferenceV1):Promise<void>{
@@ -68,7 +69,12 @@ async function pinnedSkillContent(actor:CapabilityResolveActor,reference:Capabil
 export const capabilityResolver=createCapabilityResolver({
   async authorize(actor,reference){
     if(reference.locator.source!=="git")throw new CapabilityResolveError("unsupported_kind",409);
-    await authorizeCapabilityRepository(getControlPlaneDatabase(),actor,reference.locator.repositoryId);
+    const sql=getControlPlaneDatabase();
+    await authorizeCapabilityRepository(sql,actor,reference.locator.repositoryId);
+    await authorizeCapabilityArtifact(sql,actor,{
+      organizationId:reference.organizationId,repositoryId:reference.locator.repositoryId,
+      kind:reference.kind as "skill"|"workflow_spec",artifactId:reference.artifactId,
+    });
     if(reference.kind==="skill")await authorizeIndexedSkill(actor,reference);
   },
   async workflow(actor,reference){

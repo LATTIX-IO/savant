@@ -49,7 +49,7 @@ function fixture() {
     }
     if(method==="POST"&&path===BASE+"/rulesets"){
       const id=state.rulesets.length+10;
-      state.rulesets.push({id,...body});
+      state.rulesets.push({id,...structuredClone(body)});
       if(body.target==="branch")state.mainProtected=true;
       return {status:201};
     }

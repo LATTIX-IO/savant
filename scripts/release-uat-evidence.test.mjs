@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stageBundle, archiveName } from "./release-publication.mjs";
 import { parseEvidenceRequest, validateRemoteRelease, verifySignedAttestation,
-  verifySourceReleaseEvidence, verifyRemoteTag, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
+  verifySourceReleaseEvidence, verifyRemoteTag, verifySuccessfulPublicationRun, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
 const SHA="a".repeat(40), REPO="LATTIX-IO/savant";
 const request={version:"v0.1.0",commit:SHA,repository:REPO,runId:"124"};
 const versioned=()=>({GITHUB_REPOSITORY:REPO,SAVANT_EVIDENCE_VERSION:request.version,
@@ -18,10 +18,13 @@ function mockGit(command,args){
   if(args[0]==="archive")return Buffer.from("rehearsal tracked git tar bytes");
   throw Error("unknown_git_command");
 }
-function signed(digest, predicateType="https://slsa.dev/provenance/v1"){
-  return Buffer.from(JSON.stringify([{verificationResult:{statement:{
-    predicateType,subject:[{name:archiveName(request.version),digest:{sha256:digest}}]
-  }}}]));
+function signed(digest,predicateType="https://slsa.dev/provenance/v1",runId=request.runId){
+  return Buffer.from(JSON.stringify([{verificationResult:{
+    signature:{certificate:{
+      runInvocationURI:"https://github.com/"+REPO+"/actions/runs/"+runId+"/attempts/1"
+    }},
+    statement:{predicateType,subject:[{name:archiveName(request.version),digest:{sha256:digest}}]}
+  }}]));
 }
 function fixture(){
   const stage=mkdtempSync(join(tmpdir(),"savant-uat-test-"));
@@ -34,10 +37,23 @@ function fixture(){
 }
 const response=(metadata,status=200)=>new Response(metadata?JSON.stringify(metadata):null,{status});
 
-const remoteRead=(f,{metadata=f.metadata,tag={type:"commit",sha:SHA},releaseStatus=200,seen=[]}={})=>async(url,opts)=>{
+const remoteRead=(f,{metadata=f.metadata,tag={type:"commit",sha:SHA},releaseStatus=200,
+  runChanges={},jobsChanges={},seen=[]}={})=>async(url,opts)=>{
   seen.push({url,opts});
   if(url.includes("/git/ref/tags/"))return response({object:tag});
   if(url.includes("/git/tags/"))return response({object:{type:"commit",sha:SHA}});
+  if(url.includes("/actions/runs/"+request.runId+"/jobs"))return response({
+    total_count:2,jobs:[
+      {name:"Verify, test and attest tagged source",status:"completed",conclusion:"success"},
+      {name:"Publish only after protected environment approval",status:"completed",conclusion:"success"}
+    ],...jobsChanges
+  });
+  if(url.includes("/actions/runs/"+request.runId))return response({
+    id:Number(request.runId),head_sha:SHA,
+    path:".github/workflows/publish-source-release.yml",
+    head_branch:"main",event:"workflow_dispatch",status:"completed",
+    conclusion:"success",repository:{full_name:REPO},...runChanges
+  });
   if(releaseStatus!==200)return new Response(null,{status:releaseStatus});
   return response(metadata);
 };
@@ -102,13 +118,14 @@ test("PER-1291 rejects draft, missing/extra assets, forged sizes and digest omis
 });
 test("PER-1291 attestation requires a nonempty signed SLSA subject for the exact archive digest",()=>{
   const digest="f".repeat(64);
-  assert.equal(verifySignedAttestation(signed(digest),digest),true);
+  assert.equal(verifySignedAttestation(signed(digest),digest,request),true);
   for(const value of [
     Buffer.from("[]"), Buffer.from("{broken"),Buffer.from("null"),
     Buffer.from(JSON.stringify([{verificationResult:{}}])),
     signed("e".repeat(64)),signed(digest,"https://wrong.example/predicate"),
+    signed(digest,"https://slsa.dev/provenance/v1","999"),
     Buffer.alloc(1024*1024+1,0)
-  ])assert.throws(()=>verifySignedAttestation(value,digest),ReleaseEvidenceError);
+  ])assert.throws(()=>verifySignedAttestation(value,digest,request),ReleaseEvidenceError);
 });
 test("PER-1291 read-only end-to-end rehearsal checks local archive, GitHub metadata and signer identity",async()=>{
   const f=fixture(),calls=[], network=[];
@@ -123,7 +140,7 @@ test("PER-1291 read-only end-to-end rehearsal checks local archive, GitHub metad
     assert.equal(result.workflowRunId,request.runId);
     assert.equal(result.assets.length,3);
     assert.ok(Object.values(result.checks).every(Boolean));
-    assert.equal(network.length,2);
+    assert.equal(network.length,4);
     assert.ok(network.every(x=>x.opts.redirect==="error" && x.opts.method==="GET" ||
       x.opts.redirect==="error" && x.opts.headers.Authorization==="Bearer read-only-evidence-token"));
     assert.equal(calls.length,2);
@@ -219,5 +236,35 @@ test("PER-1291 remote live tags accept direct/annotated refs but reject moved, a
       async()=>response({object:{type:"tag",sha:"b".repeat(40)}})),/remote_tag_invalid_response/);
     await assert.rejects(verifyRemoteTag(request,"read-only-evidence-token",
       async()=>response({object:{type:"unknown",sha:SHA}})),/remote_tag_invalid_response/);
+  }finally{f.cleanup();}
+});
+
+test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs and falsely claimed run IDs",async()=>{
+  const f=fixture();
+  try{
+    const invalid=[
+      {runChanges:{head_sha:"f".repeat(40)}},
+      {runChanges:{conclusion:"failure"}},
+      {runChanges:{status:"in_progress"}},
+      {runChanges:{event:"push"}},
+      {runChanges:{path:".github/workflows/other.yml"}},
+      {runChanges:{head_branch:"feature"}},
+      {runChanges:{repository:{full_name:"attacker/other"}}},
+      {jobsChanges:{jobs:[
+        {name:"Verify, test and attest tagged source",status:"completed",conclusion:"success"},
+        {name:"Publish only after protected environment approval",status:"completed",conclusion:"skipped"}
+      ]}},
+      {jobsChanges:{total_count:3}},
+      {jobsChanges:{jobs:[]}}
+    ];
+    for(const override of invalid){
+      await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
+        remoteRead(f,override)),/workflow_run_unverified|workflow_jobs_unverified/);
+    }
+    await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
+      async()=>new Response(null,{status:403})),/workflow_run_unavailable/);
+    assert.equal(await verifySuccessfulPublicationRun(request,"read-only-evidence-token",remoteRead(f)),true);
+    const other=signed(f.prov.sha256,"https://slsa.dev/provenance/v1","998");
+    assert.throws(()=>verifySignedAttestation(other,f.prov.sha256,request),/attestation_subject_mismatch/);
   }finally{f.cleanup();}
 });

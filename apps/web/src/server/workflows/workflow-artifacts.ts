@@ -106,7 +106,7 @@ export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
       const repo = await findRepo(tenant, repositoryId);
       // Fail closed before Git access, and never accept an omitted revision precondition.
       await port.authorizeWrite(tenant.actor, tenant.organizationId);
-      if (expectedBlobSha === undefined || (expectedBlobSha !== null && !SHA.test(expectedBlobSha) && !/^blob\d+$/.test(expectedBlobSha))) {
+      if (expectedBlobSha === undefined || (expectedBlobSha !== null && !SHA.test(expectedBlobSha))) {
         throw new WorkflowArtifactError("revision_precondition_required", 428);
       }
       const spec = normalizeSpec(payload, workflowId);

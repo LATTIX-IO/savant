@@ -10,9 +10,9 @@ Before enabling publication, repository administrators must:
 2. Protect `v*` Git tags using a repository ruleset that blocks deletion and updates (tag immutability). Protect `main` with required reviews and CI. GitHub reports `main` as unprotected at the time of this implementation; do not enable publication until protection is configured.
 3. Confirm the repository supports Actions artifact attestations and the GitHub `attestations: write` permission. The prepare job must fail if it cannot create a signed provenance attestation.
 4. Set the repository Actions variable `SAVANT_RELEASE_PUBLISH_ENABLED=true` **only after** those settings are verified. The default is disabled.
-5. Ensure a version tag such as `v0.1.0` **already exists**, resolves to exactly the versioned source commit, and is reachable from `origin/main`. The package.json in that commit must declare the same version.
+5. Ensure a version tag such as `v0.1.0` **already exists**, resolves to exactly the **current main commit at dispatch** (the same source that passed the quality/security suite), and is reachable from `origin/main`. The package.json in that commit must declare the same version.
 
-The workflow is launched via **Actions → Publish governed source release → Run workflow** on `main`, with the exact `version`, full `commit_sha`, and `confirmation` value `PUBLISH vX.Y.Z`. A tag cannot be created by the workflow. There is no `push`, `workflow_run`, schedule or PR publication trigger.
+The workflow is launched via **Actions → Publish governed source release → Run workflow** on `main`, with the exact `version`, full `commit_sha` equal to the dispatched main SHA, and `confirmation` value `PUBLISH vX.Y.Z`. A tag cannot be created by the workflow. There is no `push`, `workflow_run`, schedule or PR publication trigger.
 
 ## Security and test gates
 

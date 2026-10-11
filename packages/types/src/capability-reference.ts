@@ -40,7 +40,7 @@ export interface CapabilityLinkV1 {
   to: CapabilityReferenceV1;
 }
 export interface CapabilityLossEntry {
-  code: "version_unrecognized" | "repository_missing" | "commit_missing" | "digest_missing" | "path_missing";
+  code: "identity_missing" | "version_unrecognized" | "repository_missing" | "commit_missing" | "digest_missing" | "path_missing";
   description: string;
 }
 export type CapabilityProjection =

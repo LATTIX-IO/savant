@@ -49,7 +49,8 @@ const codeIs = (code: string) => (error: unknown) => error instanceof WorkflowAr
 test("PER-1087: GitHub create/read/update/pinned read checks SHA, content and explicit branch", async () => {
   const { client, state } = fixture();
   const old = await client.read("workflows/triage.json");
-  assert.equal(old?.commitSha, c1);
+  assert.ok(old, "fixture must return an existing pinned Git blob");
+  assert.equal(old.commitSha, c1);
   assert.equal(old?.blobSha, sha(old.content));
   const next = await client.write("workflows/triage.json", "{\"changed\":true}", old.blobSha);
   assert.equal(next.commitSha, c2);

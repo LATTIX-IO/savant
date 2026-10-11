@@ -8,7 +8,7 @@ export interface WorkflowNode {
   inputs?: WorkflowPort[];
   outputs?: WorkflowPort[];
   /** Required for opaque native nodes; retained without interpreting it. */
-  native?: { kind: string; payload?: Record<string, unknown> };
+  native?: { kind: string; payload?: unknown; [key: string]: unknown };
   extensions?: Record<string, unknown>;
 }
 export interface WorkflowEdge {

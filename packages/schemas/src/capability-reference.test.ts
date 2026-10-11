@@ -60,10 +60,10 @@ test("SAV-14: legacy skill conversion retains raw old fields without fabricating
   assert.equal(migrated.reference.kind, "skill");
   assert.equal(migrated.reference.locator.source, "git");
   assert.deepEqual(migrated.reference.extensions?.legacy, legacy);
-  assert.deepEqual(migrated.lossReport, []);
+  assert.deepEqual(migrated.lossReport.map(x => x.code), ["digest_missing"]);
   const missing = migrateLegacySkillReference({ organizationId: "tenant-a", skill: { id: "old", version: "latest", arbitrary: 9 } });
   assert.equal(missing.status, "unresolved");
-  assert.deepEqual(missing.lossReport.map(x => x.code).sort(), ["commit_missing", "repository_missing", "version_unrecognized"].sort());
+  assert.deepEqual(missing.lossReport.map(x => x.code).sort(), ["commit_missing", "repository_missing", "version_unrecognized", "path_missing", "digest_missing"].sort());
   assert.deepEqual(missing.original, { id: "old", version: "latest", arbitrary: 9 });
 });
 test("SAV-14: workflow projection is derived from trusted control-plane identities and stable git digest", () => {

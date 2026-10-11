@@ -92,3 +92,22 @@ test("PER-1173: strict v1 reference snapshot rejects hostile getters without exe
   await assert.rejects(h.resolver.resolve(actor,evil),fails("invalid_reference"));
   assert.deepEqual(h.calls,[]);
 });
+
+test("PER-1173: database authorization outage is sanitized without misleading tenant denial",async()=>{
+  let reads=0;
+  const r=createCapabilityResolver({
+    async authorize(){throw Error("DATABASE_URL=secret");},
+    async workflow(){reads++;throw Error("should not be called");},
+    async skill(){reads++;throw Error("should not be called");},
+  });
+  await assert.rejects(r.resolve(actor,workflow()),e=>fails("provider_unavailable")(e)&&!String(e).includes("DATABASE_URL"));
+  assert.equal(reads,0);
+});
+test("PER-1173: over-budget skill bytes fail closed after authorization",async()=>{
+  const r=createCapabilityResolver({
+    async authorize(){},
+    async workflow(){throw Error("unexpected");},
+    async skill(){return {content:"x".repeat(520_000),commitSha:A};},
+  });
+  await assert.rejects(r.resolve(actor,skill()),fails("content_oversized"));
+});

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { authorizeTenantRequest, TenantContextError } from "@/server/control-plane/tenant-context";
 import { createApiErrorResponse } from "@/server/control-plane/control-plane-response";
-import { readJsonObject } from "@/server/control-plane/request-validation";
+import { readWorkflowRequestObject } from "@/server/workflows/request";
 import { GitProviderError } from "@/server/git/errors";
 import { workflowArtifacts } from "@/server/workflows/runtime";
 import { WorkflowArtifactError } from "@/server/workflows/workflow-artifacts";
@@ -45,7 +45,7 @@ export async function GET(request: Request, context: Params) {
 export async function PUT(request: Request, context: Params) {
   try {
     const tenant = await authorizeTenantRequest(request);
-    const body = await readJsonObject(request);
+    const body = await readWorkflowRequestObject(request);
     if (!body) return NextResponse.json(createApiErrorResponse("invalid_json_body", "Expected a JSON object."), { status: 400 });
     const { workflowId } = await context.params;
     const expected = body.expectedBlobSha;

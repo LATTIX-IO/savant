@@ -1,4 +1,4 @@
-import type { WorkflowSpecification, WorkflowNode, WorkflowPort, WorkflowEdge } from "@savant/types/workflow-specification";
+import type { WorkflowSpecification, WorkflowNode, WorkflowPort } from "@savant/types/workflow-specification";
 
 export class WorkflowSpecError extends Error {
   constructor(public readonly code: string, public readonly path: string) {

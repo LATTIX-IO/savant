@@ -25,6 +25,10 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const PATH = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
 
+const SEMVER_PRERELEASE_ID = "(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)";
+const SEMVER_SCHEMA_PATTERN =
+  "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-" +
+  SEMVER_PRERELEASE_ID + "(?:\\." + SEMVER_PRERELEASE_ID + ")*)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$";
 /** JSON Schema 2020-12; runtime parser additionally enforces bounded JSON and safe prototypes. */
 export const capabilityReferenceJsonSchema = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -36,7 +40,7 @@ export const capabilityReferenceJsonSchema = {
     kind: { enum: KINDS },
     organizationId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", not: {pattern: "\\.\\."} },
     artifactId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", not: {pattern: "\\.\\."} },
-    version: {type:"string", maxLength:128, pattern:"^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    version: {type:"string", maxLength:128, pattern: SEMVER_SCHEMA_PATTERN},
     contentHash: {type:"string", pattern:"^sha256:[0-9a-fA-F]{64}$"},
     locator: {oneOf:[
       {type:"object", additionalProperties:false, required:["source","repositoryId","path","commitSha"],properties:{
@@ -45,7 +49,7 @@ export const capabilityReferenceJsonSchema = {
         commitSha:{type:"string",pattern:"^[0-9a-fA-F]{40}$"},
       }},
       {type:"object",additionalProperties:false,required:["source","recordId"],properties:{
-        source:{const:"database"},recordId:{type:"string",minLength:1,maxLength:128},
+        source:{const:"database"},recordId:{type:"string",pattern:"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$",not:{pattern:"\\.\\."}},
       }},
     ]},
     extensions:{type:"object"},

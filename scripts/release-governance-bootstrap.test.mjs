@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   REQUIRED_RELEASE_CHECKS, BootstrapError, compileGovernancePlan, validateApproval,
-  preflight, applyGovernancePlan, makeAdminAdapter, executeBootstrap, assertCanonicalPlan
+  preflight, applyGovernancePlan, makeAdminAdapter, executeBootstrap, assertCanonicalPlan, verifyBootstrappedControls
 } from "./release-governance-bootstrap.mjs";
 import { auditGovernance } from "./release-controls-audit.mjs";
 
@@ -317,20 +317,17 @@ test("PER-1221 verified post-apply checks detect silent reviewer or required-con
   }),/post_apply_control_drift/);
 });
 
-test("PER-1221 post-apply verification fails closed on missing or malformed approval counts",async()=>{
-  for(const bad of [undefined, null, "1", "2", 0, -1, 1.5, NaN]){
+test("PER-1221 malformed approval counts fail closed in both full audit and strict post-apply verification",async()=>{
+  for(const bad of [undefined,null,"1","2",0,-1,1.5,NaN]){
     const f=fixture();
-    await assert.rejects(applyGovernancePlan(plan(),{
-      read:f.read,confirmation:"PROTECT-LATTIX-IO-savant",
-      write:async(...args)=>{
-        const response=await f.write(...args);
-        if(args[1].endsWith("/rulesets") && args[2].target==="branch"){
-          const rule=f.state.rulesets[0].rules.find(r=>r.type==="pull_request");
-          rule.parameters.required_approving_review_count=bad;
-        }
-        return response;
-      }
-    }),/post_apply_control_drift/,String(bad));
+    await applyGovernancePlan(plan(),{
+      read:f.read, write:f.write, confirmation:"PROTECT-LATTIX-IO-savant"
+    });
+    const live=f.state.rulesets[0].rules.find(r=>r.type==="pull_request");
+    live.parameters.required_approving_review_count=bad;
+    await assert.rejects(verifyBootstrappedControls(plan(),f.read),/post_apply_control_drift/,String(bad));
+    const result=await auditGovernance(REPO,f.read);
+    assert.equal(result.ready,false,String(bad));
     assert.equal(f.state.flag,"false");
   }
 });

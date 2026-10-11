@@ -21,3 +21,21 @@ create index if not exists workflow_artifact_versions_latest_idx
 -- reading workflows/*.json at Git revisions. Never infer history from skill rows.
 comment on table workflow_artifact_versions is
   'Rebuildable tenant Git workflow metadata only. Complete specifications and native provider payloads remain in tenant Git.';
+
+-- Enforce organization/repository consistency in the database itself, including
+-- callers outside the BFF (defense against cross-tenant metadata injection).
+create unique index if not exists repositories_organization_id_id_key
+  on repositories (organization_id, id);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'workflow_artifact_versions_org_repository_fk'
+  ) then
+    alter table workflow_artifact_versions
+      add constraint workflow_artifact_versions_org_repository_fk
+      foreign key (organization_id, repository_id)
+      references repositories (organization_id, id) on delete cascade;
+  end if;
+end $$;

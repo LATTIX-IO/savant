@@ -73,7 +73,7 @@ test("PER-1082: optimistic concurrency and Git errors fail without partial index
   const first = await service.save(owner, repo, "triage", specification(), null);
   const updated = { ...specification(), version: "1.0.1" };
   await assert.rejects(service.save(owner, repo, "triage", updated, null), error("revision_conflict"));
-  await assert.rejects(service.save(owner, repo, "triage", updated, "wrong"), error("revision_conflict"));
+  await assert.rejects(service.save(owner, repo, "triage", updated, "f".repeat(40)), error("revision_conflict"));
   state.failWrite = true;
   await assert.rejects(service.save(owner, repo, "triage", updated, first.blobSha), error("git_unavailable"));
   assert.equal(state.indexes, 1);

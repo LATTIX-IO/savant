@@ -3,6 +3,24 @@ export class ArtifactPolicyClientError extends Error {
   readonly status: number;
   constructor(code: string, status = 422) { super(code); this.name = "ArtifactPolicyClientError"; this.code = code; this.status = status; }
 }
+
+/**
+ * A POST that loses its response may already have committed. Never state that
+ * a failed policy mutation was rolled back. Require a fresh authorized read.
+ */
+export function describeArtifactPolicyError(error:unknown, mutation=false):string {
+  if(mutation){
+    return "Policy change outcome is unknown. Inspect the current rules before another edit.";
+  }
+  if(error instanceof ArtifactPolicyClientError){
+    if([401,403,404].includes(error.status))return "Not authorized to inspect this artifact or repository.";
+    if(error.status===409)return "Policy revision changed. Inspect the current rules again.";
+    if(error.status===503)return "Policy administration is unavailable. Try inspecting again.";
+    return `Policy inspection failed (${error.code}).`;
+  }
+  return "Policy inspection failed. Try inspecting again.";
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const ARTIFACT = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 export type ArtifactScope = {repositoryId:string;kind:"skill"|"workflow_spec";artifactId:string};

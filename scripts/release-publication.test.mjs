@@ -131,3 +131,47 @@ test("PER-1207: only manual protected job writes, verified attestation and no au
   assert.doesNotMatch(flow,/^\s*if:\s*github.ref\s*==/m);
   assert.doesNotMatch(flow,/--force|git push|git tag -f|release delete/);
 });
+
+test("PER-1207: authorized new release publishes exactly once and checks server digest",async()=>{
+  const f=fixture();let calls=0,created=0,args;
+  try{
+    const result=await publishSourceRelease(f.request,{dir:f.dir,git:fakeGit,token:"dummy",
+      fetcher:async()=>{
+        calls++;
+        return calls===1 ? new Response(null,{status:404}) :
+          new Response(JSON.stringify({tag_name:f.request.version,draft:false,prerelease:false,assets:existing(f.request,f.manifest).assets}),{status:200});
+      },
+      runGh:(_exe,passed)=>{created++;args=passed;return Buffer.from("");}
+    });
+    assert.equal(result.state,"published_verified");
+    assert.equal(calls,2);
+    assert.equal(created,1);
+    assert.ok(args.includes("--verify-tag"));
+    assert.ok(args.includes("--target"));
+    assert.ok(args.includes(f.request.commit));
+    assert.ok(args.some(s=>String(s).endsWith("SHA256SUMS")));
+    assert.ok(!args.includes("--clobber"));
+  }finally{f.dispose();}
+});
+test("PER-1207: publication race accepts identical remote and rejects changed digest",async()=>{
+  const f=fixture();
+  try{
+    let calls=0;
+    const result=await publishSourceRelease(f.request,{dir:f.dir,git:fakeGit,token:"dummy",
+      fetcher:async()=>{
+        calls++;
+        return calls===1?new Response(null,{status:404}):
+          new Response(JSON.stringify({tag_name:f.request.version,draft:false,prerelease:false,assets:existing(f.request,f.manifest).assets}),{status:200});
+      },
+      runGh:()=>{throw Error("release already exists");}
+    });
+    assert.equal(result.state,"existing_verified");
+    let after=0;
+    await assert.rejects(publishSourceRelease(f.request,{dir:f.dir,git:fakeGit,token:"dummy",
+      fetcher:async()=>++after===1?new Response(null,{status:404}):
+        new Response(JSON.stringify({tag_name:f.request.version,draft:false,prerelease:false,
+          assets:existing(f.request,{...f.manifest,sha256:"e".repeat(64)}).assets}),{status:200}),
+      runGh:()=>{throw Error("raced");}
+    }),/conflict/);
+  }finally{f.dispose();}
+});

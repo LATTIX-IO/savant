@@ -4,6 +4,14 @@ const MAX_WORKFLOW_REQUEST_BYTES = 750_000;
 
 /** Read an untrusted request with an enforced byte budget before JSON decoding. */
 export async function readWorkflowRequestObject(request: Request): Promise<Record<string, unknown>> {
+  const contentType = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
+  if (contentType !== "application/json") throw new WorkflowArtifactError("unsupported_media_type", 415);
+  const origin = request.headers.get("origin");
+  if (origin) {
+    let expected: string;
+    try { expected = new URL(origin).origin; } catch { throw new WorkflowArtifactError("request_origin_denied", 403); }
+    if (expected !== new URL(request.url).origin) throw new WorkflowArtifactError("request_origin_denied", 403);
+  }
   const advertised = request.headers.get("content-length");
   if (advertised !== null && Number(advertised) > MAX_WORKFLOW_REQUEST_BYTES) {
     throw new WorkflowArtifactError("workflow_request_oversized", 413);

@@ -128,3 +128,33 @@ test("PER-1082: replay after SQL recovery repairs the missing index without crea
   assert.equal(state.writes, 1);
   assert.equal(state.indexes, 1);
 });
+
+test("SAV-14: authenticated workflow read and save expose an immutable tenant-derived capability IR ref", async () => {
+  const { service } = harness();
+  const created = await service.save(owner, repo, "triage", specification(), null);
+  assert.equal(created.capabilityProjection?.status, "ready");
+  if (created.capabilityProjection?.status !== "ready") return;
+  const ref = created.capabilityProjection.reference;
+  assert.equal(ref.organizationId, owner.organizationId);
+  assert.equal(ref.kind, "workflow_spec");
+  assert.equal(ref.artifactId, "triage");
+  assert.equal(ref.contentHash, "sha256:" + created.digest);
+  assert.deepEqual(ref.locator, {
+    source: "git", repositoryId: repo,
+    path: "workflows/triage.json", commitSha: created.commitSha,
+  });
+  const retrieved = await service.get(read, repo, "triage");
+  assert.deepEqual(retrieved.capabilityProjection, created.capabilityProjection);
+  await assert.rejects(service.get({organizationId: "foreign", actor: "owner"},repo,"triage"), error("repository_not_found"));
+});
+
+test("SAV-14: pre-existing non-SemVer workflow remains accessible with truthful unavailable projection", async () => {
+  const {service,state} = harness();
+  const raw = { ...specification(), version: "legacy-label" };
+  const saved = await service.save(owner, repo, "triage", raw, null);
+  assert.deepEqual(saved.capabilityProjection, { status:"unavailable", reason:"version_invalid" });
+  assert.equal(state.writes, 1);
+  const existing = await service.get(read, repo, "triage");
+  assert.equal(existing.specification.version, "legacy-label");
+  assert.deepEqual(existing.capabilityProjection, { status:"unavailable", reason:"version_invalid" });
+});

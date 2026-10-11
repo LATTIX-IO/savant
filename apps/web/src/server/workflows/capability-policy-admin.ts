@@ -116,7 +116,9 @@ export function createCapabilityPolicyAdmin(sql:ControlPlaneSql){
           return {revision:revisionNumber(replay[0].resulting_revision),changed:replay[0].changed,replayed:true};
         }
         if(current!==expectedRevision)failure("policy_revision_conflict",409);
-        await validatePrincipal(tx as unknown as ControlPlaneSql,actor,input);
+        // Revocation must remain possible after offboarding/deleting a principal.
+        // Only grants need a currently active, same-tenant principal.
+        if(input.operation==="grant")await validatePrincipal(tx as unknown as ControlPlaneSql,actor,input);
         let changed:boolean;
         if(input.operation==="grant"){
           const rows=await tx<{id:string}[]>`

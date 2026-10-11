@@ -61,7 +61,7 @@ export function createCapabilityPolicyAdmin(sql:ControlPlaneSql){
   return {
     async list(actor:PolicyActor,scope:PolicyScope):Promise<{revision:number;rules:PolicyRule[]}>{
       return sql.begin(async tx=>{
-        await authorizeAdmin(tx as ControlPlaneSql,actor,scope);
+        await authorizeAdmin(tx as unknown as ControlPlaneSql,actor,scope);
         const versions=await tx<RevisionRow[]>`
           select revision from capability_artifact_policy_revisions
           where organization_id=${actor.organizationId}
@@ -91,7 +91,7 @@ export function createCapabilityPolicyAdmin(sql:ControlPlaneSql){
         failure("policy_precondition_required",428);
       const hash=policyMutationDigest(input);
       return sql.begin(async tx=>{
-        await authorizeAdmin(tx as ControlPlaneSql,actor,input);
+        await authorizeAdmin(tx as unknown as ControlPlaneSql,actor,input);
         await tx`
           insert into capability_artifact_policy_revisions
             (organization_id,repository_id,artifact_kind,artifact_id)
@@ -116,7 +116,7 @@ export function createCapabilityPolicyAdmin(sql:ControlPlaneSql){
           return {revision:revisionNumber(replay[0].resulting_revision),changed:replay[0].changed,replayed:true};
         }
         if(current!==expectedRevision)failure("policy_revision_conflict",409);
-        await validatePrincipal(tx as ControlPlaneSql,actor,input);
+        await validatePrincipal(tx as unknown as ControlPlaneSql,actor,input);
         let changed:boolean;
         if(input.operation==="grant"){
           const rows=await tx<{id:string}[]>`

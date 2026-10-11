@@ -32,6 +32,18 @@ async function resolveRepositoryRecord(repo: WorkflowRepository, access: "read" 
     access,
   });
   if (!token.credential.accessToken) throw new WorkflowArtifactError("git_credential_unavailable", 503);
+  // Never trust a stale owner/name alone: a rename/reuse could point to another
+  // repository. Match the exact immutable provider repository identity first.
+  if (!connected.providerRepositoryId) throw new WorkflowArtifactError("repository_identity_unverified", 409);
+  const locator = {
+    provider: "github" as const, host: "github.com",
+    owner: connected.owner, name: connected.name,
+    fullName: connected.fullName, providerRepositoryId: connected.providerRepositoryId,
+  };
+  const accessResult = await token.provider.validateRepositoryAccess(token.credential, locator);
+  if (!accessResult.accessible || accessResult.repository?.providerRepositoryId !== connected.providerRepositoryId) {
+    throw new WorkflowArtifactError("repository_identity_unverified", 409);
+  }
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(connected.owner)}/${encodeURIComponent(connected.name)}`;
   return { connected, credential: token.credential, apiUrl };
 }

@@ -6,6 +6,7 @@ const REPOSITORY = "LATTIX-IO/savant";
 const SHA = /^[a-f0-9]{40}$/;
 const INT = /^[1-9][0-9]{0,14}$/;
 const MAX_RESPONSE = 1024 * 1024;
+const ACTIONS_APP_ID = 15368; // GitHub Actions App; required status checks must be source-bound.
 const API = "https://api.github.com";
 const REQUIRED = Object.freeze([
   "Savant unit, type, lint, build and secrets",
@@ -44,7 +45,7 @@ export function compileGovernancePlan({repository=REPOSITORY,reviewerId,operator
         required_approving_review_count:1,required_review_thread_resolution:true
       }},
       {type:"required_status_checks",parameters:{
-        required_status_checks:REQUIRED.map(context=>({context})),
+        required_status_checks:REQUIRED.map(context=>({context,integration_id:ACTIONS_APP_ID})),
         strict_required_status_checks_policy:true
       }}
     ]
@@ -96,6 +97,10 @@ export async function preflight(plan,read) {
   assertCanonicalPlan(plan);
   if(typeof read!=="function" || plan?.repository!==REPOSITORY)fail("invalid_preflight");
   const base="/repos/"+REPOSITORY;
+  if(plan.reviewerType==="Team")fail("team_reviewer_membership_unverified");
+  const caller=await read("/user");
+  if(caller?.id!==plan.operatorId || typeof caller?.login!=="string" || !caller.login)
+    fail("operator_identity_mismatch");
   const rep=await read(base);
   if(rep?.default_branch!=="main" || rep?.full_name!==REPOSITORY)fail("wrong_repository_baseline");
   const branch=await read(base+"/branches/main");
@@ -107,7 +112,8 @@ export async function preflight(plan,read) {
   if(!Array.isArray(runs?.check_runs) || !Number.isSafeInteger(runs.total_count) ||
     runs.total_count!==runs.check_runs.length)fail("incomplete_ci_evidence");
   for(const context of REQUIRED){
-    if(!runs.check_runs.some(c=>c.name===context && c.status==="completed" && c.conclusion==="success"))
+    if(!runs.check_runs.some(c=>c.name===context && c.status==="completed" &&
+      c.conclusion==="success" && c.app?.id===ACTIONS_APP_ID && c.app?.slug==="github-actions"))
       fail("required_ci_context_unverified");
   }
   let flag=null, environment=null;
@@ -145,7 +151,8 @@ export async function verifyBootstrappedControls(plan, read) {
       if(rule.type==="required_status_checks"){
         const required=live.parameters?.required_status_checks;
         if(live.parameters?.strict_required_status_checks_policy!==true ||
-           !Array.isArray(required) || !REQUIRED.every(context=>required.some(entry=>entry.context===context)))
+           !Array.isArray(required) || !REQUIRED.every(context=>required.some(entry=>
+             entry.context===context && entry.integration_id===ACTIONS_APP_ID)))
           fail("post_apply_control_drift");
       }else if(rule.type==="pull_request"){
         if(live.parameters?.required_approving_review_count<1 ||
@@ -191,7 +198,7 @@ export function makeAdminAdapter({token,fetcher=fetch}={}) {
   if(typeof token!=="string" || token.trim().length<10 || /[\r\n]/.test(token))fail("missing_admin_token");
   return async(method,path,body,expected)=>{
     if(!["GET","POST","PUT"].includes(method)||typeof path!=="string"||
-      !/^\/repos\/LATTIX-IO\/savant(?:\/[A-Za-z0-9_./?=&-]+)?$/.test(path)||
+      (!(method==="GET"&&path==="/user") && !/^\/repos\/LATTIX-IO\/savant(?:\/[A-Za-z0-9_./?=&-]+)?$/.test(path))||
       path.split("?")[0].split("/").some(s=>s==="."||s===".."))fail("invalid_admin_request");
     const mutations={
       "POST /repos/LATTIX-IO/savant/actions/variables":201,

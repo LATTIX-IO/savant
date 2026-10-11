@@ -20,7 +20,7 @@ export function validatePublishRequest({ version, commit, confirmation, enabled,
   if (ref !== "refs/heads/main") throw Error("publish_requires_main");
   if (enabled !== "true") throw Error("publication_disabled");
   if (confirmation !== "PUBLISH " + version) throw Error("explicit_confirmation_required");
-  if (!REPO.test(repository ?? "")) throw Error("invalid_repository");
+  if (!REPO.test(repository ?? "") || repository.split("/").some(segment => segment === "." || segment === "..")) throw Error("invalid_repository");
   if (!/^[1-9][0-9]{0,19}$/.test(String(runId ?? ""))) throw Error("invalid_run_id");
   return { version, commit, repository, runId: String(runId) };
 }
@@ -66,15 +66,21 @@ export function validateBundle(dir, request) {
   if (JSON.stringify(readdirSync(dir).sort()) !== JSON.stringify(expectedFiles)) throw Error("unexpected_bundle_contents");
   const bytes = readFileSync(path.join(dir, base));
   const provenance = JSON.parse(readFileSync(path.join(dir, "release-provenance.json"), "utf8"));
-  const checksum = readFileSync(path.join(dir, "SHA256SUMS"), "utf8");
+  const checksumBytes = readFileSync(path.join(dir, "SHA256SUMS"));
+  const checksum = checksumBytes.toString("utf8");
+  const manifestBytes = readFileSync(path.join(dir, "release-provenance.json"));
   if (provenance.schema !== "savant.source-release.v1" ||
       provenance.repository !== request.repository || provenance.tag !== request.version ||
       provenance.commit !== request.commit || provenance.archive !== base ||
       !DIGEST.test(provenance.sha256 ?? "") || provenance.bytes !== bytes.length ||
+      String(provenance.runId) !== request.runId ||
       provenance.published !== false || !/^[1-9][0-9]{0,19}$/.test(String(provenance.runId ?? "")) ||
       provenance.sha256 !== digestOf(bytes) ||
       checksum !== provenance.sha256 + "  " + base + "\n") throw Error("release_bundle_integrity_failed");
-  return { base, digest: provenance.sha256, provenance };
+  const files = Object.fromEntries([
+    [base, bytes], ["SHA256SUMS", checksumBytes], ["release-provenance.json", manifestBytes]
+  ].map(([name, content]) => [name, { sha256: digestOf(content), bytes: content.length }]));
+  return { base, digest: provenance.sha256, provenance, files };
 }
 export function stageBundle(request, { executor = run, output = "dist/source-release" } = {}) {
   verifyGitTag(request, executor);
@@ -85,16 +91,21 @@ export function stageBundle(request, { executor = run, output = "dist/source-rel
   writeFileSync(path.join(output, archiveName(request.version)), bytes, { flag: "wx", mode: 0o600 });
   writeFileSync(path.join(output, "SHA256SUMS"), provenance.sha256 + "  " + provenance.archive + "\n", { flag: "wx", mode: 0o600 });
   writeFileSync(path.join(output, "release-provenance.json"), JSON.stringify(provenance, null, 2) + "\n", { flag: "wx", mode: 0o600 });
-  validateBundle(output, request);
-  return provenance;
+  const inspected = validateBundle(output, request);
+  return { ...provenance, files: inspected.files };
 }
 export function classifyExistingRelease(existing, request, manifest) {
   if (existing == null) return "create";
   if (existing.tagName !== request.version || existing.isDraft || existing.isPrerelease !== request.version.includes("-")) throw Error("existing_release_conflict");
   const names = [archiveName(request.version), "SHA256SUMS", "release-provenance.json"].sort();
   if (!Array.isArray(existing.assets) || JSON.stringify(existing.assets.map(a => a.name).sort()) !== JSON.stringify(names)) throw Error("existing_release_conflict");
-  const tar = existing.assets.find(a => a.name === archiveName(request.version));
-  if (tar?.digest !== "sha256:" + manifest.sha256 || tar.size !== manifest.bytes) throw Error("existing_release_conflict");
+  if (!manifest?.files || Object.keys(manifest.files).sort().join("|") !== names.join("|")) throw Error("existing_release_conflict");
+  for (const name of names) {
+    const expectation = manifest.files[name];
+    const asset = existing.assets.find(a => a.name === name);
+    if (!expectation || !DIGEST.test(expectation.sha256) || !Number.isSafeInteger(expectation.bytes) ||
+        asset?.digest !== "sha256:" + expectation.sha256 || asset.size !== expectation.bytes) throw Error("existing_release_conflict");
+  }
   return "unchanged";
 }
 export function parseRequestEnv(env = process.env) {

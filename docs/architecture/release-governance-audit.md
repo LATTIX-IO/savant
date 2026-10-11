@@ -4,11 +4,11 @@ Savant source publication is disabled by default. The operational audit is a **r
 
 ## Operator execution
 
-An authorized repository administrator must supply a short-lived, **read-only** GitHub token capable of reading repository rulesets, the `savant-release` environment, deployment-branch policies, and Actions variables. Do not paste the token into command arguments or commit it.
+An authorized repository administrator must use a short-lived credential that can provide **complete** GitHub ruleset evidence, including `bypass_actors`, and can read the `savant-release` environment, deployment-branch policies, and Actions variables. **GitHub omits `bypass_actors` unless the caller has ruleset write access.** A read-only GitHub token cannot prove the no-bypass requirement; the audit will fail closed rather than treating missing evidence as an empty bypass list. Use a dedicated GitHub App installation token with the minimum required ruleset administration permission, not a personal access token. The auditor itself makes only GET requests, but the credential can carry administrative write authority and must be handled as privileged.
 
 ```bash
 export GITHUB_REPOSITORY=LATTIX-IO/savant
-export GH_TOKEN=<read-only admin token>
+export GH_TOKEN=<ephemeral, repository-scoped ruleset-evidence token>
 node scripts/release-controls-audit.mjs > release-governance-audit.json
 ```
 
@@ -30,7 +30,9 @@ A successful CI check for this audit only proves the deterministic checks agains
 
 The approved `savant-release` publish job now invokes the same read-only governance auditor **after** the protected-environment gate and **before** verifying the release attestation or invoking `gh release create`. The workflow pins the mode to `SAVANT_GOVERNANCE_MODE=publish`; unlike the default offline audit mode, this verifies that the repository-level publication variable is explicitly `true`. All other seven security controls remain mandatory in both modes.
 
-Configure an environment-scoped secret named `SAVANT_GOVERNANCE_READ_TOKEN` in `savant-release`, using a short-lived, repository-bound, **read-only** fine-grained credential or GitHub App installation token with sufficient GitHub administration-metadata, environment and Actions-variable read permissions. Validate the effective scopes before the first manual run. Do not use an administrative write token or the `contents: write` release publishing token for this inspection. The read-only secret is exposed to the audit step only, never the build/prepare job or the publication command.
+Create a dedicated GitHub App installed **only on the Savant repository**, with repository Administration (write), Actions (read), and Environments (read) permissions. GitHub's ruleset API requires ruleset write authority to reveal `bypass_actors` even for a GET; if organization-owned rulesets are applicable, separately verify whether they are visible with the App and fail closed if not. Place `SAVANT_GOVERNANCE_APP_CLIENT_ID` as an environment-level variable and `SAVANT_GOVERNANCE_APP_PRIVATE_KEY` as an environment-level secret in the protected `savant-release` environment. Do not expose either to the prepare job.
+
+After independent environment approval, the SHA-pinned first-party `actions/create-github-app-token` action mints a short-lived, single-repository installation token with **Administration (write)**, Actions (read), and Environments (read). The token is accessible only to the GET-only governance audit step; it is not passed to `gh release create` and is revoked by the action's job cleanup. The regular `contents: write` release token remains separate. Although API usage is GET-only, compromising this privileged token could allow ruleset changes; use strict environment approval, repository-restricted App installation, key rotation, and keep publishing disabled unless this elevated verification mechanism is explicitly accepted. An audit with omitted `bypass_actors` must never pass.
 
 The publish job returns a failing result when the secret is missing, the GitHub administration endpoints reject it, the variable is disabled, or branch/tag/reviewer policy has drifted. The CLI emits only fixed boolean controls and stable problem codes. This is a live **just-in-time posture check**, not a substitute for platform-enforced environment approvals or immutable repository rulesets.
 

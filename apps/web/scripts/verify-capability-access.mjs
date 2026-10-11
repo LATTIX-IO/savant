@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { performance } from "node:perf_hooks";
 import postgres from "postgres";
 import { authorizeCapabilityRepository } from "../src/server/workflows/capability-access.ts";
+import { createCapabilityResolver } from "../src/server/workflows/capability-resolver.ts";
+import { createCapabilityLinkService } from "../src/server/workflows/capability-links.ts";
 
 const uri=process.env.DATABASE_URL;
 if(process.env.SAVANT_WORKFLOW_SCHEMA_TEST!=="1"||!uri||!["localhost","127.0.0.1","::1"].includes(new URL(uri).hostname)){
@@ -60,8 +62,40 @@ try{
   times.sort((x,y)=>x-y);
   const p95=times[Math.ceil(times.length*0.95)-1];
   assert.ok(p95<3000,"Local DB ACL p95 regression guard is not production SLO");
+  // Live PostgreSQL two-repository batch negative test: the second denial must
+  // complete before a simulated provider ever sees the first repository.
+  const [secondRepo] = await sql`insert into repositories(organization_id,provider_type,owner_name,repo_name,default_branch)
+    values(${a.id},'github','capability-tests',${"second-"+slug},'main') returning id`;
+  await sql`insert into repository_permissions(repository_id,permission_key,granted_to_type,granted_to_ref)
+    values(${secondRepo.id},'read','user',${owner.id})`;
+  const sha = "a".repeat(40), digest = "b".repeat(64);
+  const ref = (name, repositoryId) => ({
+    schemaVersion: 1, kind: "workflow_spec", organizationId: a.id,
+    artifactId: name, version: "1.0.0", contentHash: "sha256:" + digest,
+    locator: {source:"git", repositoryId, path:"workflows/"+name+".json", commitSha:sha},
+  });
+  let providerReads = 0;
+  const resolver = createCapabilityResolver({
+    async authorize(actor,reference) {
+      await authorizeCapabilityRepository(sql,actor,reference.locator.repositoryId);
+    },
+    async workflow(_actor,reference) {
+      providerReads++;
+      return {specification:{workflowId:reference.artifactId,version:reference.version},digest,commitSha:sha};
+    },
+    async skill() {throw Error("not used");},
+  });
+  const linkService = createCapabilityLinkService(resolver);
+  const graph = {links:[{relation:"depends_on",from:ref("one",repo.id),to:ref("two",secondRepo.id)}]};
+  await assert.rejects(linkService.resolve(memberActor,graph),denied);
+  assert.equal(providerReads,0,"cross-repo denial before any simulated provider read");
+  await sql`insert into repository_permissions(repository_id,permission_key,granted_to_type,granted_to_ref)
+    values(${secondRepo.id},'source:read','user',${member.id})`;
+  const verified = await linkService.resolve(memberActor,graph);
+  assert.equal(verified.nodeCount,2);
+  assert.equal(providerReads,2);
   console.log(JSON.stringify({scope:"capability_acl",tenantIsolation:true,explicitAcl:true,
-    groupGrant:true,unknownPermissionDenied:true,disabledDenied:true,
+    groupGrant:true,unknownPermissionDenied:true,disabledDenied:true,crossRepoLinkPreflight:true,
     localPgP95Ms:Number(p95.toFixed(3)),samples:times.length}));
 }finally{
   if(a)await sql`delete from organizations where id=${a.id}`;

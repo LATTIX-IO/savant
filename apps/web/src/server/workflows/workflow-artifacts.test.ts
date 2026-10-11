@@ -56,7 +56,7 @@ test("PER-1082: tenant owner saves canonical version, reads it, then repeat is i
   assert.equal(repeated.commitSha, saved.commitSha);
   assert.equal(repeated.replayed, true);
   assert.equal(state.writes, 1);
-  assert.equal(state.indexes, 1);
+  assert.equal(state.indexes, 2);
 });
 
 test("PER-1082: writer denied before Git and foreign tenant cannot read or mutate", async () => {
@@ -113,4 +113,18 @@ test("PER-1082: malformed path identifiers rejected before read", async () => {
   const { service } = harness();
   await assert.rejects(service.get(read, repo, "../other"), error("workflow_id_invalid"));
   await assert.rejects(service.get(read, repo, "a/b"), error("workflow_id_invalid"));
+});
+
+test("PER-1082: replay after SQL recovery repairs the missing index without creating a second commit", async () => {
+  const { service, state } = harness();
+  state.failIndex = true;
+  const first = await service.save(owner, repo, "triage", specification(), null);
+  assert.equal(first.reconciliationRequired, true);
+  state.failIndex = false;
+  const second = await service.save(owner, repo, "triage", specification(), null);
+  assert.equal(second.replayed, true);
+  assert.equal(second.indexed, true);
+  assert.equal(second.commitSha, first.commitSha);
+  assert.equal(state.writes, 1);
+  assert.equal(state.indexes, 1);
 });

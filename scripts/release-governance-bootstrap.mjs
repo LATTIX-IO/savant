@@ -74,12 +74,26 @@ export function compileGovernancePlan({repository=REPOSITORY,reviewerId,operator
     ]
   };
 }
+export function assertCanonicalPlan(plan) {
+  if (!plan || typeof plan !== "object" || plan.schema !== "savant.github-governance-bootstrap.v1") fail("invalid_bootstrap_plan");
+  const canonical=compileGovernancePlan({
+    repository:plan.repository,
+    reviewerId:String(plan.reviewerId),
+    operatorId:String(plan.operatorId),
+    reviewerType:plan.reviewerType
+  });
+  if(JSON.stringify(plan.operations)!==JSON.stringify(canonical.operations) ||
+     plan.publicationEnabled!==false || plan.repository!==REPOSITORY)fail("modified_bootstrap_plan");
+  return canonical;
+}
+
 export function validateApproval(argv=[]) {
   if(argv.length===0)return "plan";
   if(argv.length===2 && argv[0]==="--apply" && argv[1]==="--confirm=PROTECT-LATTIX-IO-savant")return "apply";
   fail("explicit_operator_approval_required");
 }
 export async function preflight(plan,read) {
+  assertCanonicalPlan(plan);
   if(typeof read!=="function" || plan?.repository!==REPOSITORY)fail("invalid_preflight");
   const base="/repos/"+REPOSITORY;
   const rep=await read(base);
@@ -109,10 +123,11 @@ export async function preflight(plan,read) {
 export async function applyGovernancePlan(plan, {read,write,confirmation}={}) {
   if(confirmation!=="PROTECT-LATTIX-IO-savant")fail("explicit_operator_approval_required");
   if(typeof write!=="function")fail("missing_write_adapter");
-  const prior=await preflight(plan,read); // zero writes before all checks
+  const canonical=assertCanonicalPlan(plan);
+  const prior=await preflight(canonical,read); // zero writes before all checks
   let created=0;
   try {
-    for(const operation of plan.operations){
+    for(const operation of canonical.operations){
       if(operation.onMissingOnly && !prior.createVariable)continue;
       const result=await write(operation.method,operation.path,operation.body,operation.expected??201);
       if(!result || result.status!==(operation.expected??201))fail("administrative_write_not_confirmed");
@@ -132,8 +147,14 @@ export function makeAdminAdapter({token,fetcher=fetch}={}) {
     if(!["GET","POST","PUT"].includes(method)||typeof path!=="string"||
       !/^\/repos\/LATTIX-IO\/savant(?:\/[A-Za-z0-9_./?=&-]+)?$/.test(path)||
       path.split("?")[0].split("/").some(s=>s==="."||s===".."))fail("invalid_admin_request");
-    if(method!=="GET" && (!body||typeof body!=="object"||!Number.isInteger(expected)))
-      fail("invalid_admin_mutation");
+    const mutations={
+      "POST "+"/repos/LATTIX-IO/savant/actions/variables":201,
+      "POST "+"/repos/LATTIX-IO/savant/rulesets":201,
+      "PUT "+"/repos/LATTIX-IO/savant/environments/savant-release":200,
+      "POST "+"/repos/LATTIX-IO/savant/environments/savant-release/deployment-branch-policies":200
+    };
+    if(method!=="GET" && (!body||typeof body!=="object"||
+        mutations[method+" "+path]!==expected))fail("invalid_admin_mutation");
     let response;
     try{response=await fetcher(API+path,{
       method,redirect:"error",cache:"no-store",

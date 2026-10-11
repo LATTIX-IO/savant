@@ -185,13 +185,14 @@ export function migrateLegacySkillReference(input: {
   if (!isRecord(original)) fail("invalid_json", "$.skill");
   const losses: CapabilityLossEntry[] = [];
   if (!semver(original.version)) losses.push(loss("version_unrecognized", "Legacy version does not comply with SemVer; no synthetic version was assigned."));
-  if (!input.repositoryId) losses.push(loss("repository_missing", "No tenant-scoped repository identifier was supplied."));
+  if (!input.repositoryId || !ID.test(input.repositoryId) || input.repositoryId.includes("..")) losses.push(loss("repository_missing", "No valid tenant-scoped repository identifier was supplied."));
+  if (typeof original.id !== "string" || !ID.test(original.id) || original.id.includes("..")) losses.push(loss("identity_missing", "No valid legacy skill identity was supplied."));
   const projection = isRecord(original.projection) ? original.projection : null;
-  if (typeof projection?.sourcePath !== "string" || !PATH.test(projection.sourcePath)) losses.push(loss("path_missing", "No valid Git-relative source path was indexed."));
+  if (typeof projection?.sourcePath !== "string" || !PATH.test(projection.sourcePath) || projection.sourcePath.split("/").some(p => p === "." || p === "..")) losses.push(loss("path_missing", "No valid Git-relative source path was indexed."));
   if (typeof projection?.sourceCommitSha !== "string" || !SHA1.test(projection.sourceCommitSha)) losses.push(loss("commit_missing", "No immutable source commit was indexed."));
   const hash = original.contentHash;
   if (typeof hash !== "string" || !SHA256.test(hash)) losses.push(loss("digest_missing", "The legacy index had no canonical SHA-256 digest; integrity is revision-only."));
-  if (losses.some(entry => entry.code !== "digest_missing") || typeof original.id !== "string") {
+  if (losses.some(entry => entry.code !== "digest_missing")) {
     return { status: "unresolved", original, lossReport: losses };
   }
   const obj: Record<string, unknown> = {

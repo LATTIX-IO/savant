@@ -108,3 +108,28 @@ test("SAV-14: organizational scope and revision remain immutable in the original
   assert.equal(parsed.locator.source, "git");
   if (parsed.locator.source === "git") assert.equal(parsed.locator.repositoryId, "repo-a");
 });
+
+test("SAV-14: legacy migration rejects traversal and invalid identifiers as unresolved loss, never an exception", () => {
+  const base = {
+    id: "good", version: "1.0.0", contentHash: "sha256:" + HASH,
+    projection: { sourcePath: "tier3/workflow/good/SKILL.md", sourceCommitSha: SHA },
+  };
+  const badPath = migrateLegacySkillReference({
+    organizationId: "tenant-a", repositoryId: "repo-a",
+    skill: { ...base, projection: { ...base.projection, sourcePath: "../other" } },
+  });
+  assert.equal(badPath.status, "unresolved");
+  assert.ok(badPath.lossReport.some(x => x.code === "path_missing"));
+
+  const badId = migrateLegacySkillReference({
+    organizationId: "tenant-a", repositoryId: "repo-a", skill: { ...base, id: "../unknown" },
+  });
+  assert.equal(badId.status, "unresolved");
+  assert.ok(badId.lossReport.some(x => x.code === "identity_missing"));
+
+  const badRepo = migrateLegacySkillReference({
+    organizationId: "tenant-a", repositoryId: "bad..repo", skill: base,
+  });
+  assert.equal(badRepo.status, "unresolved");
+  assert.ok(badRepo.lossReport.some(x => x.code === "repository_missing"));
+});

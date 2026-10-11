@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { gunzipSync } from "node:zlib";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, renameSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, renameSync, copyFileSync, linkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import {
@@ -149,6 +149,9 @@ test("PER-1220 tampering: archive, checksum, provenance, unexpected file and sym
     writeFileSync(sumPath,"0".repeat(64)+"  "+archiveName(VERSION)+"\n");
     assert.throws(()=>validateBundle(stageDir,f.request),/integrity/);
     writeFileSync(sumPath,sum);
+    writeFileSync(sumPath,Buffer.alloc(1024*1024+1,120));
+    assert.throws(()=>validateBundle(stageDir,f.request),/unsafe_bundle_entry/);
+    writeFileSync(sumPath,sum);
     const provPath=join(stageDir,"release-provenance.json");
     const provenance=readFileSync(provPath);
     const forged=JSON.parse(provenance.toString("utf8"));
@@ -164,6 +167,11 @@ test("PER-1220 tampering: archive, checksum, provenance, unexpected file and sym
       const saved=join(f.root,"saved-archive.tar.gz");
       renameSync(archive,saved);
       symlinkSync(saved,archive);
+      assert.throws(()=>validateBundle(stageDir,f.request),/unsafe_bundle_entry/);
+      rmSync(archive);
+      copyFileSync(saved,archive);
+      const hardlink=join(f.root,"hardlinked-archive");
+      linkSync(archive,hardlink);
       assert.throws(()=>validateBundle(stageDir,f.request),/unsafe_bundle_entry/);
     }
   }finally{f.cleanup();}

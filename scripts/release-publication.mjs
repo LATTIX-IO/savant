@@ -13,7 +13,7 @@ export const archiveName = (version) => "savant-" + version + ".tar.gz";
 export const digestOf = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
 export function validatePublishRequest({ version, commit, confirmation, enabled, ref, repository, runId }) {
-  if (typeof version !== "string") throw Error("invalid_version");
+  if (typeof version !== "string" || /[\r\n\t]/.test(version)) throw Error("invalid_version");
   validateReleaseVersion(version, version.slice(1));
   if (!SHA.test(commit ?? "")) throw Error("invalid_commit");
   if (ref !== "refs/heads/main") throw Error("publish_requires_main");

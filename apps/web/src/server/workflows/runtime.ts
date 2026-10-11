@@ -14,7 +14,7 @@ const GITHUB_SHA = /^[a-fA-F0-9]{40}$/;
 type GitHubContent = { type?: string; encoding?: string; content?: string; sha?: string };
 type GitHubWritten = { content?: { sha?: string }; commit?: { sha?: string } };
 
-async function resolveRepositoryRecord(repo: WorkflowRepository): Promise<{
+async function resolveRepositoryRecord(repo: WorkflowRepository, access: "read" | "write"): Promise<{
   connected: ConnectedRepositoryRecord;
   credential: RuntimeCredential;
   apiUrl: string;
@@ -29,7 +29,7 @@ async function resolveRepositoryRecord(repo: WorkflowRepository): Promise<{
   );
   const token = await git.broker.resolve({
     organizationId: repo.organizationId, connectionId: resolved.connection.id,
-    access: "repository_read",
+    access,
   });
   if (!token.credential.accessToken) throw new WorkflowArtifactError("git_credential_unavailable", 503);
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(connected.owner)}/${encodeURIComponent(connected.name)}`;
@@ -97,7 +97,7 @@ export const workflowArtifacts = createWorkflowArtifactService({
     }
   },
   async read(repo, path, revision) {
-    const { credential, apiUrl } = await resolveRepositoryRecord(repo);
+    const { credential, apiUrl } = await resolveRepositoryRecord(repo, "read");
     const sha = revision ?? await headRevision(apiUrl, credential, repo.branch);
     if (!GITHUB_SHA.test(sha)) throw new WorkflowArtifactError("revision_invalid", 400);
     const data = await githubCall<GitHubContent>(
@@ -112,7 +112,7 @@ export const workflowArtifacts = createWorkflowArtifactService({
     return { content: bytes.toString("utf8"), blobSha: data.sha, commitSha: sha };
   },
   async write(repo, path, content, expectedBlobSha) {
-    const { credential, apiUrl } = await resolveRepositoryRecord(repo);
+    const { credential, apiUrl } = await resolveRepositoryRecord(repo, "write");
     const result = await githubCall<GitHubWritten>(pathUrl(apiUrl, path), credential, "PUT", {
       message: `chore(workflow): update ${path}`,
       content: Buffer.from(content, "utf8").toString("base64"),

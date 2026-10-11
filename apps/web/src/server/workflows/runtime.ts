@@ -98,7 +98,8 @@ export const workflowArtifacts = createWorkflowArtifactService({
       select status from repositories where organization_id = ${organizationId}
       and id = ${repositoryId} limit 1
     `;
-    if (rows[0]?.status === "disabled") throw new WorkflowArtifactError("repository_disabled", 409);
+    if (!rows[0]) throw new WorkflowArtifactError("repository_not_found", 404);
+    if (rows[0].status === "disabled") throw new WorkflowArtifactError("repository_disabled", 409);
     return { id: repo.id, organizationId: repo.organizationId, provider: repo.provider, branch: repo.defaultBranch };
   },
   async authorizeWrite(subject, organizationId) {

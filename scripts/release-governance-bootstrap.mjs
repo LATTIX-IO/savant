@@ -120,6 +120,51 @@ export async function preflight(plan,read) {
   if(environment!==null)fail("existing_environment_requires_manual_reconciliation");
   return {mainSha:sha,createVariable:flag===null};
 }
+export async function verifyBootstrappedControls(plan, read) {
+  const desired=assertCanonicalPlan(plan);
+  const base="/repos/"+REPOSITORY;
+  const summaries=await read(base+"/rulesets?includes_parents=true&per_page=100");
+  if(!Array.isArray(summaries))fail("post_apply_control_drift");
+  const details=[];
+  for(const summary of summaries){
+    if(!Number.isSafeInteger(summary?.id)||summary.id<1)fail("post_apply_control_drift");
+    details.push(await read(base+"/rulesets/"+summary.id));
+  }
+  for(const operation of desired.operations.filter(o=>o.path.endsWith("/rulesets"))){
+    const expected=operation.body;
+    const matches=details.filter(d=>d.name===expected.name && d.target===expected.target);
+    if(matches.length!==1)fail("post_apply_control_drift");
+    const actual=matches[0];
+    if(actual.enforcement!=="active" || !Array.isArray(actual.bypass_actors) || actual.bypass_actors.length ||
+       JSON.stringify(actual.conditions?.ref_name)!==JSON.stringify(expected.conditions.ref_name))
+      fail("post_apply_control_drift");
+    const actualRules=new Map(actual.rules?.map(r=>[r.type,r])||[]);
+    for(const rule of expected.rules){
+      const live=actualRules.get(rule.type);
+      if(!live)fail("post_apply_control_drift");
+      if(rule.type==="required_status_checks"){
+        const required=live.parameters?.required_status_checks;
+        if(live.parameters?.strict_required_status_checks_policy!==true ||
+           !Array.isArray(required) || !REQUIRED.every(context=>required.some(entry=>entry.context===context)))
+          fail("post_apply_control_drift");
+      }else if(rule.type==="pull_request"){
+        if(live.parameters?.required_approving_review_count<1 ||
+           live.parameters?.dismiss_stale_reviews_on_push!==true ||
+           live.parameters?.require_last_push_approval!==true ||
+           live.parameters?.required_review_thread_resolution!==true)
+          fail("post_apply_control_drift");
+      }
+    }
+  }
+  const environment=await read(base+"/environments/savant-release");
+  const reviews=environment?.protection_rules?.find(r=>r.type==="required_reviewers");
+  if(reviews?.prevent_self_review!==true ||
+     !Array.isArray(reviews.reviewers) ||
+     !reviews.reviewers.some(r=>r.type===desired.reviewerType && r.reviewer?.id===desired.reviewerId))
+    fail("post_apply_control_drift");
+  return true;
+}
+
 export async function applyGovernancePlan(plan, {read,write,confirmation}={}) {
   if(confirmation!=="PROTECT-LATTIX-IO-savant")fail("explicit_operator_approval_required");
   if(typeof write!=="function")fail("missing_write_adapter");
@@ -139,6 +184,7 @@ export async function applyGovernancePlan(plan, {read,write,confirmation}={}) {
   }
   const outcome=await auditGovernance(REPOSITORY,read,{mode:"audit"});
   if(outcome.ready!==true)fail("post_apply_security_audit_failed");
+  await verifyBootstrappedControls(canonical,read);
   return {state:"controls_verified_publication_disabled",created,mainSha:prior.mainSha};
 }
 export function makeAdminAdapter({token,fetcher=fetch}={}) {

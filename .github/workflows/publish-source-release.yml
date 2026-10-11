@@ -114,5 +114,10 @@ jobs:
         with:
           name: savant-source-release
           path: dist/source-release
+      - name: Verify GitHub signed provenance for the exact archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh attestation verify "dist/source-release/savant-${{ inputs.version }}.tar.gz" --repo "$GITHUB_REPOSITORY"
       - name: Recheck tag, integrity and publish or verify identical replay
         run: node scripts/release-publish.mjs

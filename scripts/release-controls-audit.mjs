@@ -1,5 +1,3 @@
-import { writeFileSync } from "node:fs";
-
 const REPOSITORY = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 const CHECK_NAMES = [
   "main_default_branch", "main_protected", "main_review_rules",
@@ -140,10 +138,5 @@ if (process.argv[1]?.endsWith("/release-controls-audit.mjs")){
   }
   const output=JSON.stringify(report,null,2)+"\n";
   console.log(output);
-  if(process.env.SAVANT_GOVERNANCE_EVIDENCE_PATH){
-    const file=process.env.SAVANT_GOVERNANCE_EVIDENCE_PATH;
-    if(!/^[A-Za-z0-9._/-]{1,130}$/.test(file)||file.includes(".."))process.exitCode=1;
-    else writeFileSync(file,output,{flag:"wx",mode:0o600});
-  }
   if(!report.ready)process.exitCode=1;
 }

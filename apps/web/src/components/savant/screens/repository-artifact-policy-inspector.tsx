@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 import {
-  ArtifactPolicyClientError, describeArtifactPolicy, listArtifactPolicies,
+  ArtifactPolicyClientError, describeArtifactPolicy, describeArtifactPolicyError, listArtifactPolicies,
   makeArtifactPolicyScope, postArtifactPolicyMutation,
   type ArtifactPolicyList, type ArtifactPolicyRule,
 } from "@/lib/artifact-policy-client";
@@ -10,15 +10,6 @@ type Kind="skill"|"workflow_spec";
 type Effect="allow"|"deny";
 type PrincipalType="user"|"group"|"role";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-function safeError(error:unknown):string {
-  if(error instanceof ArtifactPolicyClientError) {
-    if([401,403,404].includes(error.status))return "Not authorized to inspect this artifact or repository.";
-    if(error.status===409)return "Policy changed since it was loaded. Reload before editing.";
-    if(error.status===503)return "Policy administration is unavailable. No changes were made.";
-    return `Policy request failed (${error.code}).`;
-  }
-  return "Policy request failed. No changes were made.";
-}
 /** Explicit, admin-authorized artifact inspector. Never fetches source content. */
 export function RepositoryArtifactPolicyInspector({repositoryId}:{repositoryId:string}) {
   const [kind,setKind]=useState<Kind>("skill");
@@ -47,9 +38,9 @@ export function RepositoryArtifactPolicyInspector({repositoryId}:{repositoryId:s
       void listArtifactPolicies(scope,slug,fetch,controller.signal).then(result=>{
         if(active){setSnapshot(result);setError("");}
       }).catch(err=>{
-        if(active&&!controller.signal.aborted){setSnapshot(null);setError(safeError(err));}
+        if(active&&!controller.signal.aborted){setSnapshot(null);setError(describeArtifactPolicyError(err));}
       }).finally(()=>{if(active)setLoading(false);});
-    }catch(err){const timer=window.setTimeout(()=>{setSnapshot(null);setError(safeError(err));setLoading(false);},0);return ()=>{clearTimeout(timer);clearTimeout(id);};}
+    }catch(err){const timer=window.setTimeout(()=>{setSnapshot(null);setError(describeArtifactPolicyError(err));setLoading(false);},0);return ()=>{clearTimeout(timer);clearTimeout(id);};}
     return ()=>{active=false;controller.abort();clearTimeout(id);};
   },[scopeKey,repositoryId,revisionToken]);
   const expectedKey=`${repositoryId}|${kind}|${artifactId.trim()}`;
@@ -68,7 +59,7 @@ export function RepositoryArtifactPolicyInspector({repositoryId}:{repositoryId:s
       setSnapshot(null);
       setRevisionToken(value=>value+1);
     } catch(err){
-      setSnapshot(null);setError(safeError(err));
+      setSnapshot(null);setError(describeArtifactPolicyError(err,true));
       if(err instanceof ArtifactPolicyClientError&&err.status===409)setRevisionToken(value=>value+1);
     }finally{setSaving(false);}
   }

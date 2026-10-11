@@ -108,7 +108,8 @@ export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
   if(typeof token!=="string"||token.trim().length<10||token.includes("\n"))fail("missing_read_token");
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>30000)fail("invalid_timeout");
   return async(path)=>{
-    if(typeof path!=="string"||!/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.?=&/-]+)?$/.test(path))fail("invalid_api_path");
+    if(typeof path!=="string"||!/^\/repos\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.?=&/-]+)?$/.test(path) ||
+      path.split("?")[0].split("/").some(segment=>segment==="."||segment===".."))fail("invalid_api_path");
     let response;
     try { response=await fetcher("https://api.github.com"+path,{
       method:"GET",redirect:"error",cache:"no-store",

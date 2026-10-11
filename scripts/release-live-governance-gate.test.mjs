@@ -100,10 +100,28 @@ test("PER-1216: publishing workflow gates write after protected approval with sc
   assert.ok(protectedJob.includes("environment:\n      name: savant-release"));
   assert.ok(auditStep>0 && writeStep>auditStep);
   assert.match(protectedJob,/SAVANT_GOVERNANCE_MODE: publish/);
-  assert.match(protectedJob,/GH_TOKEN: \$\{\{ secrets\.SAVANT_GOVERNANCE_READ_TOKEN \}\}/);
+  assert.match(protectedJob,/actions\\/create-github-app-token@[0-9a-f]{40}/);
+  assert.match(protectedJob,/GH_TOKEN: \\$\\{\\{ steps\\.governance_evidence\\.outputs\\.token \\}\\}/);
+  assert.match(protectedJob,/permission-administration: write/);
+  assert.match(protectedJob,/permission-actions: read/);
+  assert.match(protectedJob,/permission-environments: read/);
+  assert.match(protectedJob,/repositories: \\$\\{\\{ github\\.event\\.repository\\.name \\}\\}/);
+  assert.ok(protectedJob.indexOf("Mint short-lived GitHub ruleset evidence token")<auditStep);
+  assert.ok(!workflow.slice(0,workflow.indexOf("\\n  publish:")).includes("SAVANT_GOVERNANCE_APP_PRIVATE_KEY"));
   assert.match(protectedJob,/permissions:\n      contents: write/);
-  assert.ok(!workflow.slice(0,workflow.indexOf("\n  publish:")).includes("secrets.SAVANT_GOVERNANCE_READ_TOKEN"));
+  assert.ok(!workflow.slice(0,workflow.indexOf("\n  publish:")).includes("secrets.SAVANT_GOVERNANCE_APP_PRIVATE_KEY"));
   assert.ok(protectedJob.indexOf("node scripts/release-controls-audit.mjs")<
     protectedJob.indexOf("gh attestation verify"));
   assert.doesNotMatch(workflow,/^\s*(push|pull_request|workflow_run|schedule):\s*$/m);
+});
+
+test("PER-1216: missing bypass actor evidence must not be interpreted as an empty allowlist",async()=>{
+  const state=governanceFixture("true");
+  delete state[base+"/rulesets/11"].bypass_actors;
+  delete state[base+"/rulesets/12"].bypass_actors;
+  const result=await auditGovernance(repo,adapter(state),{mode:"publish"});
+  assert.equal(result.ready,false);
+  assert.equal(result.checks.main_review_rules,false);
+  assert.equal(result.checks.version_tag_immutable,false);
+  assert.doesNotMatch(JSON.stringify(result),/actor_id|reviewer.*20/);
 });

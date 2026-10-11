@@ -10,6 +10,7 @@
     "./tenant-skill-repo": "./src/tenant-skill-repo.ts",
     "./skill-intelligence": "./src/skill-intelligence.ts",
     "./git-providers": "./src/git-providers.ts",
-    "./assessments": "./src/assessments.ts"
+    "./assessments": "./src/assessments.ts",
+    "./workflow-specification": "./src/workflow-specification.ts"
   }
 }

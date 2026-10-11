@@ -29,7 +29,7 @@ function harness() {
       const current = state.files.get(path);
       if (expectedBlobSha !== (current?.blobSha ?? null)) throw new WorkflowArtifactError("revision_conflict", 409);
       state.writes++;
-      const file = { content, blobSha: "blob" + state.writes, commitSha: "commit" + state.writes };
+      const file = { content, blobSha: String(state.writes).repeat(40), commitSha: String(state.writes).repeat(40) };
       state.files.set(path, file);
       return { blobSha: file.blobSha, commitSha: file.commitSha };
     },
@@ -47,7 +47,7 @@ test("PER-1082: tenant owner saves canonical version, reads it, then repeat is i
   const { service, state } = harness();
   const saved = await service.save(owner, repo, "triage", specification(), null);
   assert.equal(saved.sourceOfTruth, "git");
-  assert.equal(saved.commitSha, "commit1");
+  assert.equal(saved.commitSha, "1".repeat(40));
   assert.match(saved.digest, /^[a-f0-9]{64}$/);
   const loaded = await service.get(read, repo, "triage");
   assert.deepEqual(loaded.specification, specification());
@@ -79,7 +79,7 @@ test("PER-1082: optimistic concurrency and Git errors fail without partial index
   assert.equal(state.indexes, 1);
   state.failWrite = false;
   const next = await service.save(owner, repo, "triage", updated, first.blobSha);
-  assert.equal(next.commitSha, "commit2");
+  assert.equal(next.commitSha, "2".repeat(40));
   assert.equal(state.indexes, 2);
 });
 

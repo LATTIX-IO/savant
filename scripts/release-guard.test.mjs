@@ -23,7 +23,7 @@ test("PER-1206: guard validates actual monorepo package and prevents inherited r
  const yaml=readFileSync(".github/workflows/release.yml","utf8");
  assert.doesNotMatch(yaml,/^\s*workflow_run:/m);
  assert.doesNotMatch(yaml,/\bcargo\s+(test|tauri|install|audit|deny)/);
- assert.doesNotMatch(yaml,/\bCargo\.toml\b|tauri-ui\/|mesh-node\/);
+ assert.doesNotMatch(yaml,/Cargo\\.toml|tauri-ui|mesh-node/);
  assert.match(yaml,/permissions:\s*\n\s*contents: read/);
  assert.match(yaml,/node scripts\/release-verify\.mjs/);
  assert.doesNotMatch(yaml,/\bcreate-release\b|softprops\/action-gh-release/);

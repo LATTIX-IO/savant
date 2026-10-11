@@ -102,3 +102,5 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-capability-access.mjs
       - name: Verify artifact-level grants and denials before provider IO
         run: pnpm --filter @savant/web exec node ./scripts/verify-artifact-permissions.mjs
+      - name: Verify policy admin tenant grants, revisions, retries and atomic audit
+        run: pnpm --filter @savant/web exec node ./scripts/verify-capability-policy-admin.mjs

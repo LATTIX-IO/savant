@@ -37,7 +37,7 @@ test("PER-1207: fail closed for unapproved, wrong-branch, malformed or forged re
     {enabled:"false"},{enabled:undefined},{confirmation:"PUBLISH v0.2.0"},
     {ref:"refs/heads/feature"},{ref:"refs/tags/v0.1.0"},
     {commit:"bad"},{commit:"A".repeat(40)}, {version:"v0.1.0;rm -rf /"},
-    {version:"v1.0.0\nINJECT=1"},{repository:"evil host/path"},
+    {version:"v1.0.0\nINJECT=1"},{version:"v0.1.0\n"},{repository:"evil host/path"},
     {runId:"0"}
   ])assert.throws(()=>validatePublishRequest({...valid(),...mutation}));
 });
@@ -126,5 +126,8 @@ test("PER-1207: only manual protected job writes, verified attestation and no au
   assert.match(flow,/id-token: write/);
   assert.match(flow,/fetch-depth: 0/);
   assert.match(flow,/pnpm security:scan/);
+  assert.match(flow,/node scripts\/release-preflight\.mjs/);
+  assert.ok(flow.indexOf("node scripts/release-preflight.mjs") < flow.indexOf("pnpm install"));
+  assert.doesNotMatch(flow,/^\s*if:\s*github.ref\s*==/m);
   assert.doesNotMatch(flow,/--force|git push|git tag -f|release delete/);
 });

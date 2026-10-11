@@ -28,7 +28,6 @@ concurrency:
 jobs:
   prepare:
     name: Verify, test and attest tagged source
-    if: github.ref == 'refs/heads/main' && vars.SAVANT_RELEASE_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -51,6 +50,8 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '24'
+      - name: Require enabled publication, exact main ref and signed-off existing tag
+        run: node scripts/release-preflight.mjs
       - name: pnpm
         uses: pnpm/action-setup@v4
         with:
@@ -85,7 +86,6 @@ jobs:
   publish:
     name: Publish only after protected environment approval
     needs: prepare
-    if: github.ref == 'refs/heads/main' && vars.SAVANT_RELEASE_PUBLISH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:

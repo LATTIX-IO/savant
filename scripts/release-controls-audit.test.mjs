@@ -7,7 +7,7 @@ function fixture() {
  const data={
   [base]:{default_branch:"main"},
   [base+"/branches/main"]:{name:"main",protected:true},
-  [base+"/rulesets?includes_parents=true"]:[
+  [base+"/rulesets?includes_parents=true&per_page=100"]:[
     {id:11,target:"branch",enforcement:"active"},{id:12,target:"tag",enforcement:"active"}],
   [base+"/rulesets/11"]:{id:11,target:"branch",enforcement:"active",bypass_actors:[],
     conditions:{ref_name:{include:["refs/heads/main"],exclude:[]}},
@@ -21,7 +21,7 @@ function fixture() {
       reviewers:[{type:"User",reviewer:{id:20}}]}],
     deployment_branch_policy:{protected_branches:false,custom_branch_policies:true}},
   [base+"/environments/savant-release/deployment-branch-policies"]:
-    {branch_policies:[{name:"main"}]},
+    {branch_policies:[{name:"main"}],total_count:1},
   [base+"/actions/variables/SAVANT_RELEASE_PUBLISH_ENABLED"]:
     {name:"SAVANT_RELEASE_PUBLISH_ENABLED",value:"false"}
  };
@@ -47,7 +47,8 @@ test("PER-1212: every missing prerequisite fails closed with a named safe findin
   x=>x[base+"/rulesets/12"].rules=[{type:"deletion"}],
   x=>x[base+"/environments/savant-release"].protection_rules=[],
   x=>x[base+"/environments/savant-release"].protection_rules[0].prevent_self_review=false,
-  x=>x[base+"/environments/savant-release/deployment-branch-policies"].branch_policies=[{name:"main"},{name:"dev"}],
+  x=>{x[base+"/environments/savant-release/deployment-branch-policies"].branch_policies=[{name:"main"},{name:"dev"}];x[base+"/environments/savant-release/deployment-branch-policies"].total_count=2;},
+  x=>x[base+"/environments/savant-release/deployment-branch-policies"].total_count=3,
   x=>x[base+"/actions/variables/SAVANT_RELEASE_PUBLISH_ENABLED"].value="true",
   x=>x[base+"/rulesets/11"].enforcement="evaluate",
   x=>x[base+"/rulesets/11"].rules[0].parameters.required_approving_review_count=0,
@@ -67,7 +68,7 @@ test("PER-1212: every missing prerequisite fails closed with a named safe findin
 test("PER-1212: inaccessible, malformed, overbroad and incomplete evidence never succeeds",async()=>{
  for(const [k,mutate] of [
   ["missing ruleset details",x=>delete x[base+"/rulesets/11"]],
-  ["unknown ruleset response",x=>x[base+"/rulesets?includes_parents=true"]={}],
+  ["unknown ruleset response",x=>x[base+"/rulesets?includes_parents=true&per_page=100"]={}],
   ["no environment",x=>delete x[base+"/environments/savant-release"]],
   ["missing branch list",x=>delete x[base+"/environments/savant-release/deployment-branch-policies"]],
   ["secret deployment config missing",x=>x[base+"/environments/savant-release"].protection_rules[0].reviewers=[]],
@@ -78,7 +79,7 @@ test("PER-1212: inaccessible, malformed, overbroad and incomplete evidence never
    assert.ok(!JSON.stringify(outcome).includes("confidential token"),k);
  }
  const many=fixture();
- many[base+"/rulesets?includes_parents=true"]=Array.from({length:251},(_,id)=>({id:id+1,target:"branch",enforcement:"active"}));
+ many[base+"/rulesets?includes_parents=true&per_page=100"]=Array.from({length:251},(_,id)=>({id:id+1,target:"branch",enforcement:"active"}));
  assert.equal((await auditGovernance(repo,reader(many))).ready,false);
 });
 test("PER-1212: reject hostile repository input and ambiguous ref patterns",()=>{
@@ -89,7 +90,7 @@ test("PER-1212: reject hostile repository input and ambiguous ref patterns",()=>
  f[base+"/rulesets/11"].conditions.ref_name.include=["refs/heads/*"];
  assert.equal(evaluateRulesets(f[base+"/branches/main"],[f[base+"/rulesets/11"],f[base+"/rulesets/12"]]).main_review_rules,false);
  const env=f[base+"/environments/savant-release"];
- assert.equal(evaluateEnvironment(env,[{name:"*"}]).environment_main_only,false);
+ assert.equal(evaluateEnvironment(env,{branch_policies:[{name:"*"}],total_count:1}).environment_main_only,false);
 });
 test("PER-1212: network adapter permits GET to GitHub only; never echoes tokens in errors",async()=>{
  const token="token-sensitive-secret-value";

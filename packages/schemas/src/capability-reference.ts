@@ -24,6 +24,36 @@ const SHA256 = /^sha256:[0-9a-f]{64}$/i;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 const PATH = /^[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)*$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?(?:\+([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?$/;
+
+/** JSON Schema 2020-12; runtime parser additionally enforces bounded JSON and safe prototypes. */
+export const capabilityReferenceJsonSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://savant.dev/schemas/capability-reference/v1.json",
+  type: "object", additionalProperties: false,
+  required: ["schemaVersion", "kind", "organizationId", "artifactId", "version", "locator"],
+  properties: {
+    schemaVersion: { const: 1 },
+    kind: { enum: KINDS },
+    organizationId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", not: {pattern: "\\.\\."} },
+    artifactId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$", not: {pattern: "\\.\\."} },
+    version: {type:"string", maxLength:128, pattern:"^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z.-]+)?(?:\\+[0-9A-Za-z.-]+)?$"},
+    contentHash: {type:"string", pattern:"^sha256:[0-9a-fA-F]{64}$"},
+    locator: {oneOf:[
+      {type:"object", additionalProperties:false, required:["source","repositoryId","path","commitSha"],properties:{
+        source:{const:"git"},repositoryId:{type:"string",minLength:1,maxLength:128},
+        path:{type:"string",pattern:"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",not:{pattern:"(?:^|/)\\.\\.(?:/|$)"}},
+        commitSha:{type:"string",pattern:"^[0-9a-fA-F]{40}$"},
+      }},
+      {type:"object",additionalProperties:false,required:["source","recordId"],properties:{
+        source:{const:"database"},recordId:{type:"string",minLength:1,maxLength:128},
+      }},
+    ]},
+    extensions:{type:"object"},
+  },
+  allOf:[{if:{properties:{kind:{enum:["workflow_spec","test_suite","skill"]}},required:["kind"]},
+    then:{properties:{locator:{properties:{source:{const:"git"}},required:["source"]}}}}],
+} as const;
+
 function fail(code: string, path: string): never { throw new CapabilityReferenceError(code, path); }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === "object" && !Array.isArray(value);

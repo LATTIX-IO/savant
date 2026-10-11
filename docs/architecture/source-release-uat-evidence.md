@@ -22,11 +22,11 @@ Use the installed GitHub CLI `gh` and Node 24. Keep `GH_TOKEN` out of shell argu
 
 ## Independent checks
 
-The verifier rejects malformed versions, unexpected repositories, wrong commit/run IDs, missing tags, incorrect package versions, or tags not reachable from `origin/main`. It looks up the *exact versioned GitHub Release* before downloading and requires a finalized (not draft) release with exactly three assets: `savant-vX.Y.Z.tar.gz`, `SHA256SUMS`, and `release-provenance.json`. Asset names, sizes and SHA-256 metadata must be complete and within bounds.
+The verifier rejects malformed versions, unexpected repositories, wrong commit/run IDs, missing tags, incorrect package versions, or tags not reachable from `origin/main`. It separately queries the **current remote Git tag reference**, resolving direct and annotated tags with bounded depth and rejecting mismatched, missing or cyclic refs. This prevents a stale local tag from being accepted as a live tag binding. It looks up the *exact versioned GitHub Release* before downloading and requires a finalized (not draft) release with exactly three assets: `savant-vX.Y.Z.tar.gz`, `SHA256SUMS`, and `release-provenance.json`. Asset names, sizes and SHA-256 metadata must be complete and within bounds.
 
 It uses read-only `gh release download` for the exact tag, validates each downloaded asset as a regular bounded file, recomputes archive and metadata SHA-256, and compares the complete asset digest set against GitHub's REST metadata. It then calls `gh attestation verify` with the exact artifact, `--repo LATTIX-IO/savant`, `--source-digest` and `--source-ref refs/heads/main`, with the signer restricted to `github.com/LATTIX-IO/savant/.github/workflows/publish-source-release.yml`, default SLSA v1 provenance and no self-hosted runners. Both the CLI's cryptographic verification **and** its JSON statement's subject SHA-256 must succeed.
 
-The output includes a fixed `savant.release-uat-evidence.v1` schema, release reference, source SHA, run ID, three artifact digests and six boolean checks. No token, raw certificate, private reviewer identity or GitHub error response is emitted. A failed prerequisite causes a nonzero process exit with a stable error code.
+The output includes a fixed `savant.release-uat-evidence.v1` schema, release reference, source SHA, run ID, three artifact digests and seven boolean checks. No token, raw certificate, private reviewer identity or GitHub error response is emitted. A failed prerequisite causes a nonzero process exit with a stable error code.
 
 ## Security and acceptance boundaries
 

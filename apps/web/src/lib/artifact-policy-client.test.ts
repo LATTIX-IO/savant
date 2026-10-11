@@ -5,6 +5,7 @@ import {
   ArtifactPolicyClientError,
   buildArtifactPolicyEndpoint,
   describeArtifactPolicy,
+  describeArtifactPolicyError,
   listArtifactPolicies,
   makeArtifactPolicyScope,
   postArtifactPolicyMutation,
@@ -128,4 +129,24 @@ test("PER-1205: denial precedence never implies an unproven principal decision",
     id: requestId, effect:"deny",principalType:"role",principalRef:"member",
   }]), /denies override allows/i);
   assert.doesNotMatch(describeArtifactPolicy([]), /access granted/i);
+});
+
+test("PER-1205: committed write with lost HTTP response is never misreported as rolled back", async () => {
+  const interrupted: typeof fetch = async () => {
+    // Model a server-side commit followed by a broken network transport.
+    throw new TypeError("connection dropped after policy commit");
+  };
+  await assert.rejects(postArtifactPolicyMutation(scope(), {
+    operation:"grant", effect:"deny", principalType:"role", principalRef:"member", requestId,
+  },0,"my-workspace",interrupted));
+  const notice=describeArtifactPolicyError(new TypeError("connection dropped"),true);
+  assert.match(notice,/outcome is unknown/i);
+  assert.match(notice,/inspect.*before another edit/i);
+  assert.doesNotMatch(notice,/no changes were made|rolled back/i);
+  for(const responseCode of [409,503,401]) {
+    const message=describeArtifactPolicyError(new ArtifactPolicyClientError("temporary",responseCode),true);
+    assert.match(message,/outcome is unknown/i);
+    assert.doesNotMatch(message,/no changes were made/i);
+  }
+  assert.match(describeArtifactPolicyError(new ArtifactPolicyClientError("not_found",404)),/not authorized/i);
 });

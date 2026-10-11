@@ -155,7 +155,8 @@ export async function verifyBootstrappedControls(plan, read) {
              entry.context===context && entry.integration_id===ACTIONS_APP_ID)))
           fail("post_apply_control_drift");
       }else if(rule.type==="pull_request"){
-        if(live.parameters?.required_approving_review_count<1 ||
+        const count=live.parameters?.required_approving_review_count;
+        if(!Number.isSafeInteger(count) || count<1 ||
            live.parameters?.dismiss_stale_reviews_on_push!==true ||
            live.parameters?.require_last_push_approval!==true ||
            live.parameters?.required_review_thread_resolution!==true)
@@ -181,6 +182,18 @@ export async function applyGovernancePlan(plan, {read,write,confirmation}={}) {
   try {
     for(const operation of canonical.operations){
       if(operation.onMissingOnly && !prior.createVariable)continue;
+      if(operation.method==="PUT" && operation.path==="/repos/"+REPOSITORY+"/environments/savant-release"){
+        // GitHub PUT creates OR updates an environment; a concurrent creator may
+        // have added one since preflight. Recheck immediately before writing.
+        // The endpoint is not an atomic create-only operation; operators MUST
+        // coordinate exclusive administrative access during apply.
+        try {
+          await read(operation.path);
+          fail("environment_created_during_apply");
+        } catch(e) {
+          if(e?.status!==404)throw e;
+        }
+      }
       const result=await write(operation.method,operation.path,operation.body,operation.expected??201);
       if(!result || result.status!==(operation.expected??201))fail("administrative_write_not_confirmed");
       created++;

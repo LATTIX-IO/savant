@@ -2,7 +2,7 @@ const REPOSITORY = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$
 const CHECK_NAMES = [
   "main_default_branch", "main_protected", "main_review_rules",
   "version_tag_immutable", "environment_reviewers", "self_review_prevented",
-  "environment_main_only", "publication_disabled"
+  "environment_main_only", "publication_state_matches_expected"
 ];
 
 export class GovernanceAuditError extends Error {
@@ -71,7 +71,8 @@ export function evaluateEnvironment(environment, policies) {
   };
 }
 /** Returns only predeclared boolean control results, never raw policy objects or actor details. */
-export async function auditGovernance(repository, read) {
+export async function auditGovernance(repository, read, {mode="audit"}={}) {
+  if(mode!=="audit" && mode!=="publish")fail("invalid_governance_mode");
   assertRepository(repository);
   if (typeof read !== "function") fail("missing_read_adapter");
   const base="/repos/"+repository;
@@ -96,14 +97,14 @@ export async function auditGovernance(repository, read) {
     const branches=await get(base+"/environments/savant-release/deployment-branch-policies");
     Object.assign(checks,evaluateEnvironment(environment,branches));
     const flag=await get(base+"/actions/variables/SAVANT_RELEASE_PUBLISH_ENABLED");
-    checks.publication_disabled=flag?.name==="SAVANT_RELEASE_PUBLISH_ENABLED" &&
-      flag?.value==="false";
+    checks.publication_state_matches_expected=flag?.name==="SAVANT_RELEASE_PUBLISH_ENABLED" &&
+      flag?.value===(mode==="publish"?"true":"false");
   } catch (e) {
     if (e instanceof GovernanceAuditError) problems.push(e.code);
     else problems.push("malformed_governance_evidence");
   }
   for(const [name,ok] of Object.entries(checks)){if(ok!==true)problems.push(name);}
-  return {schema:"savant.release-controls.audit.v1",repository,ready:problems.length===0,checks,problems:[...new Set(problems)]};
+  return {schema:"savant.release-controls.audit.v2",repository,mode,ready:problems.length===0,checks,problems:[...new Set(problems)]};
 }
 export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
   if(typeof token!=="string"||token.trim().length<10||token.includes("\n"))fail("missing_read_token");
@@ -129,13 +130,13 @@ export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
 export async function runGovernanceAudit(env=process.env,{fetcher=fetch}={}) {
   const repository=assertRepository(env.GITHUB_REPOSITORY);
   const reader=makeGitHubReader({token:env.GH_TOKEN,fetcher});
-  return auditGovernance(repository,reader);
+  return auditGovernance(repository,reader,{mode:env.SAVANT_GOVERNANCE_MODE??"audit"});
 }
 if (process.argv[1]?.endsWith("/release-controls-audit.mjs")){
   let report;
   try { report=await runGovernanceAudit(); }
   catch(e) {
-    report={schema:"savant.release-controls.audit.v1",ready:false,problems:[
+    report={schema:"savant.release-controls.audit.v2",ready:false,problems:[
       e instanceof GovernanceAuditError?e.code:"audit_failed"
     ],checks:{}};
   }

@@ -33,3 +33,11 @@ The publish job waits for the protected `savant-release` environment approval. O
 - Verify main/tag rulesets, environment reviewer policy and repository variable via GitHub administration.
 - Validate a deliberately tagged disposable candidate using a separate non-production repository or authorized staging process, including attestation verification, approval denial, replay and outage simulation.
 - Validate tagged source archive against independent clean checkout; ensure release is not conflated with Vercel deployment.
+
+## Just-in-time ruleset evidence (PER-1216)
+
+After protected `savant-release` environment approval and before release creation, the workflow checks the **live** repository governance configuration. The auditor requires evidence of no ruleset bypass actors and will reject omitted/missing `bypass_actors`. GitHub's REST API returns that sensitive field only to an identity with ruleset write access, even when the request method is GET. A nominally read-only GitHub token cannot satisfy this condition.
+
+To avoid a stored long-lived personal access token, the protected job uses a SHA-pinned GitHub-maintained action to mint a short-lived, **single-repository** GitHub App installation token with Administration (write), Actions (read), and Environments (read) privileges. Its inputs are protected environment values `SAVANT_GOVERNANCE_APP_CLIENT_ID` and `SAVANT_GOVERNANCE_APP_PRIVATE_KEY`. No App token is passed to the publication CLI, and the auditor performs GET requests only. The token is revoked at job completion. Nevertheless, Administration (write) is an elevated privilege: configure required independent reviewers, restrict the App installation to this repository, rotate its private key, and never allow unreviewed workflow or protected-branch changes.
+
+The release variable must be `true` at the moment of the publish audit (the offline inspection mode requires `false`). A missing App, insufficient ruleset access, incomplete evidence, a privileged-bypass rule, or a revoked approval/branch policy causes the publication gate to fail. Actual permission provisioning and non-production release acceptance remain PER-1209; publication stays disabled until those are complete.

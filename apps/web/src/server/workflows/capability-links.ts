@@ -23,7 +23,10 @@ function readLinks(input: unknown): CapabilityLinkV1[] {
     if (!item || !("value" in item)) invalid();
     try { links.push(parseCapabilityLink(item.value)); }
     catch (error) {
-      if (error instanceof CapabilityReferenceError) invalid();
+      if (error instanceof CapabilityReferenceError) {
+        if (error.code === "cross_tenant_link") throw new CapabilityResolveError("not_found", 404);
+        invalid();
+      }
       throw error;
     }
   }

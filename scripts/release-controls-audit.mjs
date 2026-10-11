@@ -37,10 +37,19 @@ export function evaluateRulesets(branch, rulesets) {
   const active = ruleList.filter(r => r.enforcement === "active" && Array.isArray(r.rules));
   const main = active.filter(r => r.target === "branch" && matches(r,"branch"));
   const tags = active.filter(r => r.target === "tag" && matches(r,"tag"));
-  const branchTypes = new Set(main.flatMap(r => r.rules.map(x=>x?.type)));
-  const tagTypes = new Set(tags.flatMap(r => r.rules.map(x=>x?.type)));
+  const noBypasses = r => Array.isArray(r.bypass_actors) && r.bypass_actors.length === 0;
+  const mainSafe = main.filter(noBypasses);
+  const tagSafe = tags.filter(noBypasses);
+  const pullRequests = mainSafe.flatMap(r=>r.rules).find(r=>r.type==="pull_request");
+  const checks = mainSafe.flatMap(r=>r.rules).find(r=>r.type==="required_status_checks");
+  const branchReviewed = Number.isSafeInteger(pullRequests?.parameters?.required_approving_review_count) &&
+    pullRequests.parameters.required_approving_review_count >= 1;
+  const statusChecks = Array.isArray(checks?.parameters?.required_status_checks) &&
+    checks.parameters.required_status_checks.length > 0 &&
+    checks.parameters.required_status_checks.every(s=>typeof s?.context==="string" && s.context.length>0);
+  const tagTypes = new Set(tagSafe.flatMap(r => r.rules.map(x=>x?.type)));
   return {
-    main_review_rules: branchTypes.has("pull_request") && branchTypes.has("required_status_checks"),
+    main_review_rules: branchReviewed && statusChecks,
     version_tag_immutable: tagTypes.has("deletion") && tagTypes.has("update"),
   };
 }

@@ -52,3 +52,49 @@ jobs:
 
       - name: Reject committed secrets
         run: pnpm run security:secrets
+
+  workflow-postgres:
+    name: Workflow schema migration and tenant integrity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: savant
+          POSTGRES_USER: savant
+          POSTGRES_PASSWORD: integration_only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U savant -d savant"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: "5432"
+      PGUSER: savant
+      PGPASSWORD: integration_only
+      PGDATABASE: savant
+      DATABASE_URL: postgresql://savant@127.0.0.1:5432/savant
+      SAVANT_WORKFLOW_SCHEMA_TEST: "1"
+    steps:
+      - name: Checkout Savant
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.0
+          run_install: false
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Apply migrations
+        run: pnpm db:migrate
+      - name: Reapply migrations to prove idempotency
+        run: pnpm db:migrate
+      - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
+        run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs

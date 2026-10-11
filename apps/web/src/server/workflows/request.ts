@@ -1,4 +1,5 @@
 import { WorkflowArtifactError } from "./workflow-artifacts.ts";
+import { assertSameOriginMutationRequest, MutationRequestSecurityError } from "../control-plane/request-security.ts";
 
 const MAX_WORKFLOW_REQUEST_BYTES = 750_000;
 
@@ -6,11 +7,12 @@ const MAX_WORKFLOW_REQUEST_BYTES = 750_000;
 export async function readWorkflowRequestObject(request: Request): Promise<Record<string, unknown>> {
   const contentType = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (contentType !== "application/json") throw new WorkflowArtifactError("unsupported_media_type", 415);
-  const origin = request.headers.get("origin");
-  if (origin) {
-    let expected: string;
-    try { expected = new URL(origin).origin; } catch { throw new WorkflowArtifactError("request_origin_denied", 403); }
-    if (expected !== new URL(request.url).origin) throw new WorkflowArtifactError("request_origin_denied", 403);
+  // Session-authenticated PUTs must require Origin or Referer, never merely
+  // compare one if present. Reuse the established proxy-aware origin policy.
+  try { assertSameOriginMutationRequest(request); }
+  catch (error) {
+    if (error instanceof MutationRequestSecurityError) throw new WorkflowArtifactError("request_origin_denied", 403);
+    throw error;
   }
   const advertised = request.headers.get("content-length");
   if (advertised !== null && Number(advertised) > MAX_WORKFLOW_REQUEST_BYTES) {

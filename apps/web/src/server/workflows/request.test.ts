@@ -7,7 +7,7 @@ import { WorkflowArtifactError } from "./workflow-artifacts.ts";
 const fails = (code: string) => (error: unknown) => error instanceof WorkflowArtifactError && error.code === code;
 function req(body: string, headers: Record<string, string> = {}): Request {
   return new Request("https://example.test/api/workflows/triage", {
-    method: "PUT", body, headers: { "Content-Type": "application/json", ...headers },
+    method: "PUT", body, headers: { "Content-Type": "application/json", Origin: "https://example.test", ...headers },
   });
 }
 
@@ -33,4 +33,6 @@ test("PER-1082: cross-origin and non-JSON mutation attempts rejected before pars
   await assert.rejects(readWorkflowRequestObject(req("{}", { Origin: "https://external.test" })), fails("request_origin_denied"));
   await assert.rejects(readWorkflowRequestObject(req("{}", { "Content-Type": "text/plain" })), fails("unsupported_media_type"));
   await assert.rejects(readWorkflowRequestObject(req("{}", { Origin: "invalid" })), fails("request_origin_denied"));
+  const missingOrigin = new Request("https://example.test/api/workflows/triage", {method:"PUT",body:"{}",headers:{"Content-Type":"application/json"}});
+  await assert.rejects(readWorkflowRequestObject(missingOrigin), fails("request_origin_denied"));
 });

@@ -114,10 +114,24 @@ jobs:
         with:
           name: savant-source-release
           path: dist/source-release
+      # GitHub hides bypass_actors unless the requester has ruleset write access.
+      # Mint a repository-restricted one-hour installation token after environment approval.
+      # The audit script itself performs GET requests only; no admin mutation is permitted.
+      - name: Mint short-lived GitHub ruleset evidence token
+        id: governance_evidence
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v3
+        with:
+          client-id: ${{ vars.SAVANT_GOVERNANCE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SAVANT_GOVERNANCE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: write
+          permission-actions: read
+          permission-environments: read
       - name: Fail closed unless release governance is still protected
         env:
           SAVANT_GOVERNANCE_MODE: publish
-          GH_TOKEN: ${{ secrets.SAVANT_GOVERNANCE_READ_TOKEN }}
+          GH_TOKEN: ${{ steps.governance_evidence.outputs.token }}
         run: node scripts/release-controls-audit.mjs
       - name: Verify GitHub signed provenance for the exact archive
         shell: bash

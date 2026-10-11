@@ -36,6 +36,8 @@ const adapter = state => async path => {
 test("PER-1216: disabled-by-default audit and enabled-only publish modes have separate valid states",async()=>{
   const inspect=await auditGovernance(repo,adapter(governanceFixture("false")));
   assert.equal(inspect.ready,true);
+  assert.equal(inspect.schema,"savant.release-controls.audit.v2");
+  assert.ok(!("publication_disabled" in inspect.checks));
   assert.equal(inspect.mode,"audit");
   assert.equal(inspect.checks.publication_state_matches_expected,true);
   const publishing=await auditGovernance(repo,adapter(governanceFixture("true")),{mode:"publish"});

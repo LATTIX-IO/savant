@@ -113,6 +113,8 @@ test("PER-1212: network adapter permits GET to GitHub only; never echoes tokens 
    error.code==="github_read_unavailable" && !error.message.includes(token));
  const thrower=makeGitHubReader({token,fetcher:async()=>{throw Error("token="+token);}});
  await assert.rejects(thrower(base),error=>!error.message.includes(token));
+ const paged=makeGitHubReader({token,fetcher:async()=>new Response("[]",{status:200,headers:{link:'<https://api.github.com/page=2>; rel="next"'}})});
+ await assert.rejects(paged(base),/paginated_governance_evidence/);
 });
 test("PER-1212: integration reads explicit fixed paths without modifying settings",async()=>{
  const obj=fixture(),requests=[];

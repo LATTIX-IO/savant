@@ -120,6 +120,7 @@ test("PER-1207: only manual protected job writes, verified attestation and no au
   assert.match(flow,/environment:\s*\n\s*name: savant-release/m);
   assert.match(flow,/vars\.SAVANT_RELEASE_PUBLISH_ENABLED/);
   assert.match(flow,/actions\/attest-build-provenance@[a-f0-9]{40}/);
+  assert.match(flow,/gh attestation verify/);
   assert.match(flow,/^\s*contents: read\s*$/m);
   assert.match(flow,/^\s*contents: write\s*$/m);
   assert.match(flow,/id-token: write/);

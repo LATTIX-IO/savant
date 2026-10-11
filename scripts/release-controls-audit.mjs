@@ -62,7 +62,8 @@ export function evaluateEnvironment(environment, policies) {
   const policy = environment.deployment_branch_policy;
   const mainOnly = policy?.custom_branch_policies === true &&
     policy?.protected_branches === false &&
-    Array.isArray(policies) && policies.length === 1 && policies[0]?.name === "main";
+    Array.isArray(policies?.branch_policies) && policies.total_count === 1 &&
+    policies.branch_policies.length === 1 && policies.branch_policies[0]?.name === "main";
   return {
     environment_reviewers: Boolean(independent),
     self_review_prevented: review?.prevent_self_review === true || environment.prevent_self_review === true,
@@ -86,14 +87,14 @@ export async function auditGovernance(repository, read) {
     checks.main_default_branch=rep?.default_branch==="main";
     const b=await get(base+"/branches/main");
     checks.main_protected=b?.name==="main" && b.protected===true;
-    const baseRules=parseRulesets(await get(base+"/rulesets?includes_parents=true"));
+    const baseRules=parseRulesets(await get(base+"/rulesets?includes_parents=true&per_page=100"));
     const detailed=[];
     for(const rule of baseRules) detailed.push(await get(base+"/rulesets/"+rule.id));
     const ruleResults=evaluateRulesets(b,detailed);
     Object.assign(checks,ruleResults);
     const environment=await get(base+"/environments/savant-release");
     const branches=await get(base+"/environments/savant-release/deployment-branch-policies");
-    Object.assign(checks,evaluateEnvironment(environment,branches?.branch_policies));
+    Object.assign(checks,evaluateEnvironment(environment,branches));
     const flag=await get(base+"/actions/variables/SAVANT_RELEASE_PUBLISH_ENABLED");
     checks.publication_disabled=flag?.name==="SAVANT_RELEASE_PUBLISH_ENABLED" &&
       flag?.value==="false";
@@ -118,6 +119,7 @@ export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
       signal:AbortSignal.timeout(timeoutMs)
     });}catch{fail("github_read_unavailable");}
     if(response.status!==200)fail("github_read_unavailable");
+    if(/rel="next"/.test(response.headers?.get("link")||""))fail("paginated_governance_evidence");
     let raw;
     try {raw=await response.text();}catch{fail("github_read_unavailable");}
     if(raw.length>1024*1024)fail("oversized_governance_response");

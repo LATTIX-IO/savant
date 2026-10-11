@@ -31,6 +31,15 @@ export async function POST(request:Request){
     const known=error instanceof CapabilityResolveError||error instanceof TenantContextError;
     if(known){
       const failure=error as CapabilityResolveError|TenantContextError;
+      // Record denial by stable error code only; do not reveal foreign artifact identities.
+      if(tenant?.identity){
+        await tryRecordAuditEvent({
+          organizationId:tenant.tenant.organizationId,actorSubject:tenant.identity.subject,
+          category:"repo",action:"capability_reference_resolution_denied",
+          targetType:"capability",targetRef:"redacted",
+          payload:{code:failure.code},
+        }).catch(()=>undefined);
+      }
       // Never echo potentially sensitive provider errors or user-supplied IDs.
       return NextResponse.json(createApiErrorResponse(failure.code,failure.code),{status:failure.status,headers:{"Cache-Control":"no-store"}});
     }

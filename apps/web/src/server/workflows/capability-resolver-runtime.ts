@@ -65,7 +65,7 @@ export const capabilityResolver=createCapabilityResolver({
   },
   async workflow(actor,reference){
     if(reference.locator.source!=="git")throw new CapabilityResolveError("not_found",404);
-    const result=await workflowArtifacts.get(actor,reference.locator.repositoryId,reference.artifactId,reference.locator.commitSha);
+    const result=await workflowArtifacts.get({organizationId:actor.organizationId,actor:actor.subject},reference.locator.repositoryId,reference.artifactId,reference.locator.commitSha);
     return {specification:result.specification,digest:result.digest,commitSha:result.commitSha};
   },
   skill:pinnedSkillContent,

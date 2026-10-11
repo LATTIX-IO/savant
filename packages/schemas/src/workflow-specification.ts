@@ -30,12 +30,18 @@ export const workflowSpecificationSchema = {
       sourceVersion: { type: "string", maxLength: 128 },
     } },
     nodes: { type: "array", maxItems: 1000, items: { type: "object", additionalProperties: false,
-      required: ["id", "kind"], properties: {
+      required: ["id", "kind"],
+      allOf: [{ if: { properties: { kind: { const: "opaque" } }, required: ["kind"] }, then: { required: ["native"] } }],
+      properties: {
         id: { type: "string", pattern: ID }, kind: { enum: KINDS },
         label: { type: "string", maxLength: 2048 },
         inputs: { type: "array", maxItems: 100, items: portSchema },
         outputs: { type: "array", maxItems: 100, items: portSchema },
-        native: { type: "object" }, extensions: { type: "object" },
+        native: { type: "object", required: ["kind"], properties: {
+          kind: { type: "string", minLength: 1, maxLength: 128 },
+          payload: {},
+        }, additionalProperties: true },
+        extensions: { type: "object" },
       },
     } },
     edges: { type: "array", maxItems: 5000, items: { type: "object", additionalProperties: false,
@@ -69,13 +75,24 @@ function safeUnknown(value: unknown, path: string, depth = 0): void {
   if (depth > 20) fail("depth-limit", path);
   if (Array.isArray(value)) {
     if (value.length > 5000) fail("size-limit", path);
-    value.forEach((item, i) => safeUnknown(item, `${path}[${i}]`, depth + 1));
+    for (let i = 0; i < value.length; i++) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(i));
+      if (!descriptor || !("value" in descriptor)) fail("invalid-value", `${path}[${i}]`);
+      safeUnknown(descriptor.value, `${path}[${i}]`, depth + 1);
+    }
+    for (const key of Object.keys(value)) {
+      if (key !== "length" && !/^(0|[1-9][0-9]*)$/.test(key)) fail("invalid-field", path + "." + key);
+    }
   } else if (value !== null && typeof value === "object") {
     const raw = value as Record<string, unknown>;
-    if (Object.keys(raw).length > 1000) fail("size-limit", path);
-    for (const [k, v] of Object.entries(raw)) {
+    const proto = Object.getPrototypeOf(raw);
+    if (proto !== Object.prototype && proto !== null) fail("invalid-object", path);
+    const descriptors = Object.getOwnPropertyDescriptors(raw);
+    if (Object.keys(descriptors).length > 1000) fail("size-limit", path);
+    for (const [k, descriptor] of Object.entries(descriptors)) {
       if (["__proto__", "prototype", "constructor"].includes(k)) fail("unsafe-key", path + "." + k);
-      safeUnknown(v, path + "." + k, depth + 1);
+      if (!("value" in descriptor)) fail("invalid-value", path + "." + k);
+      safeUnknown(descriptor.value, path + "." + k, depth + 1);
     }
   } else if (!(value === null || typeof value === "string" || typeof value === "boolean" || (typeof value === "number" && Number.isFinite(value)))) {
     fail("invalid-value", path);
@@ -106,7 +123,8 @@ export function parseWorkflowSpecification(input: unknown): WorkflowSpecificatio
   safeUnknown(input, "$");
   const wire = JSON.stringify(input);
   if (!wire || wire.length > 512_000) fail("size-limit", "$");
-  const root = object(input, "$");
+  // Validate an owned JSON snapshot, not a mutable reference supplied by callers.
+  const root = object(JSON.parse(wire) as unknown, "$");
   if (root.schemaVersion !== 1) fail("unsupported-version", "$.schemaVersion");
   keys(root, ["schemaVersion", "workflowId", "version", "source", "nodes", "edges", "outcomeRefs", "extensions"], "$");
   string(root.workflowId, "$.workflowId", 128, true);
@@ -192,7 +210,14 @@ function canonical(value: unknown): unknown {
   }
   return value;
 }
-/** Deterministic byte representation for external SHA-256/version provenance. */
+/** Deterministic UTF-8 JSON representation; node/edge array ordering is significant. */
 export function canonicalizeWorkflowSpecification(spec: WorkflowSpecification): string {
   return JSON.stringify(canonical(parseWorkflowSpecification(spec)));
+}
+
+/** SHA-256 digest of the canonical UTF-8 bytes, usable as a Git artifact content pin. */
+export async function digestWorkflowSpecification(spec: WorkflowSpecification): Promise<string> {
+  const encoded = new TextEncoder().encode(canonicalizeWorkflowSpecification(spec));
+  const digest = await crypto.subtle.digest("SHA-256", encoded);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }

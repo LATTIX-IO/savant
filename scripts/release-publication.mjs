@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync, mkdirSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, lstatSync } from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { gzipSync } from "node:zlib";
@@ -64,6 +64,16 @@ export function validateBundle(dir, request) {
   const base = archiveName(request.version);
   const expectedFiles = [base, "SHA256SUMS", "release-provenance.json"].sort();
   if (JSON.stringify(readdirSync(dir).sort()) !== JSON.stringify(expectedFiles)) throw Error("unexpected_bundle_contents");
+  // Artifacts cross a workflow/job boundary: never dereference symlinks or
+  // unexpected filesystem entries, and enforce bounds before reading into memory.
+  if (!lstatSync(dir).isDirectory() || lstatSync(dir).isSymbolicLink())
+    throw Error("unsafe_bundle_entry");
+  for (const name of expectedFiles) {
+    const stat = lstatSync(path.join(dir,name));
+    const limit = name === base ? MAX_ARCHIVE : 1024 * 1024;
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 ||
+        stat.size > limit || stat.nlink !== 1) throw Error("unsafe_bundle_entry");
+  }
   const bytes = readFileSync(path.join(dir, base));
   const provenance = JSON.parse(readFileSync(path.join(dir, "release-provenance.json"), "utf8"));
   const checksumBytes = readFileSync(path.join(dir, "SHA256SUMS"));

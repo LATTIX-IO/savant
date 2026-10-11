@@ -15,7 +15,7 @@ export SAVANT_EVIDENCE_VERSION=v0.1.0
 export SAVANT_EVIDENCE_COMMIT=<exact-40-character-tagged-sha>
 export SAVANT_EVIDENCE_RUN_ID=<approved-release-workflow-run-id>
 read -r -s -p 'Read-only GitHub token: ' GH_TOKEN
-printf '\\n'
+printf '\n'
 export GH_TOKEN
 node scripts/release-uat-evidence.mjs > savant-uat-verification.json
 ```

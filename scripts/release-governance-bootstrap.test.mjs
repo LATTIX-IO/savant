@@ -316,3 +316,64 @@ test("PER-1221 verified post-apply checks detect silent reviewer or required-con
     }
   }),/post_apply_control_drift/);
 });
+
+test("PER-1221 post-apply verification fails closed on missing or malformed approval counts",async()=>{
+  for(const bad of [undefined, null, "1", "2", 0, -1, 1.5, NaN]){
+    const f=fixture();
+    await assert.rejects(applyGovernancePlan(plan(),{
+      read:f.read,confirmation:"PROTECT-LATTIX-IO-savant",
+      write:async(...args)=>{
+        const response=await f.write(...args);
+        if(args[1].endsWith("/rulesets") && args[2].target==="branch"){
+          const rule=f.state.rulesets[0].rules.find(r=>r.type==="pull_request");
+          rule.parameters.required_approving_review_count=bad;
+        }
+        return response;
+      }
+    }),/post_apply_control_drift/,String(bad));
+    assert.equal(f.state.flag,"false");
+  }
+});
+test("PER-1221 concurrent environment creation after preflight prevents PUT overwrite and fails for reconciliation",async()=>{
+  const f=fixture();
+  const concurrent={name:"savant-release",protection_rules:[{type:"wait_timer",wait_timer:1440}],
+    deployment_branch_policy:{protected_branches:true,custom_branch_policies:false}};
+  let putCount=0;
+  let createdByOtherActor=false;
+  await assert.rejects(applyGovernancePlan(plan(),{
+    read:f.read,confirmation:"PROTECT-LATTIX-IO-savant",
+    write:async(...args)=>{
+      if(args[0]==="PUT"){putCount++;throw Error("must never overwrite");}
+      const response=await f.write(...args);
+      if(args[1].endsWith("/rulesets") && args[2].target==="tag"){
+        // Another administrator creates an environment AFTER preflight.
+        f.state.environment=structuredClone(concurrent);
+        createdByOtherActor=true;
+      }
+      return response;
+    }
+  }),/partial_apply_requires_manual_reconciliation/);
+  assert.equal(createdByOtherActor,true);
+  assert.equal(putCount,0);
+  assert.deepEqual(f.state.environment,concurrent);
+  assert.equal(f.state.flag,"false");
+  assert.equal(f.state.rulesets.length,2);
+});
+test("PER-1221 unexpected environment read denial cannot be interpreted as missing",async()=>{
+  const f=fixture();let puts=0;
+  await assert.rejects(applyGovernancePlan(plan(),{
+    read:async path=>{
+      if(path===BASE+"/environments/savant-release" && f.state.rulesets.length===2)
+        throw new BootstrapError("not_authorized",403);
+      return f.read(path);
+    },
+    write:async(...args)=>{
+      if(args[0]==="PUT")puts++;
+      return f.write(...args);
+    },
+    confirmation:"PROTECT-LATTIX-IO-savant"
+  }),/partial_apply_requires_manual_reconciliation/);
+  assert.equal(puts,0);
+  assert.equal(f.state.environment,null);
+  assert.equal(f.state.flag,"false");
+});

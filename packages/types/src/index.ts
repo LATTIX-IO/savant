@@ -1,3 +1,4 @@
+export * from "./capability-reference.ts";
 export * from "./workflow-specification.ts";
 export * from "./control-plane.ts";
 export * from "./repository-provider-readiness.ts";

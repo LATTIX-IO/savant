@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stageBundle, archiveName } from "./release-publication.mjs";
 import { parseEvidenceRequest, validateRemoteRelease, verifySignedAttestation,
-  verifySourceReleaseEvidence, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
+  verifySourceReleaseEvidence, verifyRemoteTag, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
 const SHA="a".repeat(40), REPO="LATTIX-IO/savant";
 const request={version:"v0.1.0",commit:SHA,repository:REPO,runId:"124"};
 const versioned=()=>({GITHUB_REPOSITORY:REPO,SAVANT_EVIDENCE_VERSION:request.version,
@@ -33,6 +33,15 @@ function fixture(){
   return {stage,prov,assets,metadata,cleanup:()=>rmSync(stage,{recursive:true,force:true})};
 }
 const response=(metadata,status=200)=>new Response(metadata?JSON.stringify(metadata):null,{status});
+
+const remoteRead=(f,{metadata=f.metadata,tag={type:"commit",sha:SHA},releaseStatus=200,seen=[]}={})=>async(url,opts)=>{
+  seen.push({url,opts});
+  if(url.includes("/git/ref/tags/"))return response({object:tag});
+  if(url.includes("/git/tags/"))return response({object:{type:"commit",sha:SHA}});
+  if(releaseStatus!==200)return new Response(null,{status:releaseStatus});
+  return response(metadata);
+};
+
 function fakeRunner(f,{attestation=signed(f.prov.sha256),tamper=()=>{},log=[]}={}){
   return (cmd,args)=>{
     assert.equal(cmd,"gh");
@@ -60,7 +69,7 @@ function fakeRunner(f,{attestation=signed(f.prov.sha256),tamper=()=>{},log=[]}={
 }
 const options=(f,more={})=>({
   token:"read-only-evidence-token",
-  fetcher:async()=>response(f.metadata),
+  fetcher:remoteRead(f),
   git:mockGit,
   runner:fakeRunner(f),
   ...more
@@ -105,11 +114,7 @@ test("PER-1291 read-only end-to-end rehearsal checks local archive, GitHub metad
   const f=fixture(),calls=[], network=[];
   try{
     const result=await verifySourceReleaseEvidence(request,options(f,{
-      fetcher:async(url,opts)=>{
-        network.push({url,opts});
-        assert.equal(opts.redirect,"error");
-        return response(f.metadata);
-      },
+      fetcher:remoteRead(f,{seen:network}),
       runner:fakeRunner(f,{log:calls})
     }));
     assert.equal(result.ready,true);
@@ -118,7 +123,9 @@ test("PER-1291 read-only end-to-end rehearsal checks local archive, GitHub metad
     assert.equal(result.workflowRunId,request.runId);
     assert.equal(result.assets.length,3);
     assert.ok(Object.values(result.checks).every(Boolean));
-    assert.equal(network.length,1);
+    assert.equal(network.length,2);
+    assert.ok(network.every(x=>x.opts.redirect==="error" && x.opts.method==="GET" ||
+      x.opts.redirect==="error" && x.opts.headers.Authorization==="Bearer read-only-evidence-token"));
     assert.equal(calls.length,2);
     assert.ok(calls.every(a=>a[0]==="release"&&a[1]==="download" ||
       a[0]==="attestation"&&a[1]==="verify"));
@@ -131,10 +138,10 @@ test("PER-1291 outages, untrusted tag and unreleased candidates prevent any down
     let downloads=0;
     const runner=()=>{downloads++;throw Error("unsafe command");};
     await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
-      fetcher:async()=>new Response(null,{status:404}),runner
+      fetcher:remoteRead(f,{releaseStatus:404}),runner
     })),/release_not_published/);
     await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
-      fetcher:async()=>new Response(null,{status:403}),runner
+      fetcher:remoteRead(f,{releaseStatus:403}),runner
     })),/remote_release_unavailable/);
     await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
       git:()=>{throw Error("injected git failure");},runner
@@ -164,7 +171,7 @@ test("PER-1291 corrupted downloaded artifacts, provenance and remote digest mism
     const drift={...f.metadata,assets:f.assets.map((a,i)=>i? a:{...a,digest:"sha256:"+"b".repeat(64)})};
     let verify=0;
     await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
-      fetcher:async()=>response(drift),
+      fetcher:remoteRead(f,{metadata:drift}),
       runner:(cmd,args)=>{
         if(args[0]==="attestation")verify++;
         return fakeRunner(f)(cmd,args);
@@ -193,4 +200,24 @@ test("PER-1291 production verifier never creates, edits, deletes or dispatches a
   assert.match(src,/--signer-workflow/);
   assert.match(src,/--source-digest/);
   assert.match(src,/--deny-self-hosted-runners/);
+});
+
+test("PER-1291 remote live tags accept direct/annotated refs but reject moved, absent and cyclic refs",async()=>{
+  const f=fixture();
+  try{
+    const calls=[];
+    assert.equal(await verifyRemoteTag(request,"read-only-evidence-token",remoteRead(f,{seen:calls})),true);
+    assert.equal(calls.length,1);
+    assert.equal(calls[0].opts.method,"GET");
+    assert.equal(await verifyRemoteTag(request,"read-only-evidence-token",
+      remoteRead(f,{tag:{type:"tag",sha:"b".repeat(40)}})),true);
+    await assert.rejects(verifyRemoteTag(request,"read-only-evidence-token",
+      remoteRead(f,{tag:{type:"commit",sha:"f".repeat(40)}})),/remote_tag_commit_mismatch/);
+    await assert.rejects(verifyRemoteTag(request,"read-only-evidence-token",
+      async()=>new Response(null,{status:404})),/remote_tag_unavailable/);
+    await assert.rejects(verifyRemoteTag(request,"read-only-evidence-token",
+      async()=>response({object:{type:"tag",sha:"b".repeat(40)}})),/remote_tag_invalid_response/);
+    await assert.rejects(verifyRemoteTag(request,"read-only-evidence-token",
+      async()=>response({object:{type:"unknown",sha:SHA}})),/remote_tag_invalid_response/);
+  }finally{f.cleanup();}
 });

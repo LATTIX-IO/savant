@@ -27,6 +27,43 @@ export function parseEvidenceRequest(env=process.env){
   }catch{deny("invalid_evidence_request");}
   return request;
 }
+export async function verifyRemoteTag(request,token,fetcher=fetch){
+  const sha=/^[0-9a-f]{40}$/;
+  if(request?.repository!==REPOSITORY || typeof request?.version!=="string" ||
+     !/^v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?$/.test(request.version) ||
+     !sha.test(request.commit||"") || typeof token!=="string" || token.length<10)
+    deny("remote_tag_invalid_request");
+  const base="https://api.github.com/repos/"+REPOSITORY;
+  async function get(path){
+    let response;
+    try{
+      response=await fetcher(base+path,{
+        method:"GET",redirect:"error",cache:"no-store",
+        headers:{Authorization:"Bearer "+token,Accept:"application/vnd.github+json",
+          "X-GitHub-Api-Version":"2022-11-28"},
+        signal:AbortSignal.timeout(15000)
+      });
+      if(response.status!==200)deny("remote_tag_unavailable");
+      const raw=await response.text();
+      if(raw.length>65536)deny("remote_tag_invalid_response");
+      return JSON.parse(raw);
+    }catch{deny("remote_tag_unavailable");}
+  }
+  let target=(await get("/git/ref/tags/"+request.version))?.object;
+  const seen=new Set();
+  for(let i=0;i<4;i++){
+    if(!target || !sha.test(target.sha||""))deny("remote_tag_invalid_response");
+    if(target.type==="commit"){
+      if(target.sha!==request.commit)deny("remote_tag_commit_mismatch");
+      return true;
+    }
+    if(target.type!=="tag" || seen.has(target.sha))deny("remote_tag_invalid_response");
+    seen.add(target.sha);
+    target=(await get("/git/tags/"+target.sha))?.object;
+  }
+  deny("remote_tag_invalid_response");
+}
+
 export function validateRemoteRelease(release,request){
   if(!release)deny("release_not_published");
   const names=[archiveName(request.version),"SHA256SUMS","release-provenance.json"].sort();
@@ -70,6 +107,7 @@ export async function verifySourceReleaseEvidence(request,{
     SAVANT_EVIDENCE_COMMIT:request.commit,SAVANT_EVIDENCE_RUN_ID:request.runId
   });
   try{verifyGitTag(canonical,git);}catch{deny("tag_source_unverified");}
+  await verifyRemoteTag(canonical,token,fetcher);
   let published;
   try{published=await inspectExistingRelease(canonical,token,fetcher);}
   catch{deny("remote_release_unavailable");}
@@ -103,7 +141,7 @@ export async function verifySourceReleaseEvidence(request,{
       assets:Object.keys(bundle.files).sort().map(name=>({
         name,sha256:bundle.files[name].sha256,bytes:bundle.files[name].bytes
       })),
-      checks:{tagCommit:true,releaseAssets:true,checksums:true,provenance:true,
+      checks:{tagCommit:true,remoteTag:true,releaseAssets:true,checksums:true,provenance:true,
         remoteDigests:true,signedAttestation:true}
     };
   }finally{rmSync(dir,{recursive:true,force:true});}

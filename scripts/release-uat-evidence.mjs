@@ -80,22 +80,64 @@ export function validateRemoteRelease(release,request){
   }
   return true;
 }
-export function verifySignedAttestation(raw, digest){
+export function verifySignedAttestation(raw, digest, request){
   let value;
   try{
     if(!Buffer.isBuffer(raw)||raw.length===0||raw.length>MAX_ATTESTATION_BYTES)deny("attestation_result_invalid");
     value=JSON.parse(raw.toString("utf8"));
   }catch{deny("attestation_result_invalid");}
   if(!Array.isArray(value)||value.length===0||value.length>30)deny("attestation_result_invalid");
+  if(!request || request.repository!==REPOSITORY ||
+    !/^[1-9][0-9]{0,19}$/.test(String(request.runId||"")))deny("attestation_run_unverified");
+  const expectedRun="https://github.com/"+REPOSITORY+"/actions/runs/"+request.runId+"/attempts/";
+
   const valid=value.some(item=>{
     const statement=item?.verificationResult?.statement;
-    return statement?.predicateType==="https://slsa.dev/provenance/v1" &&
+    const uri=item?.verificationResult?.signature?.certificate?.runInvocationURI;
+    return typeof uri==="string" && uri.startsWith(expectedRun) &&
+      /^[1-9][0-9]*$/.test(uri.slice(expectedRun.length)) &&
+      statement?.predicateType==="https://slsa.dev/provenance/v1" &&
       Array.isArray(statement.subject) &&
       statement.subject.some(subject=>subject?.digest?.sha256===digest);
   });
   if(!valid)deny("attestation_subject_mismatch");
   return true;
 }
+export async function verifySuccessfulPublicationRun(request,token,fetcher=fetch){
+  const base="https://api.github.com/repos/"+REPOSITORY+"/actions/runs/"+request.runId;
+  async function get(url){
+    try{
+      const response=await fetcher(url,{
+        method:"GET",redirect:"error",cache:"no-store",
+        headers:{Authorization:"Bearer "+token,Accept:"application/vnd.github+json",
+          "X-GitHub-Api-Version":"2022-11-28"},
+        signal:AbortSignal.timeout(15000)
+      });
+      if(response.status!==200)deny("workflow_run_unavailable");
+      const raw=await response.text();
+      if(raw.length>512*1024)deny("workflow_run_unavailable");
+      return JSON.parse(raw);
+    }catch{deny("workflow_run_unavailable");}
+  }
+  const run=await get(base);
+  if(String(run?.id)!==request.runId || run?.head_sha!==request.commit ||
+     run?.path!==".github/workflows/publish-source-release.yml" ||
+     run?.head_branch!=="main" || run?.event!=="workflow_dispatch" ||
+     run?.status!=="completed" || run?.conclusion!=="success" ||
+     run?.repository?.full_name!==REPOSITORY)
+    deny("workflow_run_unverified");
+  const jobs=await get(base+"/jobs?per_page=100");
+  if(!Array.isArray(jobs?.jobs) || !Number.isSafeInteger(jobs?.total_count) ||
+     jobs.total_count!==jobs.jobs.length || jobs.jobs.length<2)
+    deny("workflow_jobs_unverified");
+  for(const name of ["Verify, test and attest tagged source",
+    "Publish only after protected environment approval"]){
+    if(jobs.jobs.filter(job=>job.name===name && job.status==="completed" &&
+      job.conclusion==="success").length!==1)deny("workflow_jobs_unverified");
+  }
+  return true;
+}
+
 export async function verifySourceReleaseEvidence(request,{
   token=process.env.GH_TOKEN,fetcher=fetch,runner=run,git=run
 }={}){
@@ -112,6 +154,7 @@ export async function verifySourceReleaseEvidence(request,{
   try{published=await inspectExistingRelease(canonical,token,fetcher);}
   catch{deny("remote_release_unavailable");}
   validateRemoteRelease(published,canonical);
+  await verifySuccessfulPublicationRun(canonical,token,fetcher);
   const dir=mkdtempSync(join(tmpdir(),"savant-uat-evidence-"));
   try{
     try{
@@ -132,7 +175,7 @@ export async function verifySourceReleaseEvidence(request,{
         "--deny-self-hosted-runners","--format","json"
       ],{timeout:120000});
     }catch{deny("signed_attestation_unverified");}
-    verifySignedAttestation(attestation,bundle.digest);
+    verifySignedAttestation(attestation,bundle.digest,canonical);
     return {
       schema:"savant.release-uat-evidence.v1",ready:true,
       repository:REPOSITORY,version:canonical.version,commit:canonical.commit,
@@ -142,7 +185,7 @@ export async function verifySourceReleaseEvidence(request,{
         name,sha256:bundle.files[name].sha256,bytes:bundle.files[name].bytes
       })),
       checks:{tagCommit:true,remoteTag:true,releaseAssets:true,checksums:true,provenance:true,
-        remoteDigests:true,signedAttestation:true}
+        remoteDigests:true,workflowRun:true,signedAttestation:true}
     };
   }finally{rmSync(dir,{recursive:true,force:true});}
 }

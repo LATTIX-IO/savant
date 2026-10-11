@@ -118,7 +118,17 @@ export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
         const previous = await fromGit(repo.id, workflowId, current);
         // Exactly equal content is a no-op even after a response was lost.
         if (previous.digest === digest) {
-          return { ...previous, replayed: true, indexed: true, reconciliationRequired: false };
+          let indexed = true;
+          try {
+            await port.recordVersion({
+              organizationId: tenant.organizationId, repositoryId: repo.id,
+              workflowId, version: spec.version, blobSha: previous.blobSha,
+              commitSha: previous.commitSha, digest, actor: tenant.actor,
+            });
+          } catch {
+            indexed = false;
+          }
+          return { ...previous, replayed: true, indexed, reconciliationRequired: !indexed };
         }
       }
       if (expectedBlobSha !== (current?.blobSha ?? null)) throw new WorkflowArtifactError("revision_conflict", 409);

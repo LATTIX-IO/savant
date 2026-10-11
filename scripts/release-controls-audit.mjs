@@ -104,7 +104,7 @@ export async function auditGovernance(repository, read, {mode="audit"}={}) {
     else problems.push("malformed_governance_evidence");
   }
   for(const [name,ok] of Object.entries(checks)){if(ok!==true)problems.push(name);}
-  return {schema:"savant.release-controls.audit.v1",repository,mode,ready:problems.length===0,checks,problems:[...new Set(problems)]};
+  return {schema:"savant.release-controls.audit.v2",repository,mode,ready:problems.length===0,checks,problems:[...new Set(problems)]};
 }
 export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
   if(typeof token!=="string"||token.trim().length<10||token.includes("\n"))fail("missing_read_token");
@@ -136,7 +136,7 @@ if (process.argv[1]?.endsWith("/release-controls-audit.mjs")){
   let report;
   try { report=await runGovernanceAudit(); }
   catch(e) {
-    report={schema:"savant.release-controls.audit.v1",ready:false,problems:[
+    report={schema:"savant.release-controls.audit.v2",ready:false,problems:[
       e instanceof GovernanceAuditError?e.code:"audit_failed"
     ],checks:{}};
   }

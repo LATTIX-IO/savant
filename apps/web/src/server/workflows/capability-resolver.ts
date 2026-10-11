@@ -45,7 +45,7 @@ export function createCapabilityResolver(ports:CapabilityResolverPorts){
       if(ref.kind==="workflow_spec"&&ref.locator.path!==`workflows/${ref.artifactId}.json`)throw new CapabilityResolveError("locator_mismatch",422);
       // Always authorize before reading the pinned bytes (not even a metadata probe).
       try{await ports.authorize(actor,ref);}
-      catch(e){if(e instanceof CapabilityResolveError)throw e;throw new CapabilityResolveError("not_found",404);}
+      catch(e){if(e instanceof CapabilityResolveError)throw e;throw new CapabilityResolveError("provider_unavailable",503);}
       const expected=ref.contentHash.toLowerCase();
       try{
         if(ref.kind==="workflow_spec"){

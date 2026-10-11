@@ -28,7 +28,7 @@ function validateResponse(payload:unknown,etag:string|null,mutation:boolean):Art
   if(!Number.isSafeInteger(d.revision)||(d.revision as number)<0||etag!==`"v${d.revision}"`)fail("invalid_policy_response",502);
   if(mutation){
     if(typeof d.changed!=="boolean"||typeof d.replayed!=="boolean")fail("invalid_policy_response",502);
-    return {revision:d.revision as number,changed:d.changed,replayed:d.replayed};
+    return {revision:d.revision as number,changed:d.changed as boolean,replayed:d.replayed as boolean};
   }
   if(!Array.isArray(d.rules)||d.rules.length>=250||!d.rules.every((r:unknown)=>{
     if(!r||typeof r!=="object")return false;
@@ -54,7 +54,7 @@ async function result(response:Response,mutation:boolean) {
   return validateResponse(data,response.headers.get("ETag"),mutation);
 }
 export async function listArtifactPolicies(scope:ArtifactScope,workspaceSlug:string,fetcher:typeof fetch=fetch,signal?:AbortSignal):Promise<ArtifactPolicyList> {
-  const response=await fetcher(buildArtifactPolicyEndpoint(scope,workspaceSlug),{credentials:"same-origin",cache:"no-store",signal});
+  const response=await fetcher(buildArtifactPolicyEndpoint(scope,workspaceSlug),{credentials:"same-origin",cache:"no-store",...(signal?{signal}:{})});
   return await result(response,false) as ArtifactPolicyList;
 }
 export async function postArtifactPolicyMutation(scope:ArtifactScope,mutation:ArtifactPolicyMutation,revision:number,workspaceSlug:string,fetcher:typeof fetch=fetch):Promise<{revision:number;changed:boolean;replayed:boolean}> {

@@ -25,3 +25,15 @@ The audit itself does **not** change GitHub protections. At the time the audit w
 Before setting `SAVANT_RELEASE_PUBLISH_ENABLED=true`, an administrator must first establish the required branch/tag/environment protections, run this audit successfully, and separately perform the non-production manual workflow UAT under PER-1209: authorized publication, denied approval, conflict/replay, malformed inputs, outage handling, signed attestation verification and rollback. Capture run IDs, digests and the approval trace. Disable publication afterward until explicit production authorization.
 
 A successful CI check for this audit only proves the deterministic checks against test fixtures. It does not certify the real GitHub repository's administrative configuration.
+
+## Live publication gate (PER-1216)
+
+The approved `savant-release` publish job now invokes the same read-only governance auditor **after** the protected-environment gate and **before** verifying the release attestation or invoking `gh release create`. The workflow pins the mode to `SAVANT_GOVERNANCE_MODE=publish`; unlike the default offline audit mode, this verifies that the repository-level publication variable is explicitly `true`. All other seven security controls remain mandatory in both modes.
+
+Configure an environment-scoped secret named `SAVANT_GOVERNANCE_READ_TOKEN` in `savant-release`, using a short-lived, repository-bound, **read-only** fine-grained credential or GitHub App installation token with sufficient GitHub administration-metadata, environment and Actions-variable read permissions. Validate the effective scopes before the first manual run. Do not use an administrative write token or the `contents: write` release publishing token for this inspection. The read-only secret is exposed to the audit step only, never the build/prepare job or the publication command.
+
+The publish job returns a failing result when the secret is missing, the GitHub administration endpoints reject it, the variable is disabled, or branch/tag/reviewer policy has drifted. The CLI emits only fixed boolean controls and stable problem codes. This is a live **just-in-time posture check**, not a substitute for platform-enforced environment approvals or immutable repository rulesets.
+
+For diagnostics while publication remains disabled, omit `SAVANT_GOVERNANCE_MODE` (or set `audit` explicitly). For a controlled release after configuring the protected environment and approving the exact run, the workflow supplies `publish` mode automatically. Invalid modes fail before any API access.
+
+**Required independent non-production validation remains under PER-1209:** confirm the protection settings through GitHub administration, verify a denied environment review cannot access the publication job, attempt a manual release with missing/revoked audit token and with disabled publication, validate signed provenance, then test allowed publication and unchanged/conflicting replay. Do not enable production publication solely because CI passed.

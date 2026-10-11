@@ -159,7 +159,7 @@ test("PER-1077: parser rejects unexpected property getters, sparse arrays and no
   Object.defineProperty(a, "secret", { enumerable: true, get() { throw Error("unexpected execution"); } });
   failsWith("invalid-value", a);
   const b = validWorkflow();
-  (b.nodes as unknown[]) = new Array(1);
+  b.nodes = new Array(1);
   failsWith("invalid-value", b);
   const c = validWorkflow();
   c.extensions = { created: new Date("2026-01-01T00:00:00Z") };

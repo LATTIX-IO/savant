@@ -12,7 +12,7 @@ export GH_TOKEN=<ephemeral, repository-scoped ruleset-evidence token>
 node scripts/release-controls-audit.mjs > release-governance-audit.json
 ```
 
-The command emits a fixed JSON schema with eight boolean checks and stable error codes; it never serializes remote API responses, reviewer identities, access tokens or HTTP bodies. Exit code 0 requires all eight checks. Exit code 1 indicates missing, denied, unavailable, incomplete or unverified evidence. If the API denies environment inspection, that is a **failed control**, not an approval.
+The command emits the versioned `savant.release-controls.audit.v2` JSON schema with eight boolean checks and stable error codes; it never serializes remote API responses, reviewer identities, access tokens or HTTP bodies. Exit code 0 requires all eight checks. Exit code 1 indicates missing, denied, unavailable, incomplete or unverified evidence. If the API denies environment inspection, that is a **failed control**, not an approval.
 
 The audit verifies that `main` is the default/protected branch, that active branch rules enforce at least one required approving PR review plus named status checks without bypass actors, and that an active tag ruleset prevents update and deletion of version tags. It requires the `savant-release` environment to have explicitly configured reviewers and self-review prevention, with a single exact `main` deployment policy. It also requires the publication flag to be explicitly `false` while prerequisites are inspected.
 
@@ -39,3 +39,5 @@ The publish job returns a failing result when the secret is missing, the GitHub 
 For diagnostics while publication remains disabled, omit `SAVANT_GOVERNANCE_MODE` (or set `audit` explicitly). For a controlled release after configuring the protected environment and approving the exact run, the workflow supplies `publish` mode automatically. Invalid modes fail before any API access.
 
 **Required independent non-production validation remains under PER-1209:** confirm the protection settings through GitHub administration, verify a denied environment review cannot access the publication job, attempt a manual release with missing/revoked audit token and with disabled publication, validate signed provenance, then test allowed publication and unchanged/conflicting replay. Do not enable production publication solely because CI passed.
+
+The `v2` audit response explicitly includes `mode` and renames the former `checks.publication_disabled` key to `checks.publication_state_matches_expected`. Consumers expecting `v1` must update deliberately; the checker does not mislabel the incompatible shape as `v1`. A nonzero result does not provide authorization to publish.

@@ -250,6 +250,9 @@ test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs 
       {runChanges:{path:".github/workflows/other.yml"}},
       {runChanges:{head_branch:"feature"}},
       {runChanges:{repository:{full_name:"attacker/other"}}},
+      {runChanges:{inputs:{version:"v9.9.9",commit_sha:SHA,confirmation:"PUBLISH v9.9.9"}}},
+      {runChanges:{inputs:{version:request.version,commit_sha:"f".repeat(40),confirmation:"PUBLISH "+request.version}}},
+      {runChanges:{inputs:{version:request.version,commit_sha:SHA,confirmation:"PUBLISH wrong"}}},
       {jobsChanges:{jobs:[
         {name:"Verify, test and attest tagged source",status:"completed",conclusion:"success"},
         {name:"Publish only after protected environment approval",status:"completed",conclusion:"skipped"}
@@ -259,11 +262,14 @@ test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs 
     ];
     for(const override of invalid){
       await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
-        remoteRead(f,override)),/workflow_run_unverified|workflow_jobs_unverified/);
+        remoteRead(f,override)),/workflow_run_unverified|workflow_jobs_unverified|workflow_run_input_mismatch/);
     }
     await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
       async()=>new Response(null,{status:403})),/workflow_run_unavailable/);
     assert.equal(await verifySuccessfulPublicationRun(request,"read-only-evidence-token",remoteRead(f)),true);
+    assert.equal(await verifySuccessfulPublicationRun(request,"read-only-evidence-token",remoteRead(f,{
+      runChanges:{inputs:{version:request.version,commit_sha:SHA,confirmation:"PUBLISH "+request.version}}
+    })),true);
     const other=signed(f.prov.sha256,"https://slsa.dev/provenance/v1","998");
     assert.throws(()=>verifySignedAttestation(other,f.prov.sha256,request),/attestation_subject_mismatch/);
   }finally{f.cleanup();}

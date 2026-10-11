@@ -135,6 +135,10 @@ test("PER-1207: only manual protected job writes, verified attestation and no au
   assert.match(flow,/environment:\s*\n\s*name: savant-release/m);
   assert.match(flow,/vars\.SAVANT_RELEASE_PUBLISH_ENABLED/);
   assert.match(flow,/actions\/attest-build-provenance@[a-f0-9]{40}/);
+  for(const line of flow.split("\n")){
+    const match=line.match(/^\s*uses:\s*([^\s#]+)\s*/);
+    if(match)assert.match(match[1],/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+@[0-9a-f]{40}$/, "mutable action ref: "+match[1]);
+  }
   assert.match(flow,/gh attestation verify/);
   assert.match(flow,/^\s*contents: read\s*$/m);
   assert.match(flow,/^\s*contents: write\s*$/m);

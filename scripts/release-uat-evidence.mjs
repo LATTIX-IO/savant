@@ -126,6 +126,17 @@ export async function verifySuccessfulPublicationRun(request,token,fetcher=fetch
      run?.status!=="completed" || run?.conclusion!=="success" ||
      run?.repository?.full_name!==REPOSITORY)
     deny("workflow_run_unverified");
+  // GitHub's run endpoint does not consistently expose workflow_dispatch inputs.
+  // When they are present, reject version/commit/confirmation mismatches.
+  // When omitted, version binding comes from the exact downloaded provenance
+  // and asset digests, while run identity comes from the signed certificate.
+  if(run.inputs!==undefined && run.inputs!==null){
+    if(typeof run.inputs!=="object" ||
+       run.inputs.version!==request.version ||
+       run.inputs.commit_sha!==request.commit ||
+       run.inputs.confirmation!=="PUBLISH "+request.version)
+      deny("workflow_run_input_mismatch");
+  }
   const jobs=await get(base+"/jobs?per_page=100");
   if(!Array.isArray(jobs?.jobs) || !Number.isSafeInteger(jobs?.total_count) ||
      jobs.total_count!==jobs.jobs.length || jobs.jobs.length<2)

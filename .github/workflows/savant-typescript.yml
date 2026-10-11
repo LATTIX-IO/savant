@@ -98,3 +98,5 @@ jobs:
         run: pnpm db:migrate
       - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
         run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs
+      - name: Verify capability reference ACL, cross-tenant denial and p95
+        run: pnpm --filter @savant/web exec node ./scripts/verify-capability-access.mjs

@@ -79,6 +79,15 @@ try{
     assert.equal(JSON.stringify(record.payload_redacted).includes(member.id),false);
     assert.equal(JSON.stringify(record.payload_redacted).includes("@example"),false);
   }
+  // Offboarding must prevent NEW grants but must not trap stale existing rules.
+  await sql`update users set status='disabled' where id=${member.id}`;
+  await assert.rejects(service.mutate(adminActor,rule(),3),errorCode("principal_not_found"));
+  const clean=await service.mutate(adminActor,rule({
+    operation:"revoke",effect:state.rules[0].effect,principalRef:member.id,
+  }),3);
+  assert.deepEqual(clean,{revision:4,changed:true,replayed:false});
+  await sql`update users set status='active' where id=${member.id}`;
+  assert.equal((await service.list(adminActor,scope)).rules.length,0);
   const [group]=await sql`insert into groups(organization_id,name) values(${org.id},'platform-admins') returning id`;
   await sql`insert into group_memberships(group_id,user_id) values(${group.id},${member.id})`;
   await service.list(memberActor,scope);

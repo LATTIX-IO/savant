@@ -12,10 +12,11 @@ const MAX_ARCHIVE = 150 * 1024 * 1024;
 export const archiveName = (version) => "savant-" + version + ".tar.gz";
 export const digestOf = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
-export function validatePublishRequest({ version, commit, confirmation, enabled, ref, repository, runId }) {
+export function validatePublishRequest({ version, commit, confirmation, enabled, ref, repository, runId, mainCommit }) {
   if (typeof version !== "string" || /[\r\n\t]/.test(version)) throw Error("invalid_version");
   validateReleaseVersion(version, version.slice(1));
   if (!SHA.test(commit ?? "")) throw Error("invalid_commit");
+  if (!SHA.test(mainCommit ?? "") || mainCommit !== commit) throw Error("requested_commit_not_workflow_head");
   if (ref !== "refs/heads/main") throw Error("publish_requires_main");
   if (enabled !== "true") throw Error("publication_disabled");
   if (confirmation !== "PUBLISH " + version) throw Error("explicit_confirmation_required");
@@ -100,6 +101,7 @@ export function parseRequestEnv(env = process.env) {
   return validatePublishRequest({
     version: env.SAVANT_PUBLISH_VERSION, commit: env.SAVANT_PUBLISH_COMMIT,
     confirmation: env.SAVANT_PUBLISH_CONFIRMATION, enabled: env.SAVANT_RELEASE_PUBLISH_ENABLED,
-    ref: env.GITHUB_REF, repository: env.GITHUB_REPOSITORY, runId: env.GITHUB_RUN_ID
+    ref: env.GITHUB_REF, repository: env.GITHUB_REPOSITORY, runId: env.GITHUB_RUN_ID,
+    mainCommit: env.GITHUB_SHA
   });
 }

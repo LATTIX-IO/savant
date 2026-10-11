@@ -194,10 +194,10 @@ export function makeAdminAdapter({token,fetcher=fetch}={}) {
       !/^\/repos\/LATTIX-IO\/savant(?:\/[A-Za-z0-9_./?=&-]+)?$/.test(path)||
       path.split("?")[0].split("/").some(s=>s==="."||s===".."))fail("invalid_admin_request");
     const mutations={
-      "POST "+"/repos/LATTIX-IO/savant/actions/variables":201,
-      "POST "+"/repos/LATTIX-IO/savant/rulesets":201,
-      "PUT "+"/repos/LATTIX-IO/savant/environments/savant-release":200,
-      "POST "+"/repos/LATTIX-IO/savant/environments/savant-release/deployment-branch-policies":200
+      "POST /repos/LATTIX-IO/savant/actions/variables":201,
+      "POST /repos/LATTIX-IO/savant/rulesets":201,
+      "PUT /repos/LATTIX-IO/savant/environments/savant-release":200,
+      "POST /repos/LATTIX-IO/savant/environments/savant-release/deployment-branch-policies":200
     };
     if(method!=="GET" && (!body||typeof body!=="object"||
         mutations[method+" "+path]!==expected))fail("invalid_admin_mutation");

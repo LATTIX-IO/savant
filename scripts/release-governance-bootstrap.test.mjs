@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   REQUIRED_RELEASE_CHECKS, BootstrapError, compileGovernancePlan, validateApproval,
-  preflight, applyGovernancePlan, makeAdminAdapter, executeBootstrap
+  preflight, applyGovernancePlan, makeAdminAdapter, executeBootstrap, assertCanonicalPlan
 } from "./release-governance-bootstrap.mjs";
 import { auditGovernance } from "./release-controls-audit.mjs";
 
@@ -244,4 +244,22 @@ test("PER-1221 bootstrap script cannot silently enable source release, publish o
   assert.match(src,/post_apply_security_audit_failed/);
   const flow=readFileSync(".github/workflows/publish-source-release.yml","utf8");
   assert.doesNotMatch(flow,/^\s*(push|pull_request|workflow_run|schedule):\s*$/m);
+});
+
+test("PER-1221 forged external plan cannot enable release, overwrite flags or escape exact write allowlist",async()=>{
+  const f=fixture();
+  const injected=plan();
+  injected.operations[0].body.value="true";
+  await assert.rejects(applyGovernancePlan(injected,{read:f.read,write:f.write,
+    confirmation:"PROTECT-LATTIX-IO-savant"}),/modified_bootstrap_plan/);
+  assert.equal(f.state.writes.length,0);
+  const rewritten=plan();
+  rewritten.operations[1].path=BASE+"/releases";
+  await assert.rejects(preflight(rewritten,f.read),/modified_bootstrap_plan/);
+  const token="test-token-not-for-output";
+  const api=makeAdminAdapter({token,fetcher:async()=>{throw Error("network must not be invoked");}});
+  await assert.rejects(api("POST",BASE+"/releases",{tag_name:"v0.1.0"},201),/invalid_admin_mutation/);
+  await assert.rejects(api("PUT",BASE+"/branches/main/protection",{},200),/invalid_admin_mutation/);
+  await assert.rejects(api("POST",BASE+"/actions/variables",{name:"SAVANT_RELEASE_PUBLISH_ENABLED",value:"true"},204),/invalid_admin_mutation/);
+  assert.equal(assertCanonicalPlan(plan()).publicationEnabled,false);
 });

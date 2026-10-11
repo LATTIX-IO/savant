@@ -24,6 +24,7 @@ import {
 import { extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 
 import { RepositoryAssessmentPanel } from "./repository-assessment-panel";
+import { RepositoryArtifactPolicyInspector } from "./repository-artifact-policy-inspector";
 import { RepositoryConnectionControls } from "./repository-connection-controls";
 
 type ProviderFilter = "all" | "github" | "gitlab" | "azure" | "bitbucket";
@@ -517,6 +518,10 @@ export function RepositoriesScreen() {
                     setReloadListToken((value) => value + 1);
                   }}
                 />
+
+                <div className="divider" />
+
+                <RepositoryArtifactPolicyInspector key={sel.id} repositoryId={sel.id} />
 
                 <div className="divider" />
 

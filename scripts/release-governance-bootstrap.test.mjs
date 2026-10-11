@@ -263,3 +263,26 @@ test("PER-1221 forged external plan cannot enable release, overwrite flags or es
   await assert.rejects(api("POST",BASE+"/actions/variables",{name:"SAVANT_RELEASE_PUBLISH_ENABLED",value:"true"},204),/invalid_admin_mutation/);
   assert.equal(assertCanonicalPlan(plan()).publicationEnabled,false);
 });
+
+test("PER-1221 verified post-apply checks detect silent reviewer or required-context drift",async()=>{
+  const wrongReviewer=fixture();
+  await assert.rejects(applyGovernancePlan(plan(),{
+    read:wrongReviewer.read,confirmation:"PROTECT-LATTIX-IO-savant",
+    write:async(...args)=>{
+      const response=await wrongReviewer.write(...args);
+      if(args[0]==="PUT")wrongReviewer.state.environment.protection_rules[0].reviewers[0].reviewer.id=999;
+      return response;
+    }
+  }),/post_apply_control_drift/);
+  const lostCheck=fixture();
+  await assert.rejects(applyGovernancePlan(plan(),{
+    read:lostCheck.read,confirmation:"PROTECT-LATTIX-IO-savant",
+    write:async(...args)=>{
+      const response=await lostCheck.write(...args);
+      if(args[1].endsWith("/rulesets") && args[2].target==="branch")
+        lostCheck.state.rulesets[0].rules.find(r=>r.type==="required_status_checks").parameters.required_status_checks.pop();
+      return response;
+    }
+  }),/post_apply_control_drift/);
+  assert.equal(lostCheck.state.flag,"false");
+});

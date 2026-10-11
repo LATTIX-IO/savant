@@ -1,4 +1,6 @@
 import type { WorkflowSpecification } from "@savant/types/workflow-specification";
+import type { CapabilityProjection } from "@savant/types/capability-reference";
+import { makeWorkflowCapabilityProjection } from "@savant/schemas/capability-reference";
 import { canonicalizeWorkflowSpecification, digestWorkflowSpecification, parseWorkflowSpecification, WorkflowSpecError } from "@savant/schemas/workflow-specification";
 
 /** Git is canonical. Operational SQL indexes are optional, rebuildable projections. */
@@ -33,6 +35,8 @@ export type WorkflowArtifactResult = {
   blobSha: string;
   digest: string;
   specification: WorkflowSpecification;
+  /** Server-derived, additive capability identity; never a client authorization grant. */
+  capabilityProjection?: CapabilityProjection;
 };
 export type WorkflowSaveResult = WorkflowArtifactResult & {
   replayed: boolean;
@@ -75,6 +79,17 @@ async function fromGit(repoId: string, workflowId: string, file: WorkflowGitFile
     digest: await digestWorkflowSpecification(spec),
   };
 }
+function attachCapabilityProjection<T extends WorkflowArtifactResult>(tenant: WorkflowActor, result: T): T {
+  return {
+    ...result,
+    capabilityProjection: makeWorkflowCapabilityProjection({
+      organizationId: tenant.organizationId,
+      repositoryId: result.repositoryId, workflowId: result.workflowId,
+      version: result.specification.version, commitSha: result.commitSha,
+      digest: result.digest,
+    }),
+  };
+}
 export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
   async function findRepo(tenant: WorkflowActor, repositoryId: string): Promise<WorkflowRepository> {
     if (!tenant.organizationId || !tenant.actor) throw new WorkflowArtifactError("auth_required", 401);
@@ -93,7 +108,7 @@ export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
       const repo = await findRepo(tenant, repositoryId);
       const file = await port.read(repo, path, revision);
       if (!file) throw new WorkflowArtifactError("workflow_not_found", 404);
-      return fromGit(repo.id, workflowId, file);
+      return attachCapabilityProjection(tenant, await fromGit(repo.id, workflowId, file));
     },
     async save(
       tenant: WorkflowActor,
@@ -128,7 +143,7 @@ export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
           } catch {
             indexed = false;
           }
-          return { ...previous, replayed: true, indexed, reconciliationRequired: !indexed };
+          return attachCapabilityProjection(tenant, { ...previous, replayed: true, indexed, reconciliationRequired: !indexed });
         }
       }
       if (expectedBlobSha !== (current?.blobSha ?? null)) throw new WorkflowArtifactError("revision_conflict", 409);
@@ -149,11 +164,11 @@ export function createWorkflowArtifactService(port: WorkflowArtifactPort) {
         action: "workflow_saved", repositoryId: repo.id, workflowId,
         commitSha: commit.commitSha,
       }).catch(() => undefined);
-      return {
+      return attachCapabilityProjection(tenant, {
         sourceOfTruth: "git", repositoryId: repo.id, workflowId,
         specification: spec, blobSha: commit.blobSha, commitSha: commit.commitSha,
         digest, replayed: false, indexed, reconciliationRequired: !indexed,
-      };
+      });
     },
   };
 }

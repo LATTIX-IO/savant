@@ -10,7 +10,7 @@ import {
 import { inspectExistingRelease, publishSourceRelease } from "./release-publish.mjs";
 const COMMIT = "a".repeat(40);
 const req = () => ({version:"v0.1.0",commit:COMMIT,repository:"LATTIX-IO/savant",runId:"1234"});
-const valid = () => ({...req(),confirmation:"PUBLISH v0.1.0",enabled:"true",ref:"refs/heads/main"});
+const valid = () => ({...req(),confirmation:"PUBLISH v0.1.0",enabled:"true",ref:"refs/heads/main",mainCommit:COMMIT});
 function fakeGit(_command,args) {
   if(args[0]==="rev-parse") return Buffer.from(COMMIT + "\n");
   if(args[0]==="show") return Buffer.from(JSON.stringify({name:"savant",private:true,version:"0.1.0"}));
@@ -36,7 +36,7 @@ test("PER-1207: fail closed for unapproved, wrong-branch, malformed or forged re
   for(const mutation of [
     {enabled:"false"},{enabled:undefined},{confirmation:"PUBLISH v0.2.0"},
     {ref:"refs/heads/feature"},{ref:"refs/tags/v0.1.0"},
-    {commit:"bad"},{commit:"A".repeat(40)}, {version:"v0.1.0;rm -rf /"},
+    {commit:"bad"},{commit:"A".repeat(40)},{mainCommit:"b".repeat(40)}, {version:"v0.1.0;rm -rf /"},
     {version:"v1.0.0\nINJECT=1"},{version:"v0.1.0\n"},{repository:"evil host/path"},
     {runId:"0"}
   ])assert.throws(()=>validatePublishRequest({...valid(),...mutation}));

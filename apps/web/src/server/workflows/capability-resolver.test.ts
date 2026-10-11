@@ -65,7 +65,7 @@ test("PER-1173: invalid refs, paths and unsupported types never trigger Git",asy
   await assert.rejects(h.resolver.resolve(actor,{...workflow(),locator:{...workflow().locator,path:"../passwords"}}),fails("invalid_reference"));
   await assert.rejects(h.resolver.resolve(actor,{...workflow(),locator:{...workflow().locator,path:"workflows/another.json"}}),fails("locator_mismatch"));
   await assert.rejects(h.resolver.resolve(actor,{...workflow(),kind:"plugin"}),fails("unsupported_kind"));
-  await assert.rejects(h.resolver.resolve(actor,{...workflow(),contentHash:undefined}),fails("provenance_incomplete"));
+  await assert.rejects(h.resolver.resolve(actor,Object.fromEntries(Object.entries(workflow()).filter(([key])=>key!=="contentHash"))),fails("provenance_incomplete"));
   assert.equal(h.calls.filter(x=>x==="workflow"||x==="skill").length,0);
 });
 test("PER-1173: mismatched workflow ID, version, commit or digest fails closed",async()=>{
@@ -80,7 +80,7 @@ test("PER-1173: skill wrong digest/commit and incomplete provenance never return
   const h=harness();
   await assert.rejects(h.resolver.resolve(actor,{...skill(),contentHash:"sha256:"+B}),fails("integrity_mismatch"));
   await assert.rejects(h.resolver.resolve(actor,{...skill(),locator:{...skill().locator,commitSha:"c".repeat(40)}}),fails("integrity_mismatch"));
-  await assert.rejects(h.resolver.resolve(actor,{...skill(),contentHash:undefined}),fails("provenance_incomplete"));
+  await assert.rejects(h.resolver.resolve(actor,Object.fromEntries(Object.entries(skill()).filter(([key])=>key!=="contentHash"))),fails("provenance_incomplete"));
 });
 test("PER-1173: provider exception redacted into typed unavailable error",async()=>{
   const h=harness();h.fail();

@@ -1,6 +1,6 @@
 /** Internal, tenant-scoped dispatch lease queue; not a public route or provider executor. */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import type { Sql } from "postgres";
+import type { Sql, TransactionSql } from "postgres";
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const TOKEN=/^[a-f0-9]{64}$/;
@@ -54,7 +54,7 @@ export function createHarnessDispatchLeaseQueue(deps:{
     if(!tokenValid(token))fail("lease_denied");
     return digest(token);
   }
-  async function lockedLease(tx:Sql, identity:DispatchIdentity, runId:string, token:string,at:Date){
+  async function lockedLease(tx:TransactionSql, identity:DispatchIdentity, runId:string, token:string,at:Date){
     if(typeof runId!=="string"||!ID.test(runId))fail("lease_denied");
     const hash=checkedToken(token);
     // Global lock order: run row then lease row. Avoids deadlocks with claim,

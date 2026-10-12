@@ -1,4 +1,5 @@
 name: Publish governed source release
+run-name: "source-release:${{ inputs.version }}:${{ inputs.commit_sha }}"
 
 on:
   workflow_dispatch:

@@ -4,9 +4,10 @@ import {
   listPersistedTestBenches,createPersistedTestBench,updatePersistedTestBench,
   archivePersistedTestBench,TestBenchClientError,
 } from "./test-bench-client.ts";
+import type {TestBenchCase} from "../server/test-bench/definition-contract.ts";
 const skillId="team/core+agent",workspaceSlug="workspace-qa";
 const uuid="97ee557d-3dc0-4ee1-af29-72fedc58e4d7";
-const case1={caseId:"case-1",kind:"positive",prompt:"Give concise directions",
+const case1:TestBenchCase={caseId:"case-1",kind:"positive",prompt:"Give concise directions",
  context:null,expectedBehavior:"Provide safe steps"};
 const example={id:uuid,skillId,sourceCommitSha:"a".repeat(40),revision:1,name:"Smoke suite",
  cases:[case1],createdAt:"2026-10-12T12:00:00Z",updatedAt:"2026-10-12T12:00:00Z"};

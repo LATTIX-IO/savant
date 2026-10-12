@@ -71,6 +71,8 @@ class TelemetryContractTests(unittest.TestCase):
         sdk = buffered(send)
         self.assertTrue(sdk.record(make_span()))
         self.assertFalse(sdk.record(make_span()))
+        with self.assertRaisesRegex(TelemetryError, "^replay_conflict$"):
+            sdk.record(make_span(testSuiteHash=HASH_A))
         sdk.record(make_span("s2"))
         self.assertEqual(sdk.flush(), 2)
         self.assertEqual(sdk.flush(), 0)

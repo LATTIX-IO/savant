@@ -112,3 +112,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-test-bench-definitions.mjs
         env:
           SAVANT_TEST_BENCH_SCHEMA_TEST: "1"
+      - name: Verify observed NIM/Jev Test Bench run evidence, immutable snapshot and unsafe-retry denial
+        run: pnpm --filter @savant/web exec node ./scripts/verify-observed-test-bench-runs.mjs
+        env:
+          SAVANT_OBSERVED_TEST_BENCH_TEST: "1"

@@ -39,7 +39,8 @@ function fixture(options: { features?: Partial<typeof capabilities.features>; st
   const audit: string[] = [];
   let result = run(options.status ?? "queued");
   const adapter: HarnessAdapter = {
-    async discoverCapabilities() { history.push("discover"); return { ...capabilities, features: { ...capabilities.features, ...options.features } }; },
+    async discoverCapabilities() { history.push("discover"); return { ...capabilities, features: { ...capabilities.features, ...options.features },
+    coverage: { ...capabilities.coverage, execution: options.features?.execute === false ? "unsupported" : "partial" } }; },
     async validateConfiguration() { history.push("validate"); return true; },
     async executeTest() { history.push("execute"); return result; },
     async cancel() { history.push("cancel"); result = { ...result, status: "canceled" }; return result; },

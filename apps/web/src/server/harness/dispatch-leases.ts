@@ -142,7 +142,7 @@ export function createHarnessDispatchLeaseQueue(deps:{
       if(!Number.isSafeInteger(leaseMs)||leaseMs<100||leaseMs>60000)fail("invalid_lease");
       const at=clock();
       return sql.begin(async tx=>{
-        const row=await lockedLease(tx,identity,runId,token,at,"dispatching");
+        const row=await lockedLease(tx,identity,runId,token,at);
         const runs=await tx<{status:string;deadline_at:Date}[]>`
           select status,deadline_at from harness_eval_runs
           where organization_id=${identity.tenantId} and id=${row.harness_run_id}
@@ -211,7 +211,7 @@ export function createHarnessDispatchLeaseQueue(deps:{
       if(typeof externalRunId!=="string"||!ID.test(externalRunId))fail("invalid_external_run");
       const at=clock();
       return sql.begin(async tx=>{
-        const row=await lockedLease(tx,identity,runId,token,at);
+        const row=await lockedLease(tx,identity,runId,token,at,"dispatching");
         const runs=await tx<{status:string;deadline_at:Date}[]>`
           select status,deadline_at from harness_eval_runs
           where organization_id=${identity.tenantId} and id=${row.harness_run_id}

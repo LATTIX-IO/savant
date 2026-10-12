@@ -45,7 +45,9 @@ Use `enabled: false` for all SDK deployments by default. Never embed a bearer to
 
 SDK queue capacity defaults to 256 events (maximum 1000) with a maximum batch of 100. Exceeding capacity throws the safe `backpressure` code; it does not silently drop evidence or grow memory indefinitely. The sender includes a deterministic `batchId` and monotonic `cursor`. Receipts must echo the exact `batchId` and expected `acceptedCursor`; invalid ACK leaves the batch pending, and transport failure is sanitized to `transport_unavailable`. Concurrent receiver processes and crash recovery require **server-side, durable** batch ID dedupe and a persisted cursor (PER-1059); these reference senders are process-local only.
 
-Coverage calculation rejects a mixture of tenant, adapter, run, trace, spec-version hash or test-suite hash in a single batch of observed spans. A foreign attribution returns `identity_mismatch` rather than falsely completing a graph. The future server consumer must additionally bind these attributes to an authenticated, durable run record.\n\nMissing expected workflow node IDs are reported explicitly as `partial` or `none`, never silently `complete`. `complete` means coverage of the caller's **declared expected graph steps only**, not full provider telemetry.
+Coverage calculation rejects a mixture of tenant, adapter, run, trace, spec-version hash or test-suite hash in a single batch of observed spans. A foreign attribution returns `identity_mismatch` rather than falsely completing a graph. The future server consumer must additionally bind these attributes to an authenticated, durable run record.
+
+Missing expected workflow node IDs are reported explicitly as `partial` or `none`, never silently `complete`. `complete` means coverage of the caller's **declared expected graph steps only**, not full provider telemetry.
 
 The TypeScript implementation serializes an owned sanitized snapshot and refuses property getters/prototype pollution. The Python SDK requires plain `dict` and exact primitive types. Neither SDK transmits custom arbitrary attributes.
 

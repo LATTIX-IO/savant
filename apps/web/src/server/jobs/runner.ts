@@ -11,6 +11,7 @@ import { runHubEval, runHubHydrate, runHubSafety, runHubSync } from "../hub/jobs
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
 import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
+import { requirePinnedEvaluationCommit } from "./eval-source-revision.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
 
 /**
@@ -166,7 +167,18 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
   }
 
   const root = run.sourcePath;
-  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId);
+  // Legacy unpinned jobs fail deterministically; do not retry or read mutable HEAD.
+  let commitSha: string;
+  try {
+    commitSha = requirePinnedEvaluationCommit(run.commitSha);
+  } catch {
+    await store.update(organizationId, run.id, {
+      status: "failed", completed: true,
+      error: "Evaluation source revision is missing or invalid. Sync the repository and queue a new evaluation.",
+    });
+    return "done";
+  }
+  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId, commitSha);
   const files = await repo.readMany([`${root}/SKILL.md`, `${root}/metadata.yaml`, `${root}/eval/dataset.yaml`, `${root}/eval/rubric.yaml`, `${root}/eval/baseline.json`]);
   const instructions = files[`${root}/SKILL.md`];
   if (!instructions) {

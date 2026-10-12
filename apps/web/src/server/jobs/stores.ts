@@ -134,10 +134,10 @@ const toRun = (row: RunRow): EvalGenerationRun => ({
 
 export function createEvalGenerationStore(sql: Sql) {
   return {
-    async create(organizationId: string, input: { repositoryId: string; skillId: string; sourcePath: string; mode: EvalGenerationRun["mode"]; trigger: string; requestedBy: string }): Promise<EvalGenerationRun> {
+    async create(organizationId: string, input: { repositoryId: string; skillId: string; sourcePath: string; mode: EvalGenerationRun["mode"]; trigger: string; requestedBy: string; commitSha: string }): Promise<EvalGenerationRun> {
       const [row] = await sql<RunRow[]>`
-        insert into eval_generation_runs (organization_id, repository_id, skill_id, source_path, mode, trigger, requested_by)
-        values (${organizationId}, ${input.repositoryId}, ${input.skillId}, ${input.sourcePath}, ${input.mode}, ${input.trigger}, ${input.requestedBy})
+        insert into eval_generation_runs (organization_id, repository_id, skill_id, source_path, commit_sha, mode, trigger, requested_by)
+        values (${organizationId}, ${input.repositoryId}, ${input.skillId}, ${input.sourcePath}, ${input.commitSha}, ${input.mode}, ${input.trigger}, ${input.requestedBy})
         returning *
       `;
       return toRun(row as RunRow);

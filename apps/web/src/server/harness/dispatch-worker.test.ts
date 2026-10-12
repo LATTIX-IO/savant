@@ -135,7 +135,7 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
     tenantId:tenant,adapterId:req.adapterId,runId:req.runId,traceId:req.traceId,
     idempotencyKey:req.idempotencyKey,inputRef:req.inputRef,
     specVersionHash:req.specVersionHash,testSuiteHash:req.testSuiteHash,
-    leaseToken:"f".repeat(64),leaseUntil:new Date(Date.now()+180).toISOString(),
+    leaseToken:"f".repeat(64),leaseUntil:"2026-10-12T12:00:01.000Z",
     attempt:1,generation:1,
   };
   let acknowledgements=0,retries=0,started=0;
@@ -145,8 +145,8 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
       acknowledge:async()=>{acknowledgements++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
       releaseForRetry:async()=>{retries++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
     },
-    nowMs:()=>Date.now(),
-    loadAuthorizedRequest:async()=>req,
+    nowMs:()=>Date.parse("2026-10-12T12:00:00.000Z"),
+    loadAuthorizedRequest:async()=>({...req,budget:{...req.budget,maxDurationMs:100}}),
     resolveAdapter:async()=>({
       durableIdempotency:true,
       capabilities:caps,

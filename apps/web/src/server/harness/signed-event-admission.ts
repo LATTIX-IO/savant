@@ -1,0 +1,78 @@
+/**
+ * Signed adapter-event trust boundary. No HTTP endpoint, no secret storage.
+ * The credential resolver MUST bind active adapter keys to tenant and adapter.
+ * All external calls are injected for testability and explicit fail-close.
+ */
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { parseHarnessRunEvent } from "@savant/schemas/harness-adapter";
+
+const ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
+const TENANT=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SIGNATURE=/^v1=([a-f0-9]{64})$/;
+const MAX_BYTES=8192, MAX_SKEW_SECONDS=300;
+export class SignedHarnessEventError extends Error {
+  readonly code:string;
+  constructor(code:string){ super(code); this.name="SignedHarnessEventError"; this.code=code; }
+}
+function reject(code:string):never {throw new SignedHarnessEventError(code);}
+export interface SignedHarnessEventEnvelope {
+  tenantId:string; adapterId:string; runId:string; deliveryId:string;
+  timestamp:string; signature:string; rawBody:Uint8Array;
+}
+export interface SignedHarnessEventDeps {
+  nowMs:()=>number;
+  resolveSecrets:(tenantId:string,adapterId:string)=>Promise<readonly Uint8Array[]>;
+  getRun:(tenantId:string,runId:string)=>Promise<{
+    tenantId:string;adapterId:string;runId:string;traceId:string;status:string;
+  }>;
+  applyEvent:(tenantId:string,runId:string,event:unknown)=>Promise<unknown>;
+}
+export function createSignedHarnessEventAdmission(deps:SignedHarnessEventDeps){
+  return async function admit(raw:SignedHarnessEventEnvelope):Promise<unknown>{
+    if (!raw||typeof raw!=="object"||Array.isArray(raw)||
+      typeof raw.tenantId!=="string"||!TENANT.test(raw.tenantId)||
+      typeof raw.adapterId!=="string"||!ID.test(raw.adapterId)||
+      typeof raw.runId!=="string"||!ID.test(raw.runId)||
+      typeof raw.deliveryId!=="string"||!ID.test(raw.deliveryId)||
+      typeof raw.timestamp!=="string"||!/^[1-9][0-9]{0,11}$/.test(raw.timestamp)||
+      typeof raw.signature!=="string"||!SIGNATURE.test(raw.signature)||
+      !(raw.rawBody instanceof Uint8Array)||
+      raw.rawBody.byteLength<1||raw.rawBody.byteLength>MAX_BYTES)reject("unauthorized");
+    const now=deps.nowMs(),seconds=Number(raw.timestamp);
+    if(!Number.isSafeInteger(seconds)||!Number.isFinite(now)||
+      Math.abs(seconds*1000-now)>MAX_SKEW_SECONDS*1000)reject("unauthorized");
+    let secrets:readonly Uint8Array[];
+    try {secrets=await deps.resolveSecrets(raw.tenantId,raw.adapterId);}
+    catch {return reject("unauthorized");}
+    if(!Array.isArray(secrets)||secrets.length<1||secrets.length>2)reject("unauthorized");
+    const framing=Buffer.concat([
+      Buffer.from(`savant-harness-v1\n${raw.timestamp}\n${raw.tenantId}\n${raw.adapterId}\n${raw.runId}\n${raw.deliveryId}\n`,"utf8"),
+      Buffer.from(raw.rawBody),
+    ]);
+    const supplied=Buffer.from(raw.signature.slice(3),"hex");
+    let verified=false;
+    for(const secret of secrets){
+      if(!(secret instanceof Uint8Array)||secret.byteLength<32||secret.byteLength>128)
+        reject("unauthorized");
+      const expected=createHmac("sha256",secret).update(framing).digest();
+      verified=timingSafeEqual(expected,supplied)||verified;
+    }
+    if(!verified)reject("unauthorized");
+    let event:unknown;
+    try{
+      const body=new TextDecoder("utf-8",{fatal:true}).decode(raw.rawBody);
+      event=JSON.parse(body);
+    }catch {return reject("invalid_event");}
+    let row:Awaited<ReturnType<SignedHarnessEventDeps["getRun"]>>;
+    try{row=await deps.getRun(raw.tenantId,raw.runId);}
+    catch{return reject("not_found");}
+    if(!row||row.tenantId!==raw.tenantId||row.adapterId!==raw.adapterId||
+      row.runId!==raw.runId)reject("not_found");
+    let parsed:ReturnType<typeof parseHarnessRunEvent>;
+    try{parsed=parseHarnessRunEvent(event,{
+      tenantId:raw.tenantId,runId:raw.runId,traceId:row.traceId,
+    });}
+    catch{return reject("invalid_event");}
+    return deps.applyEvent(raw.tenantId,raw.runId,parsed);
+  };
+}

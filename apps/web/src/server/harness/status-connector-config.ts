@@ -39,6 +39,24 @@ function validateUrl(value:string,allowedOrigins:readonly string[]):string{
     !allowedOrigins.includes(uri.origin))fail("invalid_endpoint");
   return uri.href;
 }
+/** Copy only primitive data descriptors before the FIRST await. Untrusted callers
+ * cannot mutate tenant, actor or vault identity after authorization. */
+function snapshotInput<T extends object>(incoming:T,keys:readonly (keyof T)[]):T{
+  try{
+    if(!incoming||typeof incoming!=="object"||Array.isArray(incoming)||
+      (Object.getPrototypeOf(incoming)!==Object.prototype&&Object.getPrototypeOf(incoming)!==null))
+      fail("invalid_scope");
+    const descriptors=Object.getOwnPropertyDescriptors(incoming);
+    const expected=keys.map(String);
+    if(Reflect.ownKeys(incoming).length!==expected.length ||
+      Object.keys(descriptors).length!==expected.length ||
+      expected.some(k=>!descriptors[k]||!("value" in descriptors[k]!)||
+        (typeof descriptors[k]!.value!=="string"&&typeof descriptors[k]!.value!=="number"&&
+         descriptors[k]!.value!==null)))
+      fail("invalid_scope");
+    return Object.freeze(Object.fromEntries(expected.map(k=>[k,descriptors[k]!.value]))) as T;
+  }catch{return fail("invalid_scope");}
+}
 function publicMetadata(r:Row){
   return {tenantId:r.organization_id,adapterId:r.adapter_id,
     endpoint:r.endpoint,status:r.status,revision:r.revision};
@@ -78,8 +96,9 @@ export function createHarnessStatusConnectorConfigStore(deps:{
   }
   return {
     /** CAS upsert resets status to DISABLED. Version mismatches cannot overwrite. */
-    async save(input:{tenantId:string;adapterId:string;actor:string;
+    async save(incoming:{tenantId:string;adapterId:string;actor:string;
       endpoint:string;secretRef:string;expectedRevision:number|null}){
+      const input=snapshotInput(incoming,["tenantId","adapterId","actor","endpoint","secretRef","expectedRevision"]);
       if(!input||typeof input!=="object")fail("invalid_scope");
       await admin(input.tenantId,input.adapterId,input.actor);
       if(!validRevision(input.expectedRevision))fail("version_conflict");
@@ -123,7 +142,8 @@ export function createHarnessStatusConnectorConfigStore(deps:{
       });
     },
     /** Explicit admin enable; never reuse an unchecked/stale vault or gateway. */
-    async activate(input:{tenantId:string;adapterId:string;actor:string;expectedRevision:number}){
+    async activate(incoming:{tenantId:string;adapterId:string;actor:string;expectedRevision:number}){
+      const input=snapshotInput(incoming,["tenantId","adapterId","actor","expectedRevision"]);
       if(!input||typeof input!=="object")fail("invalid_scope");
       await admin(input.tenantId,input.adapterId,input.actor);
       if(!validRevision(input.expectedRevision)||input.expectedRevision===null)
@@ -169,7 +189,8 @@ export function createHarnessStatusConnectorConfigStore(deps:{
         return publicMetadata(updated[0]!);
       });
     },
-    async disable(input:{tenantId:string;adapterId:string;actor:string;expectedRevision:number}){
+    async disable(incoming:{tenantId:string;adapterId:string;actor:string;expectedRevision:number}){
+      const input=snapshotInput(incoming,["tenantId","adapterId","actor","expectedRevision"]);
       if(!input||typeof input!=="object")fail("invalid_scope");
       await admin(input.tenantId,input.adapterId,input.actor);
       if(!validRevision(input.expectedRevision)||input.expectedRevision===null)

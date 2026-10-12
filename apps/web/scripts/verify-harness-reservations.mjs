@@ -3,6 +3,7 @@ import { createHmac, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { createHarnessReservationStore, HarnessReservationError } from "../src/server/harness/invocation-reservations.ts";
 import { createSignedHarnessEventAdmission, SignedHarnessEventError } from "../src/server/harness/signed-event-admission.ts";
+import { createHarnessEventQuarantine, HarnessQuarantineError } from "../src/server/harness/event-quarantine.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || process.env.SAVANT_HARNESS_SCHEMA_TEST !== "1" ||
@@ -178,11 +179,13 @@ try {
   );
   const signedSig = "v1=" + createHmac("sha256", signingSecret)
     .update(Buffer.concat([signedHeader, signedBody])).digest("hex");
+  const quarantineStore = createHarnessEventQuarantine({sql, now: () => nowValue.at});
   const signedAdmission = createSignedHarnessEventAdmission({
     nowMs: () => nowValue.at.getTime(),
     resolveSecrets: async () => [signingSecret],
     getRun: (tenant, runId) => s1.getRun(tenant, runId),
     applyEvent: (tenant, runId, parsed, delivery) => s1.applyEvent(tenant, runId, parsed, delivery),
+    quarantine: rejected => quarantineStore.record(rejected),
   });
   const signedReq = {
     tenantId: orgA, adapterId: "sandbox-adapter", runId: "run-four",
@@ -201,6 +204,59 @@ try {
   `;
   assert.equal(receipts.length, 1);
   assert.match(receipts[0].payload_sha256, /^[a-f0-9]{64}$/);
+
+  // Cryptographically valid but invalid-content events are quarantined, never applied.
+  const invalidSignedBody = Buffer.from(JSON.stringify({
+    ...signedEvent, eventId: "e-invalid-signed", rawPrompt: "DO_NOT_STORE_THIS_SECRET",
+  }));
+  const invalidSignedHeader = Buffer.from(
+    `savant-harness-v1\n${signedTimestamp}\n${orgA}\nsandbox-adapter\nrun-four\ndelivery-invalid-four\n`,
+  );
+  const invalidSignedRequest = {
+    ...signedReq,
+    deliveryId: "delivery-invalid-four",
+    rawBody: invalidSignedBody,
+    signature: "v1=" + createHmac("sha256", signingSecret)
+      .update(Buffer.concat([invalidSignedHeader, invalidSignedBody])).digest("hex"),
+  };
+  await assert.rejects(() => signedAdmission(invalidSignedRequest),
+    error => error instanceof SignedHarnessEventError && error.code === "invalid_event");
+  await assert.rejects(() => signedAdmission(invalidSignedRequest),
+    error => error instanceof SignedHarnessEventError && error.code === "invalid_event");
+  const quarantined = await sql`
+    select delivery_id,payload_sha256,reason,expires_at,rejected_at
+    from harness_eval_event_quarantine where organization_id=${orgA}
+  `;
+  assert.equal(quarantined.length, 1);
+  assert.equal(quarantined[0].delivery_id, "delivery-invalid-four");
+  assert.equal(quarantined[0].reason, "invalid_event");
+  assert.match(quarantined[0].payload_sha256, /^[a-f0-9]{64}$/);
+  assert.equal(quarantined[0].expires_at.getTime() - quarantined[0].rejected_at.getTime(),
+    7 * 86400000);
+  assert.equal((await s2.getRun(orgA, "run-four")).status, "succeeded");
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries
+    where organization_id=${orgA} and harness_run_id=
+      (select id from harness_eval_runs where organization_id=${orgA} and run_id='run-four')`)[0].n, 1);
+  const invalidHash = {tenantId:orgA,adapterId:"sandbox-adapter",runId:"run-four",
+    deliveryId:"delivery-invalid-four",payloadSha256:"f".repeat(64),reason:"invalid_event"};
+  await assert.rejects(() => quarantineStore.record(invalidHash),
+    error => error instanceof HarnessQuarantineError && error.code === "quarantine_conflict");
+  await assert.rejects(() => quarantineStore.record({...invalidHash,tenantId:orgB}),
+    error => error instanceof HarnessQuarantineError && error.code === "not_found");
+  await assert.rejects(() => quarantineStore.record({...invalidHash,deliveryId:"delivery-signed-four"}),
+    error => error instanceof HarnessQuarantineError && error.code === "delivery_conflict");
+  await sql`update harness_eval_runs set retention_days=0
+    where organization_id=${orgA} and run_id='run-four'`;
+  const disabledRetention = await quarantineStore.record({
+    ...invalidHash,deliveryId:"delivery-no-retention",payloadSha256:"e".repeat(64),
+  });
+  assert.deepEqual(disabledRetention,{retained:false,replay:false});
+  assert.equal((await sql`select count(*)::int as n from harness_eval_event_quarantine
+    where organization_id=${orgA}`)[0].n, 1);
+  assert.equal(await quarantineStore.purgeExpired(orgB), 0);
+  nowValue.at = new Date(nowValue.at.getTime() + 8 * 86400000);
+  assert.equal(await quarantineStore.purgeExpired(orgA), 1);
+  assert.equal(await quarantineStore.purgeExpired(orgA), 0);
 
   // Schema-level composite FK rejects cross-tenant event grafting.
   const [run] = await sql`select id from harness_eval_runs where organization_id=${orgA} and run_id='run-two'`;
@@ -226,6 +282,7 @@ try {
   orgA = null;
   assert.equal((await sql`select count(*)::int as n from harness_eval_events`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries`)[0].n, 0);
+  assert.equal((await sql`select count(*)::int as n from harness_eval_event_quarantine`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from harness_eval_transitions`)[0].n, 0);
   console.log(JSON.stringify({
     harnessReservations: "passed",

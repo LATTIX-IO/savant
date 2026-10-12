@@ -34,7 +34,7 @@ export function makeReadOnlyEvidenceClient({ token, fetcher = fetch } = {}) {
   if (typeof token !== "string" || token.trim().length < 10 || /[\r\n]/.test(token))
     fail("missing_read_token");
   return async (path, { allowMissing = false } = {}) => {
-    if (typeof path !== "string" || !/^\/(?:actions\/runs\/[1-9][0-9]*(?:\/(?:jobs\?per_page=100|approvals))?|releases\/tags\/v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)$/.test(path))
+    if (typeof path !== "string" || !/^\/(?:actions\/runs\/[1-9][0-9]*(?:\/(?:jobs\?per_page=100|approvals))?|releases\?per_page=1|releases\/tags\/v[0-9]+\.[0-9]+\.[0-9]+(?:-[A-Za-z0-9.-]+)?)$/.test(path))
       fail("invalid_read_path");
     let response;
     try {
@@ -47,7 +47,10 @@ export function makeReadOnlyEvidenceClient({ token, fetcher = fetch } = {}) {
     } catch { fail("negative_evidence_api_unavailable"); }
     if (allowMissing && response.status === 404) return null;
     if (response.status !== 200) fail("negative_evidence_api_unavailable");
-    if (/rel="next"/.test(response.headers?.get("link") || ""))
+    // This one-item list is an authorization probe, not an attempt to
+    // enumerate all releases. A next-page link is expected and safe here.
+    if (path !== "/releases?per_page=1" &&
+        /rel="next"/.test(response.headers?.get("link") || ""))
       fail("negative_evidence_paginated");
     let raw;
     try { raw = await response.text(); } catch { fail("negative_evidence_api_unavailable"); }
@@ -131,6 +134,10 @@ export async function verifyNegativeReleaseEvidence(request, {
   const run = await get(runPath);
   const jobs = await get(runPath + "/jobs?per_page=100");
   const approvals = await get(runPath + "/approvals");
+  // Require a successful list/read from Releases before treating an exact-tag
+  // 404 as absence. Missing Contents access must never certify nonpublication.
+  const visibleReleases = await get("/releases?per_page=1");
+  if (!Array.isArray(visibleReleases)) fail("release_read_permission_unverified");
   const release = await get("/releases/tags/" + canonical.version, { allowMissing: true });
   return assessNegativeReleaseRun(canonical, run, jobs, approvals, release);
 }

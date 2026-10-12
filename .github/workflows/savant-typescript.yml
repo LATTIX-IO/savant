@@ -132,6 +132,8 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-dispatch-worker.mjs
       - name: Verify tenant-authenticated provider idempotency reconciliation evidence
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-provider-reconciliation.mjs
+      - name: Verify signed customer harness status through isolated reconciliation DB
+        run: pnpm --filter @savant/web exec node ./scripts/verify-harness-signed-status.mjs
       - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
         run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs
       - name: Verify capability reference ACL, cross-tenant denial and p95

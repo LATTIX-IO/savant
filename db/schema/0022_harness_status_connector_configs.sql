@@ -13,7 +13,8 @@ create table if not exists harness_status_connector_configs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   primary key (organization_id,adapter_id),
-  check (secret_ref like ('vault:' || organization_id::text || ':' || adapter_id || ':%')),
+  check (left(secret_ref,length('vault:' || organization_id::text || ':' || adapter_id || ':')) =
+    ('vault:' || organization_id::text || ':' || adapter_id || ':')),
   check (endpoint like 'https://%/v1/savant/status')
 );
 create index if not exists harness_status_connectors_enabled_idx

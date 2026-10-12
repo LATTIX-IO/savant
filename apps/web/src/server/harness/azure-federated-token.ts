@@ -9,7 +9,7 @@
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const JWT=/^[a-zA-Z0-9_-]{1,8192}\.[a-zA-Z0-9_-]{1,8192}\.[a-zA-Z0-9_-]{1,8192}$/;
 // RFC 6750 b64token permits + / and trailing = padding; never permit controls.
-const TOKEN=/^[A-Za-z0-9._~+/-]+=*$/;
+const TOKEN=/^[A-Za-z0-9._~+\/-]+=*$/;
 const MAX_BYTES=4096;
 
 export class HarnessFederatedIdentityError extends Error{

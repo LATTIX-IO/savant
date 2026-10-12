@@ -93,7 +93,7 @@ test("PER-1371 accepts a full live-observed matrix with independent run/version 
   assert.equal(result.successful.sha256,"b".repeat(64));
   assert.deepEqual(result.negative.map(x=>x.scenario),["preflight_denied","approval_denied"]);
   assert.ok(Object.values(result.checks).every(x=>x===true));
-  assert.deepEqual(calls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
+  assert.deepEqual(secondCalls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
   assert.equal(calls[0][1].SAVANT_GOVERNANCE_MODE,"audit");
   assert.equal(calls[0][1].GH_TOKEN,e.SAVANT_GOVERNANCE_EVIDENCE_TOKEN);
   for(const entry of calls.slice(1))assert.equal(entry[2].token,e.GH_TOKEN);
@@ -213,9 +213,10 @@ test("PER-1371 upstream API rejection is sanitized and stops subsequent verifier
     x instanceof AcceptanceMatrixError &&
     x.code==="matrix_live_evidence_unavailable" && !x.message.includes("secret"));
   assert.deepEqual(calls.map(x=>x[0]),["governance","successful"]);
-  const f=services(e,calls=[]);
+  const secondCalls=[];
+  const f=services(e,secondCalls);
   f.negative=async r=>{
-    calls.push([r.scenario]);
+    secondCalls.push([r.scenario]);
     if(r.scenario==="approval_denied")throw Error("HTTP private response");
     return fixtures().preflight;
   };

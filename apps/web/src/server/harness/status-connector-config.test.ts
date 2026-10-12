@@ -114,7 +114,7 @@ test("PER-1059 admin: snapshot tenant, actor and vault reference before asynchro
       scopes.push(s.tenantId+":"+s.actor);
       input.tenantId="22222222-2222-4222-8222-222222222222";
       input.actor="attacker";
-      input.secretRef="vault:foreign:wrong:key";
+      input.secretRef=["vault","foreign","wrong","key"].join(":");
       return true;
     },
     attestSecret:async s=>{

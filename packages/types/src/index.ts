@@ -6,3 +6,4 @@ export * from "./tenant-skill-repo.ts";
 export * from "./skill-intelligence.ts";
 export * from "./git-providers.ts";
 export * from "./assessments.ts";export * from "./harness-adapter.ts";
+export * from "./harness-telemetry.ts";

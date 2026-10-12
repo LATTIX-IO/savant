@@ -11,6 +11,8 @@ import {readBoundedTestBenchBody} from "@/server/test-bench/definition-request";
 import {createObservedRunStore} from "@/server/test-bench/observed-run-store";
 import {parseObservedRunAdmission} from "@/server/test-bench/observed-run-contract";
 
+export const maxDuration=300;
+
 /** Read encrypted, observed run receipts. This does not infer missing scores. */
 export async function GET(request:Request,ctx:RouteContext<"/api/skills/[id]/test-bench/[definitionId]/runs">){
   try{

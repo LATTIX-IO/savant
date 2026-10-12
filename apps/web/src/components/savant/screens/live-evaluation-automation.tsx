@@ -4,7 +4,7 @@ import {useEffect,useState} from "react";
 
 import {
   isActiveLiveEvaluation,loadLiveEvalAutomation,startLiveEvalAutomation,
-  type LiveEvalAutomation,type LiveEvalRun,
+  type LiveEvalAutomation,
 } from "@/lib/live-evaluation-automation";
 
 const POLL_INTERVAL_MS=6000;

@@ -161,3 +161,31 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
   assert.equal(acknowledgements,0);
   assert.equal(retries,0);
 });
+
+test("PER-1059: miswired queue cannot switch worker tenant or adapter before provider I/O",async()=>{
+  for (const bad of [
+    {tenantId:"22222222-2222-4222-8222-222222222222"},
+    {adapterId:"foreign-adapter"},
+  ]) {
+    let sideEffects=0;
+    const worker=createHarnessDispatchWorker({
+      queue:{
+        claim:async()=>({
+          tenantId:tenant,adapterId:req.adapterId,runId:req.runId,traceId:req.traceId,
+          idempotencyKey:req.idempotencyKey,inputRef:req.inputRef,
+          specVersionHash:req.specVersionHash,testSuiteHash:req.testSuiteHash,
+          leaseToken:"f".repeat(64),leaseUntil:"2026-10-12T12:00:30Z",
+          attempt:1,generation:1,...bad,
+        }),
+        acknowledge:async()=>{sideEffects++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
+        releaseForRetry:async()=>{sideEffects++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
+      },
+      nowMs:()=>Date.parse("2026-10-12T12:00:00Z"),
+      loadAuthorizedRequest:async()=>{sideEffects++;return req;},
+      resolveAdapter:async()=>{sideEffects++;throw Error("must not resolve provider");},
+      audit:async()=>{sideEffects++;},
+    });
+    assert.equal((await worker.tick(identity)).state,"reconciliation_required");
+    assert.equal(sideEffects,0);
+  }
+});

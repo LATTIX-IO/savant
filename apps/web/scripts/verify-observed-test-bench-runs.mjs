@@ -32,6 +32,8 @@ try{
  const [foreign]=await sql`insert into organizations(slug,display_name)
   values(${"observed-b-"+suffix},'Observed B') returning id`;
  orgId=org.id;foreignId=foreign.id;
+ await sql`insert into users(organization_id,external_subject,email,display_name)
+   values(${orgId},'owner',${"owner-"+suffix+"@example.test"},'Original test-run initiator')`;
  const [repo]=await sql`insert into repositories
   (organization_id,provider_type,owner_name,repo_name,default_branch)
   values(${orgId},'github','observed-test',${"repo-"+suffix},'main') returning id`;
@@ -151,6 +153,29 @@ try{
  assert.equal(failed.status,"failed");assert.equal(failed.scorecard,null);
  assert.equal(failed.errorCode,"test_bench_unconfirmed_provider_retry");
  assert.equal(calls,1);
+
+ // A valid first attempt MUST refuse provider egress if the initiator was
+ // offboarded after admission but before the worker claimed the job.
+ const revoked=await store.start(actor,skillId,suite.id,{
+   expectedRevision:2,requestId:randomUUID(),
+ });
+ await sql`update users set status='disabled' where organization_id=${orgId} and external_subject='owner'`;
+ const [revokedJob]=await sql`select * from background_jobs
+   where id=(select job_id from test_bench_runs where id=${revoked.run.id})`;
+ const refused=await executeQueuedObservedRun({
+   sql,job:{id:revokedJob.id,organizationId:orgId,repositoryId:repo.id,
+     kind:"test_bench_run",dedupeKey:revoked.run.id,
+     payload:{runId:revoked.run.id},progress:{},attempts:1},
+   queue:{release:async()=>{throw Error("unexpected");}},
+   deadline:Date.now()+230000,
+   readInstructions:async()=>{throw Error("revoked operator must not read sources");},
+   clients:()=>{throw Error("revoked operator must not invoke model");},
+ });
+ assert.equal(refused,"done");
+ const rejected=await store.get(actor,skillId,suite.id,revoked.run.id);
+ assert.equal(rejected.status,"failed");
+ assert.equal(rejected.errorCode,"test_bench_actor_revoked");
+ assert.equal(calls,1);
  const logs=JSON.stringify(await sql`select payload_redacted from audit_events
   where organization_id=${orgId} and target_type='test_bench_run'`);
  assert.ok(!logs.includes(cases[0].prompt));
@@ -160,7 +185,8 @@ try{
   "exactly-once admission","cross-tenant read/write denial","role refusal",
   "encrypted queue snapshot","immutable revision A after index B",
   "observed NIM and Jev output persisted encrypted","complete scorecard only after observation",
-  "unsafe retry fails before provider IO","metadata-only audited events",
+  "unsafe retry fails before provider IO","revoked operator denied before egress",
+  "metadata-only audited events",
  ]}));
 }finally{
  if(orgId)await sql`delete from organizations where id=${orgId}`;

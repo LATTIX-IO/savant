@@ -57,7 +57,8 @@ function fixture(options:{
       calls.push("dispatchStarted");assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);
       return {runId,state:"dispatching" as const,generation:1};
     },
-    recordUnknownOutcome:async (_:typeof identity,runId:string,token:string,reason:string)=>{
+    recordUnknownOutcome:async (_:typeof identity,runId:string,token:string,
+      reason:"provider_unknown"|"provider_timeout"|"invalid_response"|"ack_failed")=>{
       calls.push("hold:"+reason);assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);
       return {runId,state:"reconciliation" as const,reason};
     },

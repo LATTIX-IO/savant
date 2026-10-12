@@ -25,11 +25,7 @@ export function LiveEvaluationAutomation({
 
   useEffect(()=>{
     const controller=new AbortController();
-    if(!workspaceSlug){
-      setError("A workspace is required to load persisted evaluation results.");
-      setLoading(false);
-      return ()=>controller.abort();
-    }
+    if(!workspaceSlug)return ()=>controller.abort();
     void loadLiveEvalAutomation(skillId,{signal:controller.signal,workspaceSlug})
       .then(value=>{if(!controller.signal.aborted)setSnapshot(value);})
       .catch(()=>{if(!controller.signal.aborted)setError("Unable to read the persisted evaluation status.");})
@@ -93,7 +89,7 @@ export function LiveEvaluationAutomation({
           >
             {submitting?"Submitting…":active?"Evaluation in progress":"Generate live evaluation"}
           </button>
-          {loading?<span className="subtle">Checking evaluation service…</span>:null}
+          {workspaceSlug&&loading?<span className="subtle">Checking evaluation service…</span>:null}
           {snapshot&&!snapshot.canGenerate?(
             <span className="subtle" style={{fontSize:12}}>
               Live evaluation requires an authorized role and configured NIM/Jev services.
@@ -101,7 +97,7 @@ export function LiveEvaluationAutomation({
           ):null}
           {readOnly?<span className="subtle">Historical evaluation is read-only.</span>:null}
         </div>
-        {error?<p role="alert" style={{color:"var(--blood)",fontSize:12,margin:0}}>{error}</p>:null}
+        {(!workspaceSlug||error)?<p role="alert" style={{color:"var(--blood)",fontSize:12,margin:0}}>{workspaceSlug?error:"A workspace is required to load persisted evaluation results."}</p>:null}
         {focused?(
           <div role="status" aria-live="polite" style={{borderTop:"1px solid var(--rule)",paddingTop:12,display:"grid",gap:6}}>
             <div className="row" style={{justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>

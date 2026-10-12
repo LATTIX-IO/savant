@@ -4,9 +4,11 @@ import type {
 } from "@savant/types/harness-adapter";
 
 export class AdapterProtocolError extends Error {
-  constructor(readonly code: string) {
+  readonly code: string;
+  constructor(code: string) {
     // Never reflect untrusted adapter text, tokens, payloads or tenant existence in errors.
     super(code);
+    this.code = code;
     this.name = "AdapterProtocolError";
   }
 }

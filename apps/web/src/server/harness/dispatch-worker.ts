@@ -74,11 +74,13 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
       if(lease.tenantId!==identity.tenantId || lease.adapterId!==identity.adapterId)
         return {state:"reconciliation_required",runId:lease.runId};
       const runId=lease.runId;
+      const leaseToken=lease.leaseToken;
+      const auditIdentity={tenantId:lease.tenantId,adapterId:lease.adapterId};
       let dispatched=false;
       async function retry(outcome:string){
-        try{await deps.queue.releaseForRetry(identity,runId,lease.leaseToken,250);}
+        try{await deps.queue.releaseForRetry(identity,runId,leaseToken,250);}
         catch{return {state:"reconciliation_required" as const,runId};}
-        try{await deps.audit({tenantId:lease.tenantId,adapterId:lease.adapterId,runId,outcome});}
+        try{await deps.audit({...auditIdentity,runId,outcome});}
         catch{/* audit adapter is diagnostics only; transaction log is authoritative */}
         return {state:"retry" as const,runId};
       }

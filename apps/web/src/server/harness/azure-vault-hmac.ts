@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const IDENT=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const PINNED=/^([a-z0-9][a-z0-9-]{0,39})\.([a-f0-9]{32})$/;
 const KV_NAME=/^[a-z][a-z0-9-]{1,22}[a-z0-9]$/;

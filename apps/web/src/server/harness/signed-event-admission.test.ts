@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import test from "node:test";
 import { createSignedHarnessEventAdmission, SignedHarnessEventError } from "./signed-event-admission.ts";
 
@@ -35,9 +35,10 @@ function fixture(options: {secret?: Uint8Array[], runAdapter?: string, runTenant
       return { tenantId:options.runTenant ?? tenantId,adapterId:options.runAdapter ?? "adapter-1",
         runId:"run-1", traceId:"trace-1",status:"running" };
     },
-    applyEvent: async (_t:string,_r:string,e:unknown) => {
+    applyEvent: async (_t:string,_r:string,e:unknown,delivery:{deliveryId:string;payloadSha256:string}) => {
       io.push("apply");
       assert.deepEqual(e,event);
+      assert.deepEqual(delivery,{deliveryId:"delivery-1",payloadSha256:createHash("sha256").update(body).digest("hex")});
       return {status:"succeeded",replay:false};
     },
   };
@@ -124,4 +125,35 @@ test("PER-1059 signed ingress: invalid request performs no I/O",async()=>{
   await denied("unauthorized",()=>f.admit({} as never));
   await denied("unauthorized",()=>f.admit({...envelope(),deliveryId:"x".repeat(200)}));
   assert.deepEqual(f.io,[]);
+});
+
+test("PER-1059: concurrent mutation cannot swap authenticated tenant, body or delivery ID",async()=>{
+  const request=envelope({rawBody:Buffer.from(body)});
+  const received:unknown[]=[];
+  const admit=createSignedHarnessEventAdmission({
+    nowMs:()=>Number(timestamp)*1000,
+    async resolveSecrets(){
+      request.tenantId=otherTenant;
+      request.deliveryId="forged-delivery";
+      (request.rawBody as Buffer).fill(0x58);
+      return [key];
+    },
+    async getRun(t,r){
+      assert.equal(t,tenantId);
+      assert.equal(r,"run-1");
+      return {tenantId,adapterId:"adapter-1",runId:"run-1",traceId:"trace-1",status:"running"};
+    },
+    async applyEvent(t,r,e,delivery){
+      assert.equal(t,tenantId);
+      assert.equal(r,"run-1");
+      assert.deepEqual(e,event);
+      received.push(delivery);
+      return {status:"succeeded",replay:false};
+    },
+  });
+  assert.deepEqual(await admit(request),{status:"succeeded",replay:false});
+  assert.deepEqual(received,[{
+    deliveryId:"delivery-1",
+    payloadSha256:createHash("sha256").update(body).digest("hex"),
+  }]);
 });

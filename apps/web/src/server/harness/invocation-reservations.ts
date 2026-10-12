@@ -191,9 +191,13 @@ export function createHarnessReservationStore(deps: {
       });
     },
     // Webhook signature and connector scope MUST be verified by an upstream controller.
-    async applyEvent(organizationId: string, runId: string, rawEvent: unknown) {
+    async applyEvent(organizationId: string, runId: string, rawEvent: unknown,
+      delivery?: { deliveryId: string; payloadSha256: string }) {
       if (typeof organizationId !== "string" || !TENANT.test(organizationId)) reject("unauthorized");
       checkRunId(runId);
+      if (delivery && (typeof delivery.deliveryId !== "string" || !IDENT.test(delivery.deliveryId) ||
+          typeof delivery.payloadSha256 !== "string" || !/^[a-f0-9]{64}$/.test(delivery.payloadSha256)))
+        reject("invalid_delivery");
       return sql.begin(async tx => {
         const rows = await tx<RunRow[]>`
           select * from harness_eval_runs where organization_id=${organizationId}
@@ -209,6 +213,19 @@ export function createHarnessReservationStore(deps: {
         } catch { reject("invalid_event"); }
         if (!["running","succeeded","failed","timedOut","canceled"].includes(event.status))
           reject("invalid_event");
+        if (delivery) {
+          const received = await tx<{ event_id: string; payload_sha256: string }[]>`
+            select event_id,payload_sha256 from harness_eval_deliveries
+            where organization_id=${organizationId} and harness_run_id=${row.id}
+              and delivery_id=${delivery.deliveryId}
+          `;
+          if (received.length) {
+            const prior = received[0]!;
+            if (prior.event_id !== event.eventId || prior.payload_sha256 !== delivery.payloadSha256)
+              reject("delivery_conflict");
+            return { ...output(row), replay: true };
+          }
+        }
         const previous = await tx<{ sequence: string; status: string; trace_id: string }[]>`
           select sequence::text,status,trace_id from harness_eval_events
           where organization_id=${organizationId} and harness_run_id=${row.id} and event_id=${event.eventId}
@@ -224,6 +241,13 @@ export function createHarnessReservationStore(deps: {
         if (row.status === "cancelRequested" && !["canceled","timedOut","failed"].includes(event.status))
           reject("cancel_race");
         if (row.status === "queued" && event.status === "canceled") reject("invalid_transition");
+        if (delivery) {
+          await tx`
+            insert into harness_eval_deliveries
+              (organization_id,harness_run_id,delivery_id,event_id,payload_sha256)
+            values (${organizationId},${row.id},${delivery.deliveryId},${event.eventId},${delivery.payloadSha256})
+          `;
+        }
         await tx`
           insert into harness_eval_events
             (organization_id,harness_run_id,event_id,sequence,status,trace_id)

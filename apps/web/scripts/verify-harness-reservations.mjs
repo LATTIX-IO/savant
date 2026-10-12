@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { createHarnessReservationStore, HarnessReservationError } from "../src/server/harness/invocation-reservations.ts";
+import { createSignedHarnessEventAdmission, SignedHarnessEventError } from "../src/server/harness/signed-event-admission.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || process.env.SAVANT_HARNESS_SCHEMA_TEST !== "1" ||
@@ -126,9 +127,29 @@ try {
     event(orgB, "run-two", "e-tenant-forged", 1, "running")));
   await denied("invalid_event", () => s1.applyEvent(orgA, "run-two",
     event(orgA, "run-two", "e-trace-forged", 1, "running", "wrong-trace")));
-  const applied = await s1.applyEvent(orgA, "run-two",
-    event(orgA, "run-two", "e-running", 1, "running"));
-  assert.equal(applied.latestSequence, 1);
+  const signedDelivery = { deliveryId: "delivery-one", payloadSha256: "c".repeat(64) };
+  const runningEvent = event(orgA, "run-two", "e-running", 1, "running");
+  const concurrentDeliveries = await Promise.all([
+    s1.applyEvent(orgA, "run-two", runningEvent, signedDelivery),
+    s2.applyEvent(orgA, "run-two", runningEvent, signedDelivery),
+  ]);
+  assert.equal(concurrentDeliveries.filter(r => r.replay === false).length, 1);
+  assert.equal(concurrentDeliveries.filter(r => r.replay === true).length, 1);
+  assert.ok(concurrentDeliveries.every(r => r.latestSequence === 1));
+  // Exactly one signed receipt, atomically attached to the accepted event.
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries where organization_id=${orgA}`)[0].n, 1);
+  const replaySigned = await s2.applyEvent(orgA, "run-two", runningEvent, signedDelivery);
+  assert.equal(replaySigned.replay, true);
+  await denied("delivery_conflict", () => s2.applyEvent(orgA, "run-two", runningEvent,
+    { ...signedDelivery, payloadSha256: "d".repeat(64) }));
+  await denied("delivery_conflict", () => s2.applyEvent(orgA, "run-two",
+    event(orgA, "run-two", "different-event-id", 2, "succeeded"), signedDelivery));
+  await denied("invalid_delivery", () => s2.applyEvent(orgA, "run-two",
+    event(orgA, "run-two", "forged-delivery", 2, "succeeded"),
+    { deliveryId: "invalid\nvalue", payloadSha256: "d".repeat(64) }));
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries where organization_id=${orgA}`)[0].n, 1);
+  await denied("not_found", () => s1.applyEvent(orgB, "run-two",
+    runningEvent, signedDelivery));
   await denied("out_of_order", () => s1.applyEvent(orgA, "run-two",
     event(orgA, "run-two", "e-sequence-replay", 1, "succeeded")));
   assert.equal((await s1.applyEvent(orgA, "run-two",
@@ -142,6 +163,45 @@ try {
   assert.equal(await s1.expireDue(orgA), 0);
   await denied("late_event", () => s1.applyEvent(orgA, "run-three",
     event(orgA, "run-three", "e-late", 1, "succeeded")));
+  // Signed HMAC admission -> real durable store end-to-end (no production provider).
+  await s1.reserve({
+    organizationId: orgA, actorSubject: "test-operator",
+    request: request(orgA, "run-four"), capabilities: caps,
+  });
+  await s1.markRunning(orgA, "run-four", "sandbox-external-four");
+  const signingSecret = Buffer.alloc(32, 0x43);
+  const signedEvent = event(orgA, "run-four", "e-signed-complete", 1, "succeeded");
+  const signedBody = Buffer.from(JSON.stringify(signedEvent));
+  const signedTimestamp = String(Math.floor(nowValue.at.getTime() / 1000));
+  const signedHeader = Buffer.from(
+    `savant-harness-v1\n${signedTimestamp}\n${orgA}\nsandbox-adapter\nrun-four\ndelivery-signed-four\n`,
+  );
+  const signedSig = "v1=" + createHmac("sha256", signingSecret)
+    .update(Buffer.concat([signedHeader, signedBody])).digest("hex");
+  const signedAdmission = createSignedHarnessEventAdmission({
+    nowMs: () => nowValue.at.getTime(),
+    resolveSecrets: async () => [signingSecret],
+    getRun: (tenant, runId) => s1.getRun(tenant, runId),
+    applyEvent: (tenant, runId, parsed, delivery) => s1.applyEvent(tenant, runId, parsed, delivery),
+  });
+  const signedReq = {
+    tenantId: orgA, adapterId: "sandbox-adapter", runId: "run-four",
+    deliveryId: "delivery-signed-four", timestamp: signedTimestamp,
+    rawBody: signedBody, signature: signedSig,
+  };
+  assert.equal((await signedAdmission(signedReq)).replay, false);
+  assert.equal((await signedAdmission(signedReq)).replay, true);
+  const tamperedReq = { ...signedReq, signature: "v1=" + "0".repeat(64) };
+  await assert.rejects(() => signedAdmission(tamperedReq),
+    err => err instanceof SignedHarnessEventError && err.code === "unauthorized");
+  assert.equal((await s2.getRun(orgA, "run-four")).status, "succeeded");
+  const receipts = await sql`
+    select delivery_id,payload_sha256 from harness_eval_deliveries
+    where organization_id=${orgA} and delivery_id='delivery-signed-four'
+  `;
+  assert.equal(receipts.length, 1);
+  assert.match(receipts[0].payload_sha256, /^[a-f0-9]{64}$/);
+
   // Schema-level composite FK rejects cross-tenant event grafting.
   const [run] = await sql`select id from harness_eval_runs where organization_id=${orgA} and run_id='run-two'`;
   let foreignDenied = false;
@@ -158,20 +218,21 @@ try {
     select action,count(*)::int as n from harness_eval_transitions
     where organization_id=${orgA} group by action
   `;
-  assert.ok(audit.some(x => x.action === "reserved" && x.n === 3));
+  assert.ok(audit.some(x => x.action === "reserved" && x.n === 4));
   assert.ok(audit.some(x => x.action === "cancelRequested" && x.n === 1));
   assert.ok(audit.some(x => x.action === "expired" && x.n === 1));
   assert.equal((await sql`select count(*)::int as n from harness_eval_runs where organization_id=${orgB}`)[0].n, 0);
   await sql`delete from organizations where id=${orgA}`;
   orgA = null;
   assert.equal((await sql`select count(*)::int as n from harness_eval_events`)[0].n, 0);
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from harness_eval_transitions`)[0].n, 0);
   console.log(JSON.stringify({
     harnessReservations: "passed",
     assertions: [
       "tenant-matched authorization", "durable cross-process replay", "tenant quotas",
       "duplicate run/receipt safety", "cancel-vs-complete race", "deadline recovery",
-      "malicious event rejection", "DB composite tenant FK", "transactional audit", "cascade",
+      "malicious event rejection", "signed HMAC to DB ingest", "DB composite tenant FK", "transactional audit", "cascade",
     ],
   }));
 } finally {

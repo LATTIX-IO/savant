@@ -38,8 +38,9 @@ export function parseHarnessTelemetrySpan(value: unknown): HarnessTelemetrySpanV
   const root = value as Record<string, unknown>;
   if (REQUIRED.some(key => !Object.hasOwn(root, key)) || root.schemaVersion !== 1 ||
       !id(root.tenantId) || !id(root.adapterId) || !id(root.runId) || !id(root.traceId) ||
-      !id(root.spanId) || !HASH.test(root.specVersionHash as string) ||
-      !HASH.test(root.testSuiteHash as string) ||
+      !id(root.spanId) || typeof root.specVersionHash !== "string" ||
+      !HASH.test(root.specVersionHash) || typeof root.testSuiteHash !== "string" ||
+      !HASH.test(root.testSuiteHash) ||
       !KINDS.includes(root.kind as typeof KINDS[number]) ||
       !STATUS.includes(root.status as typeof STATUS[number]) ||
       !["none", "metadata"].includes(root.captureLevel as string) ||

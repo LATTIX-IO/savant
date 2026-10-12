@@ -130,3 +130,42 @@ test("PER-1059 AKS: untrusted I/O failures expose code, never raw assertion or p
   await denied("invalid_assertion",x.read);
  });
 });
+
+test("PER-1059 AKS: ServiceAccount DNS subdomains and Kubernetes length boundaries",async()=>{
+ const valid=[
+  "system:serviceaccount:savant:harness.status",
+  "system:serviceaccount:savant:a.b.c",
+  "system:serviceaccount:nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn:sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "system:serviceaccount:savant:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.ddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+ ];
+ const invalid=[
+  "system:serviceaccount:savant:.harness",
+  "system:serviceaccount:savant:harness.",
+  "system:serviceaccount:savant:harness..status",
+  "system:serviceaccount:savant:-harness",
+  "system:serviceaccount:savant:harness-",
+  "system:serviceaccount:savant:UPPER",
+  "system:serviceaccount:bad.namespace:harness",
+  "system:serviceaccount:nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn:harness",
+  "system:serviceaccount:savant:ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss",
+  "system:serviceaccount:savant:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc.dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+  "system:serviceaccount:savant:",
+  "system:serviceaccount:savant:harness:extra",
+ ];
+ await projected(async x=>{
+  for(const expectedSubject of valid){
+   const reader=createAksProjectedAssertionReader({
+    tokenFilePath:x.tokenPath,trustedMountRoot:x.root,
+    expectedIssuer:iss,expectedSubject,nowMs:()=>now,
+   });
+   await x.write(jwt({sub:expectedSubject}));
+   assert.equal(await reader(),jwt({sub:expectedSubject}));
+  }
+  for(const expectedSubject of invalid){
+   assert.throws(()=>createAksProjectedAssertionReader({
+    tokenFilePath:x.tokenPath,trustedMountRoot:x.root,
+    expectedIssuer:iss,expectedSubject,nowMs:()=>now,
+   }),(e:unknown)=>e instanceof HarnessProjectedIdentityError&&e.code==="invalid_configuration");
+  }
+ });
+});

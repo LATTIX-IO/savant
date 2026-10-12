@@ -89,10 +89,29 @@ try {
   assert.deepEqual(pending,{state:"reconciliation_required",runId:"run-unknown"});
   assert.equal(remote.length,2,"provider failure not blindly retried");
   assert.equal((await reservations.getRun(tenant,"run-unknown")).status,"queued");
+  // Unknown external outcome is durably held, not re-queued after lease expiry.
+  const unknownState=await sql`
+    select d.state,d.reconciliation_reason from harness_eval_dispatch_leases d
+    inner join harness_eval_runs r on d.harness_run_id=r.id
+    where d.organization_id=${tenant} and r.run_id='run-unknown'
+  `;
+  assert.deepEqual([unknownState[0].state,unknownState[0].reconciliation_reason],
+    ["reconciliation","provider_unknown"]);
+  const acceptedState=await sql`
+    select d.state from harness_eval_dispatch_leases d
+    inner join harness_eval_runs r on d.harness_run_id=r.id
+    where d.organization_id=${tenant} and r.run_id='run-allowed'
+  `;
+  assert.equal(acceptedState[0].state,"acknowledged");
   assert.equal((await reservations.getRun(tenant,"run-denied")).status,"queued");
   assert.equal(claims.length,3);
   assert.equal(outcomes.length,2);
   assert.equal(await worker.tick(identity,20000).then(x=>x.state),"idle","backoff and leased unknown require reconciliation");
+  now.at=new Date(now.at.getTime()+22000);
+  assert.equal((await worker.tick(identity,20000)).state,"idle",
+    "expired started or quarantined dispatch must not automatically invoke provider again");
+  assert.equal(remote.length,2);
+  now.at=new Date(now.at.getTime()-22000);
   const persisted=await sql`
     select run_id,status,external_run_id from harness_eval_runs
       where organization_id=${tenant} order by run_id

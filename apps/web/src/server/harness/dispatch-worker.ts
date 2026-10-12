@@ -69,6 +69,10 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
       // occurs until immutable tenant-owned run pins and adapter capability match.
       const lease=await deps.queue.claim(identity,leaseMs);
       if(!lease)return {state:"idle"};
+      // Defense in depth: even a compromised/miswired queue may not switch the
+      // worker's authenticated scope to another tenant or adapter.
+      if(lease.tenantId!==identity.tenantId || lease.adapterId!==identity.adapterId)
+        return {state:"reconciliation_required",runId:lease.runId};
       const runId=lease.runId;
       let dispatched=false;
       async function retry(outcome:string){

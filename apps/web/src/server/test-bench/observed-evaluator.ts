@@ -1,7 +1,6 @@
 import type {ChatClient,JudgeClient,JevAnswer} from "../ai/clients.ts";
-import {scoringQuestions,verdictFor} from "../evaluation/eval-generation.ts";
+import {DEFAULT_RUBRIC,scoringQuestions,verdictFor} from "../evaluation/eval-generation.ts";
 import {computeScorecard,type EvalSample,type Scorecard} from "../evaluation/scorecard.ts";
-import {DEFAULT_RUBRIC} from "../evaluation/rubric.ts";
 import type {TestBenchCase} from "./definition-contract.ts";
 
 /** Deliberately bounded FIRST execution adapter: real NIM chat + Jev only.

@@ -138,6 +138,7 @@ try{
     sideEffect.runId,sideEffect.leaseToken)).state,"dispatching");
   await denied("lease_denied",()=>q1.releaseForRetry(ident("worker-1"),
     sideEffect.runId,sideEffect.leaseToken,100));
+  assert.equal((await store.requestCancel(tenant,"run-possibly-started")).status,"cancelRequested");
   now.at=new Date(now.at.getTime()+700);
   assert.equal(await q2.claim(ident("worker-2"),500),null,"provider-side uncertainty must never auto-dispatch");
   assert.equal((await q1.recordUnknownOutcome(ident("worker-1"),
@@ -149,10 +150,25 @@ try{
     where organization_id=${tenant} and harness_run_id=
       (select id from harness_eval_runs where organization_id=${tenant} and run_id='run-possibly-started')`;
   assert.deepEqual([holds[0].state,holds[0].reconciliation_reason],["reconciliation","provider_unknown"]);
+  const auditRace=await sql`select from_status,to_status from harness_eval_transitions
+    where organization_id=${tenant} and action='reconciliationRequired'
+      and harness_run_id=(select id from harness_eval_runs
+        where organization_id=${tenant} and run_id='run-possibly-started')`;
+  assert.deepEqual(auditRace.map(x=>[x.from_status,x.to_status]),
+    [["cancelRequested","cancelRequested"]]);
+  let nullReasonDenied=false;
+  try{
+    await sql`update harness_eval_dispatch_leases set reconciliation_reason=null
+      where organization_id=${tenant} and state='reconciliation'`;
+  }catch(error){
+    nullReasonDenied=error.code==="23514";
+    if(!nullReasonDenied)throw error;
+  }
+  assert.equal(nullReasonDenied,true,"PostgreSQL CHECK must reject NULL reconciliation reasons");
   const active=await sql`select status,count(*)::int as n from harness_eval_runs
     where organization_id=${tenant} group by status`;
   assert.equal(active.find(x=>x.status==="running").n,2);
-  assert.equal(active.find(x=>x.status==="cancelRequested").n,2);
+  assert.equal(active.find(x=>x.status==="cancelRequested").n,3);
   const audit=await sql`select count(*)::int as n from harness_eval_transitions
     where organization_id=${tenant} and action='started'`;
   assert.equal(audit[0].n,2);

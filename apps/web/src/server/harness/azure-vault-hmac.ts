@@ -100,9 +100,8 @@ export function createAzureKeyVaultHarnessResolver(deps:{
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>5000)
     fail("invalid_configuration");
   const getToken=deps.accessToken,transport=deps.transport,nowMs=deps.nowMs;
-  return {
-    /** Matches status connector readSecret(tenant, adapter, vaultRef). */
-    async readSecret(tenantId:string,adapterId:string,ref:string):Promise<Uint8Array|null>{
+  /** Matches status connector readSecret(tenant, adapter, vaultRef). */
+  const readSecret=async(tenantId:string,adapterId:string,ref:string):Promise<Uint8Array|null>=>{
       const {alias,version}=scoped(tenantId,adapterId,ref);
       const name=secretName(tenantId,adapterId,alias);
       const id=`${host}/secrets/${name}/${version}`;
@@ -145,10 +144,12 @@ export function createAzureKeyVaultHarnessResolver(deps:{
         clearTimeout(timer);
         ctrl.signal.removeEventListener("abort",onAbort);
       }
-    },
+  };
+  return {
+    readSecret,
     /** Metadata only: check that the exact tenant/version is available. */
     async attestSecret(input:{tenantId:string;adapterId:string;secretRef:string}):Promise<boolean>{
-      const key=await this.readSecret(input.tenantId,input.adapterId,input.secretRef);
+      const key=await readSecret(input.tenantId,input.adapterId,input.secretRef);
       if(!key)return false;
       // No secret data may escape attestation.
       key.fill(0);

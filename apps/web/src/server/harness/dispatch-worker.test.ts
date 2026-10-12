@@ -129,3 +129,35 @@ test("PER-1059: expired lease is never dispatched",async()=>{
   assert.equal((await f.worker.tick(identity)).state,"retry");
   assert.ok(!f.calls.includes("invoke"));
 });
+
+test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsafe retry",async()=>{
+  const lease={
+    tenantId:tenant,adapterId:req.adapterId,runId:req.runId,traceId:req.traceId,
+    idempotencyKey:req.idempotencyKey,inputRef:req.inputRef,
+    specVersionHash:req.specVersionHash,testSuiteHash:req.testSuiteHash,
+    leaseToken:"f".repeat(64),leaseUntil:new Date(Date.now()+180).toISOString(),
+    attempt:1,generation:1,
+  };
+  let acknowledgements=0,retries=0,started=0;
+  const worker=createHarnessDispatchWorker({
+    queue:{
+      claim:async()=>lease,
+      acknowledge:async()=>{acknowledgements++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
+      releaseForRetry:async()=>{retries++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
+    },
+    nowMs:()=>Date.now(),
+    loadAuthorizedRequest:async()=>req,
+    resolveAdapter:async()=>({
+      durableIdempotency:true,
+      capabilities:caps,
+      invoke:async()=>{started++;return new Promise<never>(()=>{});},
+    }),
+    audit:async()=>{},
+  });
+  const start=Date.now();
+  assert.equal((await worker.tick(identity)).state,"reconciliation_required");
+  assert.ok(Date.now()-start<1000,"worker timeout must not wait indefinitely");
+  assert.equal(started,1);
+  assert.equal(acknowledgements,0);
+  assert.equal(retries,0);
+});

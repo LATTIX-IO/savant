@@ -85,3 +85,15 @@ test("PER MVP live eval: failed requests, unexpected status, missing JSON and in
  await assert.rejects(()=>loadLiveEvalAutomation(" "+skillId,{fetcher:stub(payload)}),LiveEvaluationUnavailable);
  await assert.rejects(()=>loadLiveEvalAutomation("",{fetcher:stub(payload)}),LiveEvaluationUnavailable);
 });
+
+test("PER MVP live eval: abort signal is forwarded or explicitly null, never undefined",async()=>{
+ const controller=new AbortController();
+ await loadLiveEvalAutomation(skillId,{signal:controller.signal,
+  fetcher:stub(payload,200,(_url,init)=>{
+   assert.equal(init.signal,controller.signal);
+  }),
+ });
+ await startLiveEvalAutomation(skillId,{fetcher:stub({data:{...finished,status:"queued"}},202,(_url,init)=>{
+  assert.equal(init.signal,null);
+ })});
+});

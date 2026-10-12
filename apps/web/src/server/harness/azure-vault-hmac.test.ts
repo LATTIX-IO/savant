@@ -87,7 +87,7 @@ test("PER-1059 Azure KV: malformed, unpinned and cross-tenant vault refs denied 
   assert.deepEqual(f.calls,[]);
 });
 test("PER-1059 Azure KV: invalid static vault hosts cannot be constructed",()=>{
-  for(const name of ["localhost","127.0.0.1","evil--vault","test.vault.azure.net","a","bad/vault"]){
+  for(const name of ["LOCALHOST","127.0.0.1","evil--vault","test.vault.azure.net","a","bad/vault"]){
     assert.throws(()=>createAzureKeyVaultHarnessResolver({
       vaultName:name,nowMs:()=>now,
       accessToken:async()=>bearer,

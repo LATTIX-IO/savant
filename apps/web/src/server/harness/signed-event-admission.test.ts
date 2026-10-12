@@ -79,7 +79,7 @@ test("PER-1059 signed ingress: dual-key rotation, revoked or absent secret fail 
   ]);
   rotatedEnvelope.signature="v1="+createHmac("sha256",rotated).update(rotatedMessage).digest("hex");
   const f=fixture({secret:[rotated,key]});
-  assert.equal((await f.admit(rotatedEnvelope)).status,"succeeded");
+  assert.deepEqual(await f.admit(rotatedEnvelope),{status:"succeeded",replay:false});
   const removed=fixture({secret:[key]});
   await denied("unauthorized",()=>removed.admit(rotatedEnvelope));
   const revoked=fixture({secret:[]});

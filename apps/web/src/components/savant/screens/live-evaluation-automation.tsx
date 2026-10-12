@@ -1,6 +1,7 @@
 "use client";
 
 import {useEffect,useState} from "react";
+import {extractWorkspaceSlugFromPathname} from "@/lib/tenant-paths";
 
 import {
   isActiveLiveEvaluation,loadLiveEvalAutomation,startLiveEvalAutomation,
@@ -11,8 +12,9 @@ const POLL_INTERVAL_MS=6000;
 
 /** Server-backed generation and scoring. Does not execute arbitrary harness tools. */
 export function LiveEvaluationAutomation({
-  skillId,readOnly,
-}: {skillId:string;readOnly:boolean}) {
+  skillId,readOnly,pathname,
+}: {skillId:string;readOnly:boolean;pathname:string}) {
+  const workspaceSlug=extractWorkspaceSlugFromPathname(pathname);
   const [snapshot,setSnapshot]=useState<LiveEvalAutomation|null>(null);
   const [loading,setLoading]=useState(true);
   const [submitting,setSubmitting]=useState(false);
@@ -23,34 +25,39 @@ export function LiveEvaluationAutomation({
 
   useEffect(()=>{
     const controller=new AbortController();
-    void loadLiveEvalAutomation(skillId,{signal:controller.signal})
+    if(!workspaceSlug){
+      setError("A workspace is required to load persisted evaluation results.");
+      setLoading(false);
+      return ()=>controller.abort();
+    }
+    void loadLiveEvalAutomation(skillId,{signal:controller.signal,workspaceSlug})
       .then(value=>{if(!controller.signal.aborted)setSnapshot(value);})
       .catch(()=>{if(!controller.signal.aborted)setError("Unable to read the persisted evaluation status.");})
       .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
     return ()=>controller.abort();
-  },[skillId]);
+  },[skillId,workspaceSlug]);
 
   useEffect(()=>{
-    if(!active)return;
+    if(!active||!workspaceSlug)return;
     const controller=new AbortController();
     let reading=false;
     const interval=window.setInterval(()=>{
       if(reading)return;
       reading=true;
-      void loadLiveEvalAutomation(skillId,{signal:controller.signal})
+      void loadLiveEvalAutomation(skillId,{signal:controller.signal,workspaceSlug})
         .then(value=>{if(!controller.signal.aborted){setSnapshot(value);setError(null);}})
         .catch(()=>{if(!controller.signal.aborted)setError("Unable to refresh evaluation status.");})
         .finally(()=>{reading=false;});
     },POLL_INTERVAL_MS);
     return ()=>{window.clearInterval(interval);controller.abort();};
-  },[active,skillId]);
+  },[active,skillId,workspaceSlug]);
 
   async function start(){
-    if(readOnly||submitting||!snapshot?.canGenerate||active)return;
+    if(readOnly||!workspaceSlug||submitting||!snapshot?.canGenerate||active)return;
     setSubmitting(true);
     setError(null);
     try {
-      const accepted=await startLiveEvalAutomation(skillId);
+      const accepted=await startLiveEvalAutomation(skillId,{workspaceSlug});
       setLatestRequestedId(accepted.id);
       setSnapshot(current=>current===null?null:{
         ...current,
@@ -82,7 +89,7 @@ export function LiveEvaluationAutomation({
         <div className="row" style={{alignItems:"center",gap:10,flexWrap:"wrap"}}>
           <button
             type="button" className="btn btn-primary" onClick={()=>void start()}
-            disabled={readOnly||loading||submitting||active||!snapshot?.canGenerate}
+            disabled={readOnly||!workspaceSlug||loading||submitting||active||!snapshot?.canGenerate}
           >
             {submitting?"Submitting…":active?"Evaluation in progress":"Generate live evaluation"}
           </button>

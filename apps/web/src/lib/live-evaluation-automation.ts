@@ -54,7 +54,7 @@ function runFromServer(value: unknown, expectedSkillId: string): LiveEvalRun {
     commitSha,
     createdAt: typeof run.createdAt === "string" ? run.createdAt : "",
     completedAt: typeof run.completedAt === "string" ? run.completedAt : null,
-    error: typeof run.error === "string" ? run.error.slice(0, 300) : null,
+    error: typeof run.error === "string" && run.error.length > 0 ? "Evaluation failed; inspect sanitized job diagnostics." : null,
     rounds: typeof run.rounds === "number" && Number.isSafeInteger(run.rounds) && run.rounds >= 0 ? run.rounds : 0,
     score: typeof score === "number" && Number.isFinite(score) && score >= 0 && score <= 100 ? score : null,
   };

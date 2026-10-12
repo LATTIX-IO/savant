@@ -52,3 +52,20 @@ create table if not exists harness_eval_events (
 );
 comment on table harness_eval_events is
   'Immutable ordered metadata-only receipts for tenant-scoped harness test runs; external webhooks must authenticate before admission.';
+
+create table if not exists harness_eval_transitions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null,
+  harness_run_id uuid not null,
+  action varchar(24) not null check (action in ('reserved','started','cancelRequested','eventApplied','expired')),
+  from_status varchar(20),
+  to_status varchar(20) not null,
+  event_id varchar(128),
+  created_at timestamptz not null default now(),
+  foreign key (organization_id,harness_run_id)
+    references harness_eval_runs (organization_id,id) on delete cascade
+);
+create index if not exists harness_eval_transitions_tenant_run_idx
+  on harness_eval_transitions (organization_id,harness_run_id,created_at);
+comment on table harness_eval_transitions is
+  'Fail-closed transactional metadata audit. No raw prompts, credentials, session secrets or tool payloads.';

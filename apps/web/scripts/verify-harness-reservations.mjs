@@ -126,9 +126,24 @@ try {
     event(orgB, "run-two", "e-tenant-forged", 1, "running")));
   await denied("invalid_event", () => s1.applyEvent(orgA, "run-two",
     event(orgA, "run-two", "e-trace-forged", 1, "running", "wrong-trace")));
-  const applied = await s1.applyEvent(orgA, "run-two",
-    event(orgA, "run-two", "e-running", 1, "running"));
+  const signedDelivery = { deliveryId: "delivery-one", payloadSha256: "c".repeat(64) };
+  const runningEvent = event(orgA, "run-two", "e-running", 1, "running");
+  const applied = await s1.applyEvent(orgA, "run-two", runningEvent, signedDelivery);
   assert.equal(applied.latestSequence, 1);
+  // Exactly one signed receipt, atomically attached to the accepted event.
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries where organization_id=${orgA}`)[0].n, 1);
+  const replaySigned = await s2.applyEvent(orgA, "run-two", runningEvent, signedDelivery);
+  assert.equal(replaySigned.replay, true);
+  await denied("delivery_conflict", () => s2.applyEvent(orgA, "run-two", runningEvent,
+    { ...signedDelivery, payloadSha256: "d".repeat(64) }));
+  await denied("delivery_conflict", () => s2.applyEvent(orgA, "run-two",
+    event(orgA, "run-two", "different-event-id", 2, "succeeded"), signedDelivery));
+  await denied("invalid_delivery", () => s2.applyEvent(orgA, "run-two",
+    event(orgA, "run-two", "forged-delivery", 2, "succeeded"),
+    { deliveryId: "invalid\nvalue", payloadSha256: "d".repeat(64) }));
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries where organization_id=${orgA}`)[0].n, 1);
+  await denied("not_found", () => s1.applyEvent(orgB, "run-two",
+    runningEvent, signedDelivery));
   await denied("out_of_order", () => s1.applyEvent(orgA, "run-two",
     event(orgA, "run-two", "e-sequence-replay", 1, "succeeded")));
   assert.equal((await s1.applyEvent(orgA, "run-two",
@@ -165,6 +180,7 @@ try {
   await sql`delete from organizations where id=${orgA}`;
   orgA = null;
   assert.equal((await sql`select count(*)::int as n from harness_eval_events`)[0].n, 0);
+  assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries`)[0].n, 0);
   assert.equal((await sql`select count(*)::int as n from harness_eval_transitions`)[0].n, 0);
   console.log(JSON.stringify({
     harnessReservations: "passed",

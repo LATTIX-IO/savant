@@ -124,6 +124,58 @@ try{
   assert.ok(persisted[0].secret_ref.startsWith(`vault:${tenant}:${adapterId}:`));
   assert.ok(attestationCalls>=6&&egressCalls>=3);
 
+  // Adversarial TOCTOU: mutate ALL caller fields during async authorization
+  // and credential attestation. The saved row and audited actor must remain A.
+  const snapAdapter="snapshot-adapter";
+  const snapRef=`vault:${tenant}:${snapAdapter}:trusted-key`;
+  let pending=null;
+  const mutationStore=createHarnessStatusConnectorConfigStore({
+    sql,now:()=>new Date("2026-10-12T12:00:00Z"),
+    allowedOrigins:["https://customer-status.example.com"],
+    authorizeAdmin:async scope=>{
+      assert.equal(scope.tenantId,tenant);
+      assert.equal(scope.adapterId,snapAdapter);
+      assert.equal(scope.actor,"security-admin");
+      if(pending){
+        pending.tenantId=foreign;
+        pending.adapterId="attacker-adapter";
+        pending.actor="forged-auditor";
+        if("secretRef" in pending)pending.secretRef=`vault:${foreign}:attacker-adapter:secret`;
+        if("endpoint" in pending)pending.endpoint="https://attacker.example.com/v1/savant/status";
+        pending.expectedRevision=999;
+      }
+      return true;
+    },
+    attestSecret:async scope=>{
+      assert.equal(scope.tenantId,tenant);
+      assert.equal(scope.adapterId,snapAdapter);
+      assert.equal(scope.secretRef,snapRef);
+      return true;
+    },
+    verifyEgress:async(t,e)=>t===tenant&&e===endpoint,
+  });
+  pending={tenantId:tenant,adapterId:snapAdapter,actor:"security-admin",
+    endpoint,secretRef:snapRef,expectedRevision:null};
+  const savedMutation=await mutationStore.save(pending);
+  assert.deepEqual(savedMutation,{tenantId:tenant,adapterId:snapAdapter,
+    endpoint,status:"disabled",revision:1});
+  pending={tenantId:tenant,adapterId:snapAdapter,actor:"security-admin",expectedRevision:1};
+  assert.equal((await mutationStore.activate(pending)).revision,2);
+  pending={tenantId:tenant,adapterId:snapAdapter,actor:"security-admin",expectedRevision:2};
+  assert.equal((await mutationStore.disable(pending)).revision,3);
+  pending=null;
+  const snapshotRows=await sql`select organization_id,adapter_id,endpoint,secret_ref,
+      updated_by,revision,status from harness_status_connector_configs
+    where organization_id=${tenant} and adapter_id=${snapAdapter}`;
+  assert.equal(snapshotRows.length,1);
+  assert.equal(snapshotRows[0].endpoint,endpoint);
+  assert.equal(snapshotRows[0].secret_ref,snapRef);
+  assert.equal(snapshotRows[0].updated_by,"security-admin");
+  assert.equal(snapshotRows[0].revision,3);
+  assert.equal(snapshotRows[0].status,"disabled");
+  assert.equal((await sql`select count(*)::int as n from harness_status_connector_configs
+    where organization_id=${foreign}`)[0].n,0);
+
   // SQL constraint also denies tenant-crossing credential references.
   let crossTenantDenied=false;
   try{

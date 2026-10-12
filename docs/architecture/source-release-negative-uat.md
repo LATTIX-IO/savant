@@ -20,7 +20,7 @@ export GH_TOKEN
 node scripts/release-negative-uat.mjs > negative-release-uat.json
 ```
 
-Set `SAVANT_NEGATIVE_SCENARIO=approval_denied` and the corresponding run ID for a rejected protected-environment deployment. The script has no mutation or GitHub CLI dependencies; it sends four GET requests only, all to the fixed Savant repository.
+Set `SAVANT_NEGATIVE_SCENARIO=approval_denied` and the corresponding run ID for a rejected protected-environment deployment. The script has no mutation or GitHub CLI dependencies; it sends five GET requests only, all to the fixed Savant repository.
 
 ## Proof criteria
 
@@ -28,7 +28,7 @@ The verifier requires an exact `workflow_dispatch` run for `.github/workflows/pu
 
 A `preflight_denied` result requires a failed prepare job, no successfully executed publish job, no protected-environment approval history, and no GitHub Release at the requested version. An `approval_denied` result requires successful preparation, unsuccessful/absent publish job, and exactly one **rejected** review from a human User other than either run actor for the `savant-release` environment; the version must also have no GitHub Release.
 
-All read responses are bounded, redirect-free and fail closed on missing permissions, unexpected pagination, incomplete job lists, ambiguity or malformed JSON. The output includes an explicit scenario, run ID, version, commit and five boolean findings. It intentionally omits reviewer identity, credentials and raw GitHub responses. The process exits nonzero if evidence is unavailable or contradictory.
+Before interpreting the release-by-tag 404 as an absent release, the verifier requires a successful authenticated `GET /releases?per_page=1` response. This read-permission probe intentionally allows pagination because it does not enumerate releases; an access-limited 404 or 403 from the probe fails rather than falsely proving absence. All read responses are bounded, redirect-free and fail closed on missing permissions, unexpected pagination, incomplete job lists, ambiguity or malformed JSON. The output includes an explicit scenario, run ID, version, commit and five boolean findings. It intentionally omits reviewer identity, credentials and raw GitHub responses. The process exits nonzero if evidence is unavailable or contradictory.
 
 ## Interpretation limits
 

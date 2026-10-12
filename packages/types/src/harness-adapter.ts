@@ -60,7 +60,7 @@ export interface HarnessCaller {
 export interface VerifiedHarnessPrincipal {
   tenantId: string;
   actor: string;
-  scopes: AdapterScope[];
+  scopes: readonly AdapterScope[];
   expiresAtMs: number;
   revoked: boolean;
 }

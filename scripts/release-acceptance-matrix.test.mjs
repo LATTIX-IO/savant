@@ -155,7 +155,8 @@ test("PER-1371 never invokes positive/negative release checks if the disabled go
   };
   await assert.rejects(runReleaseAcceptanceMatrix(e,s),/matrix_governance_unverified/);
   assert.deepEqual(calls.map(x=>x[0]),["governance"]);
-  const corrupt=services(e,calls=[]);
+  const secondaryCalls=[];
+  const corrupt=services(e,secondaryCalls);
   corrupt.governance=async()=>({...fixtures().governance,
     checks:{...fixtures().governance.checks,publication_state_matches_expected:false}});
   await assert.rejects(runReleaseAcceptanceMatrix(e,corrupt),/matrix_incomplete_checks/);

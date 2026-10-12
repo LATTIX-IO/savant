@@ -1051,10 +1051,6 @@ function EvaluationDetailLoadedScreen({
             <Ic.ExternalLink className="b-icon" />
             Open related skill
           </Link>
-          <button type="button" className="btn btn-ghost">
-            <Ic.ExternalLink className="b-icon" />
-            Export eval
-          </button>
           <a href="#test-bench" className="btn btn-primary">
             <Ic.Refresh className="b-icon" />
             Open Test Bench drafts

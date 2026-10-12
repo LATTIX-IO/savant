@@ -102,6 +102,7 @@ jobs:
       PGDATABASE: savant
       DATABASE_URL: postgresql://savant@127.0.0.1:5432/savant
       SAVANT_WORKFLOW_SCHEMA_TEST: "1"
+      SAVANT_HARNESS_SCHEMA_TEST: "1"
     steps:
       - name: Checkout Savant
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -121,6 +122,8 @@ jobs:
         run: pnpm db:migrate
       - name: Reapply migrations to prove idempotency
         run: pnpm db:migrate
+      - name: Verify durable harness invocation tenant, quota, race and replay invariants
+        run: pnpm --filter @savant/web exec node ./scripts/verify-harness-reservations.mjs
       - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
         run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs
       - name: Verify capability reference ACL, cross-tenant denial and p95

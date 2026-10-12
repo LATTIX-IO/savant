@@ -44,7 +44,7 @@ function ctx(row:RunRow){
 function samples(row:RunRow):ObservedCase[]{
   if(!row.results_ciphertext)return [];
   try{
-    const data=JSON.parse(decryptTestBenchCases(row.results_ciphertext,ctx(row))) as unknown;
+    const data=JSON.parse(decryptTestBenchCases(row.results_ciphertext,ctx(row),process.env,65536)) as unknown;
     if(!Array.isArray(data)||data.length>MAX_OBSERVED_CASES)
       invalid("test_bench_evidence_invalid",503);
     return data as ObservedCase[];
@@ -232,7 +232,7 @@ export function createObservedRunStore(sql:Sql){
       previous:readonly ObservedCase[]):Promise<void>{
       if(index!==previous.length+1||index>row.expected_cases)
         invalid("test_bench_progress_out_of_order");
-      const ciphertext=encryptTestBenchCases(JSON.stringify([...previous,caseData]),ctx(row));
+      const ciphertext=encryptTestBenchCases(JSON.stringify([...previous,caseData]),ctx(row),process.env,65536);
       const [saved]=await sql<{id:string}[]>`
         update test_bench_runs set results_ciphertext=${ciphertext},
           completed_cases=${index},updated_at=now()
@@ -245,7 +245,7 @@ export function createObservedRunStore(sql:Sql){
     async complete(row:RunRow,result:ObservedEvaluation):Promise<void>{
       if(result.samples.length!==row.expected_cases||row.expected_cases>MAX_OBSERVED_CASES)
         invalid("test_bench_incomplete");
-      const ciphertext=encryptTestBenchCases(JSON.stringify(result.samples),ctx(row));
+      const ciphertext=encryptTestBenchCases(JSON.stringify(result.samples),ctx(row),process.env,65536);
       await sql.begin(async tx=>{
         const [saved]=await tx<{id:string}[]>`
           update test_bench_runs set status='complete',completed_at=now(),updated_at=now(),

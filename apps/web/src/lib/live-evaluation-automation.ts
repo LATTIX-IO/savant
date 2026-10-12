@@ -1,3 +1,5 @@
+import { withWorkspaceSlugQuery } from "./tenant-paths.ts";
+
 /**
  * Verified, tenant-scoped read model for real server-side evaluation generation.
  * Synthetic Test Bench previews must never pass through this API.
@@ -90,19 +92,28 @@ export function isActiveLiveEvaluation(status: LiveEvalStatus): boolean {
   return status === "queued" || status === "running";
 }
 
-function endpoint(skillId: string, start: boolean): string {
+function endpoint(skillId: string, start: boolean, workspaceSlug: string | undefined): string {
   if (!skillId || skillId.length > 300 || skillId.trim() !== skillId) {
     throw new LiveEvaluationUnavailable("Invalid skill identifier.");
   }
+  // authorizeTenantRequest requires an explicit tenant query; do not let a
+  // missing workspace silently fall back to a different user's organization.
+  if (typeof workspaceSlug !== "string" || workspaceSlug.length > 80 ||
+      !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(workspaceSlug)) {
+    throw new LiveEvaluationUnavailable("Workspace context is required.");
+  }
   const encoded = encodeURIComponent(skillId);
-  return `/api/skills/${encoded}/automation${start ? "/generate" : ""}?skillId=${encoded}`;
+  return withWorkspaceSlugQuery(
+    `/api/skills/${encoded}/automation${start ? "/generate" : ""}?skillId=${encoded}`,
+    workspaceSlug,
+  );
 }
 
 export async function loadLiveEvalAutomation(
   skillId: string,
-  options: {signal?: AbortSignal; fetcher?: typeof fetch} = {},
+  options: {signal?: AbortSignal; fetcher?: typeof fetch; workspaceSlug?: string} = {},
 ): Promise<LiveEvalAutomation> {
-  const response = await (options.fetcher ?? fetch)(endpoint(skillId, false), {
+  const response = await (options.fetcher ?? fetch)(endpoint(skillId, false, options.workspaceSlug), {
     method: "GET", credentials: "same-origin", cache: "no-store",
     headers: {Accept: "application/json"}, signal: options.signal ?? null,
   });
@@ -116,9 +127,9 @@ export async function loadLiveEvalAutomation(
 
 export async function startLiveEvalAutomation(
   skillId: string,
-  options: {signal?: AbortSignal; fetcher?: typeof fetch} = {},
+  options: {signal?: AbortSignal; fetcher?: typeof fetch; workspaceSlug?: string} = {},
 ): Promise<LiveEvalRun> {
-  const response = await (options.fetcher ?? fetch)(endpoint(skillId, true), {
+  const response = await (options.fetcher ?? fetch)(endpoint(skillId, true, options.workspaceSlug), {
     method: "POST", mode: "same-origin", credentials: "same-origin", cache: "no-store",
     headers: {Accept: "application/json"}, signal: options.signal ?? null,
   });

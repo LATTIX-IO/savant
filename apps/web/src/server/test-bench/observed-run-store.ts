@@ -113,11 +113,11 @@ export function createObservedRunStore(sql:Sql){
               and r.status<>'disabled'
             for share of d
           `;
-          if(!def)invalid("test_bench_not_found",404);
+          if(!def)return invalid("test_bench_not_found",404);
           if(def.revision!==input.expectedRevision)invalid("test_bench_revision_conflict");
           let commitSha:string;
           try{commitSha=requirePinnedEvaluationCommit(def.source_commit_sha);}
-          catch{invalid("test_bench_source_not_pinned");}
+          catch{return invalid("test_bench_source_not_pinned");}
           const cases=parseTestBenchCases(JSON.parse(decryptTestBenchCases(def.cases_ciphertext,{
             organizationId:actor.organizationId,definitionId,revision:def.revision,
             commitSha,
@@ -140,7 +140,7 @@ export function createObservedRunStore(sql:Sql){
               ${input.requestId},${actor.subject},${snapshot},${cases.length}
             ) returning *
           `;
-          if(!row)invalid("test_bench_run_unavailable",503);
+          if(!row)return invalid("test_bench_run_unavailable",503);
           const [job]=await tx<{id:string}[]>`
             insert into background_jobs(
               organization_id,repository_id,kind,dedupe_key,payload
@@ -149,7 +149,7 @@ export function createObservedRunStore(sql:Sql){
               ${id},${tx.json({runId:id})}::jsonb
             ) returning id
           `;
-          if(!job)invalid("test_bench_run_unavailable",503);
+          if(!job)return invalid("test_bench_run_unavailable",503);
           await tx`
             update test_bench_runs set job_id=${job.id}
             where organization_id=${actor.organizationId} and id=${id}
@@ -189,7 +189,7 @@ export function createObservedRunStore(sql:Sql){
         select * from test_bench_runs where organization_id=${actor.organizationId}
           and skill_id=${skillId} and definition_id=${definitionId} and id=${id}
       `;
-      if(!row)invalid("test_bench_run_not_found",404);
+      if(!row)return invalid("test_bench_run_not_found",404);
       return publicRun(row);
     },
     /** A reclaimed after-provider-I/O lease is never allowed to re-execute provider calls. */

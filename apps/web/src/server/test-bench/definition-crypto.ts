@@ -1,4 +1,4 @@
-import {createCipheriv,createDecipheriv,randomBytes} from "node:crypto";
+import {createCipheriv,createDecipheriv,createHmac,randomBytes} from "node:crypto";
 import {TestBenchError} from "./definition-contract.ts";
 
 export type TestBenchCipherContext={
@@ -59,4 +59,19 @@ export function decryptTestBenchCases(
   }catch{
     throw new TestBenchError("test_bench_ciphertext_invalid",500);
   }
+}
+
+/** Keyed, domain-separated idempotency fingerprint: never hash low-entropy
+ * user case prompts into a publicly guessable unkeyed DB fingerprint.
+ */
+export function testBenchRequestDigest(
+  payloadJson:string,organizationId:string,
+  env:Record<string,string|undefined>=process.env,
+):string{
+  const key=configuredKey(env);
+  const derived=createHmac("sha256",key)
+    .update("savant:test-bench:create-request-hmac:v1").digest();
+  return createHmac("sha256",derived)
+    .update(organizationId,"utf8").update("\n").update(payloadJson,"utf8")
+    .digest("hex");
 }

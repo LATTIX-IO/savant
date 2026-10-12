@@ -98,9 +98,24 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
           dispatched=true;
           // Adapter is obligated to honour AbortSignal and retain provider-side
           // idempotency. A crashed worker may retry; exactly-once is NOT promised.
-          const raw=await adapter.invoke(req,{
-            signal:controller.signal,timeoutMs,idempotencyKey:req.idempotencyKey,
+          // Promise.race bounds the worker's wait even if a faulty adapter
+          // ignores AbortSignal. It CANNOT undo provider-side side effects.
+          let onAbort:()=>void=()=>{};
+          const timedOut=new Promise<never>((_resolve,reject)=>{
+            onAbort=()=>reject(new HarnessWorkerError("provider_timeout"));
+            controller.signal.addEventListener("abort",onAbort,{once:true});
           });
+          let raw:unknown;
+          try {
+            raw=await Promise.race([
+              Promise.resolve().then(()=>adapter.invoke(req,{
+                signal:controller.signal,timeoutMs,idempotencyKey:req.idempotencyKey,
+              })),
+              timedOut,
+            ]);
+          } finally {
+            controller.signal.removeEventListener("abort",onAbort);
+          }
           if(controller.signal.aborted)return {state:"reconciliation_required",runId};
           const result=validatedRun(raw,req);
           try {

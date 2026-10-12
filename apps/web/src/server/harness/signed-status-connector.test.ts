@@ -191,3 +191,34 @@ test("PER-1059: hostile scope getters never cause vault or provider IO",async()=
   await denied("invalid_scope",()=>f.lookup(hostile));
   assert.deepEqual(f.calls,[]);
 });
+
+test("PER-1059: slow vault resolution timestamps after await to avoid expired HMAC",async()=>{
+  let phase=0;
+  let clockReads=0;
+  const lookup=createSignedHarnessStatusLookup({
+    allowedOrigins:[origin],
+    nowMs:()=>{clockReads++;return now+phase*3600000;},
+    resolveConnection:async()=>{phase=1;return {
+      endpoint,secretRef:`vault:${tenantId}:${adapterId}:current`};
+    },
+    readSecret:async()=>{phase=2;return secret;},
+    transport:async(_url,init)=>{
+      const hdr=new Headers(init.headers);
+      const sent=Number(hdr.get("x-savant-timestamp"));
+      assert.equal(sent,Math.floor((now+7200000)/1000),
+        "HMAC timestamp must be sampled after slow config and vault awaits");
+      const nonce=hdr.get("x-savant-nonce")!;
+      const stamp=String(sent);
+      const raw=Buffer.from(JSON.stringify({
+        tenantId,adapterId,runId:"run-1",idempotencyKey:"idem-1",providerState:"unknown",
+      }));
+      return new Response(new Uint8Array(raw),{
+        status:200,headers:{"content-type":"application/json",
+          "x-savant-timestamp":stamp,"x-savant-nonce":nonce,
+          "x-savant-signature":sign("savant-harness-status-response-v1",stamp,nonce,raw)},
+      });
+    },
+  });
+  assert.equal((await lookup(scope)).providerState,"unknown");
+  assert.equal(clockReads,1);
+});

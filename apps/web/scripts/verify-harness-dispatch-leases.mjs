@@ -119,7 +119,11 @@ try{
     assert.equal(leased.attempt,i);
     const outcome=await q1.releaseForRetry(ident("worker-1"),leased.runId,leased.leaseToken,100);
     assert.equal(outcome.state,i===4?"exhausted":"retry");
-    now.at=new Date(now.at.getTime()+101);
+    assert.equal(outcome.retryAfterMs,100*2**(i-1));
+    // Before the enforced backoff completes no other process can reclaim it.
+    now.at=new Date(now.at.getTime()+outcome.retryAfterMs-1);
+    assert.equal(await q2.claim(ident("worker-2"),500),null);
+    now.at=new Date(now.at.getTime()+2);
   }
   assert.equal(await q2.claim(ident("worker-2"),500),null);
   assert.equal((await store.getRun(tenant,"run-exhausted")).status,"queued");

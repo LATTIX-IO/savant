@@ -30,7 +30,7 @@ It uses read-only `gh release download` for the exact tag, validates each downlo
 
 It then calls `gh attestation verify` with the exact artifact, `--repo LATTIX-IO/savant`, `--source-digest` and `--source-ref refs/heads/main`, with the signer restricted to `github.com/LATTIX-IO/savant/.github/workflows/publish-source-release.yml`, default SLSA v1 provenance and no self-hosted runners. Both the CLI's cryptographic verification **and** its JSON statement's subject SHA-256 must succeed. The cryptographically verified certificate's `runInvocationURI` must also identify the **same requested workflow run ID** and a valid run attempt, preventing use of a different run's attestation for an identical source commit. This is not inferred from the unsigned release manifest.
 
-The output includes a fixed `savant.release-uat-evidence.v1` schema, release reference, source SHA, run ID, three artifact digests and eight boolean checks. No token, raw certificate, private reviewer identity or GitHub error response is emitted. A failed prerequisite causes a nonzero process exit with a stable error code.
+The output includes a versioned `savant.release-uat-evidence.v2` schema, release reference, source SHA, run ID, three artifact digests and eight boolean checks. No token, raw certificate, private reviewer identity or GitHub error response is emitted. A failed prerequisite causes a nonzero process exit with a stable error code.
 
 ## Security and acceptance boundaries
 
@@ -39,3 +39,11 @@ The local unit/regression tests use temporary, fixture-generated source bundles 
 Do not set `SAVANT_RELEASE_PUBLISH_ENABLED=true` solely to run the verifier. The publishing operator must disable it again immediately after the authorized non-production run, and the separate audit must confirm that state. Existing tags and releases should not be deleted or overwritten to correct an acceptance failure.
 
 Run local tests with `node --test scripts/release-uat-evidence.test.mjs` or the complete `pnpm test` suite. Fix any finding through a reviewed PR rather than relaxing the verifier's trust or signer restrictions.
+
+## Independent release approval history (PER-1369)
+
+The verifier now reads GitHub's `GET /repos/LATTIX-IO/savant/actions/runs/{run_id}/approvals` endpoint using the same **read-only Actions credential** already required for run/job evidence. <https://docs.github.com/en/rest/actions/workflow-runs#get-the-review-history-for-a-workflow-run>. The check requires a single successful approval record for the exact `savant-release` environment from a verified human User ID that differs from both the initiating `actor` and `triggering_actor`. Denied, skipped, pending, self-approved, missing, duplicate, mixed-environment, malformed or paginated history fails closed. The report exposes only the boolean `independentEnvironmentApproval`, never the reviewer ID.
+
+GitHub approval history is scoped to a workflow run rather than unequivocally to an individual rerun attempt. Therefore **only `run_attempt=1` is accepted**. A rerun, absent attempt number, or signed attestation from `/attempts/2` cannot satisfy this evidence contract. Start a new authorized, independently approved workflow run instead of reusing an earlier approval. The attestation certificate must bind to the exact `/actions/runs/{run_id}/attempts/1` URI.
+
+The evidence schema was incremented from `v1` to `v2`; consumers must explicitly handle the new `independentEnvironmentApproval` check and updated version rather than assume compatibility. This proves an independent approval event **for the audited run**, but not that historical environment ruleset settings were correctly configured at approval time. Verify the actual `main`/tag rulesets, independent reviewer configuration, and authorization through the separate PER-1209 administrator audit and controlled negative test. No GitHub approval was executed by this implementation.

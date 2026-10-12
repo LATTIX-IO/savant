@@ -89,13 +89,12 @@ export function verifySignedAttestation(raw, digest, request){
   if(!Array.isArray(value)||value.length===0||value.length>30)deny("attestation_result_invalid");
   if(!request || request.repository!==REPOSITORY ||
     !/^[1-9][0-9]{0,19}$/.test(String(request.runId||"")))deny("attestation_run_unverified");
-  const expectedRun="https://github.com/"+REPOSITORY+"/actions/runs/"+request.runId+"/attempts/";
+  const expectedRun="https://github.com/"+REPOSITORY+"/actions/runs/"+request.runId+"/attempts/1";
 
   const valid=value.some(item=>{
     const statement=item?.verificationResult?.statement;
     const uri=item?.verificationResult?.signature?.certificate?.runInvocationURI;
-    return typeof uri==="string" && uri.startsWith(expectedRun) &&
-      /^[1-9][0-9]*$/.test(uri.slice(expectedRun.length)) &&
+    return uri===expectedRun &&
       statement?.predicateType==="https://slsa.dev/provenance/v1" &&
       Array.isArray(statement.subject) &&
       statement.subject.some(subject=>subject?.digest?.sha256===digest);
@@ -103,6 +102,29 @@ export function verifySignedAttestation(raw, digest, request){
   if(!valid)deny("attestation_subject_mismatch");
   return true;
 }
+/**
+ * GitHub approval history proves a separate user authorized the protected
+ * environment on the original workflow attempt. GitHub does not attribute
+ * this history to reruns, so reruns intentionally cannot produce UAT proof.
+ * This cannot prove historical environment settings; operations must audit
+ * configuration separately under PER-1209.
+ */
+export function verifyIndependentReleaseApproval(history,run){
+  const id=value=>Number.isSafeInteger(value)&&value>0;
+  if(!id(run?.actor?.id)||!id(run?.triggering_actor?.id)||
+     run?.run_attempt!==1)deny("environment_approval_attempt_unverified");
+  if(!Array.isArray(history)||history.length!==1)deny("environment_approval_history_invalid");
+  const record=history[0];
+  if(record?.state!=="approved" || record?.user?.type!=="User" ||
+     !id(record?.user?.id) || record.user.id===run.actor.id ||
+     record.user.id===run.triggering_actor.id ||
+     !Array.isArray(record.environments)||record.environments.length!==1 ||
+     record.environments[0]?.name!=="savant-release" ||
+     !id(record.environments[0]?.id))
+    deny("independent_environment_approval_unverified");
+  return true;
+}
+
 export async function verifySuccessfulPublicationRun(request,token,fetcher=fetch){
   const base="https://api.github.com/repos/"+REPOSITORY+"/actions/runs/"+request.runId;
   async function get(url){
@@ -114,6 +136,7 @@ export async function verifySuccessfulPublicationRun(request,token,fetcher=fetch
         signal:AbortSignal.timeout(15000)
       });
       if(response.status!==200)deny("workflow_run_unavailable");
+      if(/rel="next"/.test(response.headers?.get("link")||""))deny("workflow_run_evidence_paginated");
       const raw=await response.text();
       if(raw.length>512*1024)deny("workflow_run_unavailable");
       return JSON.parse(raw);
@@ -146,6 +169,8 @@ export async function verifySuccessfulPublicationRun(request,token,fetcher=fetch
     if(jobs.jobs.filter(job=>job.name===name && job.status==="completed" &&
       job.conclusion==="success").length!==1)deny("workflow_jobs_unverified");
   }
+  const approvals=await get(base+"/approvals");
+  verifyIndependentReleaseApproval(approvals,run);
   return true;
 }
 
@@ -188,7 +213,7 @@ export async function verifySourceReleaseEvidence(request,{
     }catch{deny("signed_attestation_unverified");}
     verifySignedAttestation(attestation,bundle.digest,canonical);
     return {
-      schema:"savant.release-uat-evidence.v1",ready:true,
+      schema:"savant.release-uat-evidence.v2",ready:true,
       repository:REPOSITORY,version:canonical.version,commit:canonical.commit,
       workflowRunId:canonical.runId,verifiedSignerWorkflow:SIGNER,
       sha256:bundle.digest,
@@ -196,7 +221,7 @@ export async function verifySourceReleaseEvidence(request,{
         name,sha256:bundle.files[name].sha256,bytes:bundle.files[name].bytes
       })),
       checks:{tagCommit:true,remoteTag:true,releaseAssets:true,checksums:true,provenance:true,
-        remoteDigests:true,workflowRun:true,signedAttestation:true}
+        remoteDigests:true,workflowRun:true,independentEnvironmentApproval:true,signedAttestation:true}
     };
   }finally{rmSync(dir,{recursive:true,force:true});}
 }
@@ -206,7 +231,7 @@ if(process.argv[1]?.endsWith("/release-uat-evidence.mjs")){
     const evidence=await verifySourceReleaseEvidence(request);
     console.log(JSON.stringify(evidence,null,2));
   }catch(e){
-    console.error(JSON.stringify({schema:"savant.release-uat-evidence.v1",ready:false,
+    console.error(JSON.stringify({schema:"savant.release-uat-evidence.v2",ready:false,
       code:e instanceof ReleaseEvidenceError?e.code:"release_evidence_failed"}));
     process.exitCode=1;
   }

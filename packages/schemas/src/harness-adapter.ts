@@ -167,7 +167,7 @@ export function parseHarnessRunEvent(input: unknown, expected: Pick<HarnessTestR
   fieldsOrInvalidEvent(root, ["eventId", "tenantId", "runId", "traceId", "sequence", "status"]);
   if (root.tenantId !== expected.tenantId || root.runId !== expected.runId || root.traceId !== expected.traceId ||
       typeof root.eventId !== "string" || !ID.test(root.eventId) ||
-      !Number.isSafeInteger(root.sequence) || (root.sequence as number) < 1 ||
+      !Number.isSafeInteger(root.sequence as number) || (root.sequence as number) < 1 ||
       !STATUSES.includes(root.status as AdapterRunStatus))
     fail("invalid_event");
   return root as unknown as HarnessRunEvent;
@@ -194,8 +194,8 @@ export function createHarnessGateway(deps: HarnessGatewayDependencies) {
   let active = 0;
   let cachedCapabilities: HarnessAdapterCapabilities | null = null;
   async function principal(caller: HarnessCaller, scope: AdapterScope): Promise<VerifiedHarnessPrincipal> {
-    if (!caller || typeof caller.credential !== "string" || !caller.credential || !ID.test(caller.tenantId) ||
-        !ID.test(caller.actor)) fail("unauthorized");
+    if (!caller || typeof caller.credential !== "string" || !caller.credential || (typeof caller.tenantId !== "string" || !ID.test(caller.tenantId)) ||
+        (typeof caller.actor !== "string" || !ID.test(caller.actor))) fail("unauthorized");
     let result: VerifiedHarnessPrincipal | null;
     try { result = await deps.verifyCredential(caller); } catch { fail("unauthorized"); }
     if (!result || result.revoked || !Number.isFinite(result.expiresAtMs) ||
@@ -230,9 +230,11 @@ export function createHarnessGateway(deps: HarnessGatewayDependencies) {
       await principal(caller, "harness:execute");
       if (typeof configurationRef !== "string" || !ID.test(configurationRef)) fail("invalid_payload");
       const cap = await capabilities();
-      return callExternal(() => deps.adapter.validateConfiguration({
+      const result = await callExternal(() => deps.adapter.validateConfiguration({
         tenantId: caller.tenantId, adapterId: cap.adapterId, configurationRef,
       }));
+      await deps.audit({ tenantId: caller.tenantId, actor: caller.actor, action: "validateConfiguration" });
+      return result;
     },
     async execute(caller: HarnessCaller, input: unknown): Promise<HarnessRun> {
       await principal(caller, "harness:execute");
@@ -294,9 +296,9 @@ export function createHarnessGateway(deps: HarnessGatewayDependencies) {
     async *events(caller: HarnessCaller, runId: string, expected: HarnessTestRequest): AsyncGenerator<HarnessRunEvent> {
       await principal(caller, "harness:read");
       await ownsRun(caller.tenantId, runId);
+      if (expected.tenantId !== caller.tenantId || expected.runId !== runId) fail("unauthorized");
       const cap = await capabilities();
       if (!cap.features.events) fail("unsupported");
-      if (expected.tenantId !== caller.tenantId || expected.runId !== runId) fail("unauthorized");
       let sequence = 0;
       let count = 0;
       const eventIds = new Set<string>();

@@ -25,19 +25,22 @@ export type ObservedEvaluation={
   executionModel:string;judgeModel:string;
 };
 function score(answer:JevAnswer|undefined):number{
-  if(answer?.type!=="score"||!Number.isFinite(answer.score)||
-    answer.score<0||answer.score>4)reject("test_bench_judge_score_invalid");
+  if(!answer||answer.type!=="score")return reject("test_bench_judge_score_invalid");
+  if(!Number.isFinite(answer.score)||answer.score<0||answer.score>4)
+    return reject("test_bench_judge_score_invalid");
   return answer.score/4;
 }
 function binary(answer:JevAnswer|undefined):number{
-  if(answer?.type!=="noul"||!Number.isFinite(answer.noul)||
-    answer.noul<0||answer.noul>1)reject("test_bench_judge_binary_invalid");
+  if(!answer||answer.type!=="noul")return reject("test_bench_judge_binary_invalid");
+  if(!Number.isFinite(answer.noul)||answer.noul<0||answer.noul>1)
+    return reject("test_bench_judge_binary_invalid");
   return answer.noul;
 }
 function revisions(answer:JevAnswer|undefined):number{
-  if(answer?.type!=="choice"||!["0","1","2","3"].includes(answer.choice)||
+  if(!answer||answer.type!=="choice")return reject("test_bench_judge_revision_invalid");
+  if(!["0","1","2","3"].includes(answer.choice)||
     !Number.isFinite(answer.confidence)||answer.confidence<0||answer.confidence>1)
-    reject("test_bench_judge_revision_invalid");
+    return reject("test_bench_judge_revision_invalid");
   return Number(answer.choice);
 }
 function tokens(input:{promptTokens?:number;completionTokens?:number;inputTokens?:number;outputTokens?:number}):number{

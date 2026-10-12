@@ -51,7 +51,7 @@ jobs:
         run: pnpm build
 
       - name: Reject committed secrets
-        run: pnpm run security:secrets
+        run: pnpm run security:scan
 
   workflow-postgres:
     name: Workflow schema migration and tenant integrity

@@ -94,6 +94,40 @@ export const harnessAdapterCapabilitiesSchema = {
   },
 } as const;
 
+
+const schemaId = { type: "string", pattern: ID.source } as const;
+const schemaHash = { type: "string", pattern: HASH.source } as const;
+export const harnessTestRequestSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://savant.dev/schemas/harness-adapter/test-request-v1.json",
+  type: "object", additionalProperties: false,
+  required: ["tenantId", "adapterId", "actor", "runId", "traceId", "idempotencyKey",
+    "specVersionHash", "testSuiteHash", "inputRef", "budget", "capture"],
+  properties: {
+    tenantId: schemaId, adapterId: schemaId, actor: schemaId, runId: schemaId,
+    traceId: schemaId, idempotencyKey: schemaId, specVersionHash: schemaHash,
+    testSuiteHash: schemaHash, inputRef: schemaId,
+    budget: { type: "object", additionalProperties: false, required: ["maxDurationMs", "maxCostUsd"],
+      properties: { maxDurationMs: { type: "integer", minimum: 1, maximum: 86_400_000 },
+        maxCostUsd: { type: "number", exclusiveMinimum: 0, maximum: 100_000 } } },
+    capture: { type: "object", additionalProperties: false, required: ["level", "retentionDays", "residency"],
+      properties: { level: { enum: ["none", "metadata", "redacted"] },
+        retentionDays: { type: "integer", minimum: 0, maximum: 30 }, residency: schemaId } },
+  },
+} as const;
+
+export const harnessRunEventSchema = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://savant.dev/schemas/harness-adapter/run-event-v1.json",
+  type: "object", additionalProperties: false,
+  required: ["eventId", "tenantId", "runId", "traceId", "sequence", "status"],
+  properties: {
+    eventId: schemaId, tenantId: schemaId, runId: schemaId, traceId: schemaId,
+    sequence: { type: "integer", minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+    status: { enum: STATUSES },
+  },
+} as const;
+
 export function parseHarnessCapabilities(input: unknown): HarnessAdapterCapabilities {
   const root = snapshot(input);
   fields(root, ["protocol", "adapterId", "features", "coverage", "limits"]);

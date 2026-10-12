@@ -91,7 +91,7 @@ export function createHarnessTelemetryBuffer(config: {
   send: HarnessTelemetrySend;
 }) {
   if (!id(config.tenantId) || !id(config.adapterId) || !id(config.traceId) ||
-      typeof config.send !== "function")
+      typeof config.send !== "function" || typeof config.enabled !== "boolean")
     fail("invalid_configuration");
   const maxPending = config.maxPending ?? 256;
   const batchSize = config.batchSize ?? 100;
@@ -99,7 +99,7 @@ export function createHarnessTelemetryBuffer(config: {
       !amount(batchSize, 100, true) || batchSize < 1)
     fail("invalid_configuration");
   const queued: HarnessTelemetrySpanV1[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
   let acknowledged = 0;
   let pendingFlush: Promise<number> | null = null;
   function record(input: unknown): boolean {
@@ -108,11 +108,16 @@ export function createHarnessTelemetryBuffer(config: {
     if (item.tenantId !== config.tenantId || item.adapterId !== config.adapterId ||
         item.traceId !== config.traceId) fail("identity_mismatch");
     const key = item.runId + ":" + item.spanId + ":" + item.status;
-    if (seen.has(key)) return false;
+    const identity = JSON.stringify(item);
+    const previous = seen.get(key);
+    if (previous !== undefined) {
+      if (previous !== identity) fail("replay_conflict");
+      return false;
+    }
     if (queued.length >= maxPending) fail("backpressure");
     // Prevent unbounded history growth; replays beyond this window require server-side idempotency.
-    if (seen.size >= 2048) seen.delete(seen.values().next().value!);
-    seen.add(key);
+    if (seen.size >= 2048) seen.delete(seen.keys().next().value!);
+    seen.set(key, identity);
     queued.push(item);
     return true;
   }

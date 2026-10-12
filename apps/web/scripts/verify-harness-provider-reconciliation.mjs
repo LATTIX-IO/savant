@@ -68,7 +68,7 @@ try{
   const args={tenantId:tenant,adapterId:"sandbox-adapter",
     runId:"run-one",actor:"security-reviewer",observationId:"check-1"};
   await denied("unauthorized",()=>reconciler.inspectAndRecord({...args,actor:"outsider"}));
-  await denied("not_found",()=>reconciler.inspectAndRecord({...args,tenantId:other}));
+  await denied("unauthorized",()=>reconciler.inspectAndRecord({...args,tenantId:other}));
   assert.equal(calls,0);
   assert.deepEqual(await reconciler.inspectAndRecord(args),{
     state:"accepted",runId:"run-one",replay:false,action:"manual_reconciliation_required",

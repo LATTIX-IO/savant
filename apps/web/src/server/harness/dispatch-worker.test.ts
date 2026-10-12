@@ -148,11 +148,15 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
     attempt:1,generation:1,
   };
   let acknowledgements=0,retries=0,started=0;
+  const holdReasons:string[]=[];
   const worker=createHarnessDispatchWorker({
     queue:{
       claim:async()=>lease,
       markDispatchStarted:async()=>({runId:req.runId,state:"dispatching" as const,generation:1}),
-      recordUnknownOutcome:async()=>({runId:req.runId,state:"reconciliation" as const,reason:"provider_timeout" as const}),
+      recordUnknownOutcome:async (_identity,_run,_token,reason)=>{
+        holdReasons.push(reason);
+        return {runId:req.runId,state:"reconciliation" as const,reason};
+      },
       acknowledge:async()=>{acknowledgements++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
       releaseForRetry:async()=>{retries++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
     },
@@ -171,6 +175,7 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
   assert.equal(started,1);
   assert.equal(acknowledgements,0);
   assert.equal(retries,0);
+  assert.deepEqual(holdReasons,["provider_timeout"]);
 });
 
 test("PER-1059: miswired queue cannot switch worker tenant or adapter before provider I/O",async()=>{

@@ -3,6 +3,8 @@ import {createHmac,randomUUID} from "node:crypto";
 import postgres from "postgres";
 import {createAzureKeyVaultHarnessResolver}
   from "../src/server/harness/azure-vault-hmac.ts";
+import {createAzureFederatedWorkloadTokenProvider}
+  from "../src/server/harness/azure-federated-token.ts";
 import {createHarnessStatusConnectorConfigStore}
   from "../src/server/harness/status-connector-config.ts";
 import {createSignedHarnessStatusLookup}
@@ -35,9 +37,28 @@ try{
     values(${"azure-b-"+id},'Azure Vault B') returning id`;
   tenant=a.id;foreign=b.id;
   const ref=`vault:${tenant}:${adapterId}:status-key.${version}`;
+  const identityTenant="33333333-3333-4333-8333-333333333333";
+  const identityClient="44444444-4444-4444-8444-444444444444";
+  const assertion="aGVhZGVy.cGF5bG9hZA.c2lnbmF0dXJl";
+  let federationCalls=0;
+  const federatedToken=createAzureFederatedWorkloadTokenProvider({
+    tenantId:identityTenant,clientId:identityClient,
+    readFederatedAssertion:async()=>assertion,
+    transport:async(tokenUrl,init)=>{
+      federationCalls++;
+      assert.equal(tokenUrl,"https://login.microsoftonline.com/"+identityTenant+"/oauth2/v2.0/token");
+      assert.equal(init.method,"POST");assert.equal(init.redirect,"error");
+      const form=new URLSearchParams(init.body);
+      assert.equal(form.get("scope"),"https://vault.azure.net/.default");
+      assert.equal(form.get("client_assertion"),assertion);
+      assert.equal(form.get("client_id"),identityClient);
+      return new Response(JSON.stringify({token_type:"Bearer",access_token:token,expires_in:3600}),
+        {status:200,headers:{"content-type":"application/json"}});
+    },
+  });
   const azure=createAzureKeyVaultHarnessResolver({
     vaultName:"savant-test",
-    accessToken:async()=>token,
+    accessToken:federatedToken,
     nowMs:()=>now,
     transport:async (vaultUrl,request)=>{
       vaultRequests.push(vaultUrl);
@@ -140,6 +161,7 @@ try{
   assert.equal((await sql`select count(*)::int as n from
     harness_eval_reconciliation_observations where organization_id=${tenant}`)[0].n,1);
   assert.ok(vaultRequests.length>=4);
+  assert.ok(federationCalls>=4);
   const configRow=await sql`select secret_ref,status from harness_status_connector_configs
     where organization_id=${tenant}`;
   assert.equal(configRow[0].secret_ref,ref);

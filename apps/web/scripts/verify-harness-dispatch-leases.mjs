@@ -35,7 +35,7 @@ try{
     values(${"lease-b-"+id},'Lease B') returning id`;
   tenant=first.id;foreign=second.id;
   const store=createHarnessReservationStore({
-    sql,now:()=>now.at,limits:{maxActive:5,maxReservedCostUsd:2},
+    sql,now:()=>now.at,limits:{maxActive:6,maxReservedCostUsd:2},
   });
   for(const runId of ["run-one","run-two","run-canceled"]){
     await store.reserve({organizationId:tenant,actorSubject:"test-operator",
@@ -80,6 +80,8 @@ try{
   assert.equal(claimRetry.generation,2);
   assert.notEqual(claimRetry.leaseToken,claimB.leaseToken);
   await denied("lease_denied",()=>q2.acknowledge(ident("worker-2"),claimB.runId,claimB.leaseToken,"stale"));
+  await queue().markDispatchStarted(ident("worker-3"),claimRetry.runId,claimRetry.leaseToken);
+  await q1.markDispatchStarted(ident("worker-1"),claimA.runId,claimA.leaseToken);
   assert.equal((await queue().acknowledge(ident("worker-3"),claimRetry.runId,
     claimRetry.leaseToken,"provider-retry")).status,"running");
   assert.equal((await q1.acknowledge(ident("worker-1"),claimA.runId,
@@ -127,10 +129,46 @@ try{
   }
   assert.equal(await q2.claim(ident("worker-2"),500),null);
   assert.equal((await store.getRun(tenant,"run-exhausted")).status,"queued");
+  // Durable dispatch-start marker prevents crash/lease expiry from auto-redispatch.
+  await store.reserve({organizationId:tenant,actorSubject:"test-operator",
+    request:request(tenant,"run-possibly-started"),capabilities:caps});
+  const sideEffect=await q1.claim(ident("worker-1"),500);
+  assert.equal(sideEffect.runId,"run-possibly-started");
+  assert.equal((await q1.markDispatchStarted(ident("worker-1"),
+    sideEffect.runId,sideEffect.leaseToken)).state,"dispatching");
+  await denied("lease_denied",()=>q1.releaseForRetry(ident("worker-1"),
+    sideEffect.runId,sideEffect.leaseToken,100));
+  assert.equal((await store.requestCancel(tenant,"run-possibly-started")).status,"cancelRequested");
+  now.at=new Date(now.at.getTime()+700);
+  assert.equal(await q2.claim(ident("worker-2"),500),null,"provider-side uncertainty must never auto-dispatch");
+  assert.equal((await q1.recordUnknownOutcome(ident("worker-1"),
+    sideEffect.runId,sideEffect.leaseToken,"provider_unknown")).state,"reconciliation");
+  assert.equal(await q2.claim(ident("worker-2"),500),null);
+  await denied("lease_denied",()=>q2.acknowledge(ident("worker-2"),
+    sideEffect.runId,sideEffect.leaseToken,"forged"));
+  const holds=await sql`select state,reconciliation_reason from harness_eval_dispatch_leases
+    where organization_id=${tenant} and harness_run_id=
+      (select id from harness_eval_runs where organization_id=${tenant} and run_id='run-possibly-started')`;
+  assert.deepEqual([holds[0].state,holds[0].reconciliation_reason],["reconciliation","provider_unknown"]);
+  const auditRace=await sql`select from_status,to_status from harness_eval_transitions
+    where organization_id=${tenant} and action='reconciliationRequired'
+      and harness_run_id=(select id from harness_eval_runs
+        where organization_id=${tenant} and run_id='run-possibly-started')`;
+  assert.deepEqual(auditRace.map(x=>[x.from_status,x.to_status]),
+    [["cancelRequested","cancelRequested"]]);
+  let nullReasonDenied=false;
+  try{
+    await sql`update harness_eval_dispatch_leases set reconciliation_reason=null
+      where organization_id=${tenant} and state='reconciliation'`;
+  }catch(error){
+    nullReasonDenied=error.code==="23514";
+    if(!nullReasonDenied)throw error;
+  }
+  assert.equal(nullReasonDenied,true,"PostgreSQL CHECK must reject NULL reconciliation reasons");
   const active=await sql`select status,count(*)::int as n from harness_eval_runs
     where organization_id=${tenant} group by status`;
   assert.equal(active.find(x=>x.status==="running").n,2);
-  assert.equal(active.find(x=>x.status==="cancelRequested").n,2);
+  assert.equal(active.find(x=>x.status==="cancelRequested").n,3);
   const audit=await sql`select count(*)::int as n from harness_eval_transitions
     where organization_id=${tenant} and action='started'`;
   assert.equal(audit[0].n,2);

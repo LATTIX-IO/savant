@@ -8,7 +8,7 @@ const MAX_ATTEMPTS=4;
 type Row={
   id:string; organization_id:string; harness_run_id:string; adapter_id:string;
   worker_id:string; lease_token_sha256:string; generation:number; attempt:number;
-  state:"leased"|"retry"|"acknowledged"|"exhausted";
+  state:"leased"|"retry"|"acknowledged"|"exhausted"|"dispatching"|"reconciliation";
   lease_until:Date; next_eligible_at:Date;
 };
 type Candidate={
@@ -54,7 +54,8 @@ export function createHarnessDispatchLeaseQueue(deps:{
     if(!tokenValid(token))fail("lease_denied");
     return digest(token);
   }
-  async function lockedLease(tx:TransactionSql, identity:DispatchIdentity, runId:string, token:string,at:Date){
+  async function lockedLease(tx:TransactionSql, identity:DispatchIdentity, runId:string, token:string,at:Date,
+    requiredState:"leased"|"dispatching"="leased"){
     if(typeof runId!=="string"||!ID.test(runId))fail("lease_denied");
     const hash=checkedToken(token);
     // Global lock order: run row then lease row. Avoids deadlocks with claim,
@@ -73,7 +74,8 @@ export function createHarnessDispatchLeaseQueue(deps:{
     const row=found[0];
     if(!row||row.worker_id!==identity.workerId||
       !safeEqual(row.lease_token_sha256,hash)||
-      row.state!=="leased"||new Date(row.lease_until).getTime()<=at.getTime())
+      row.state!==requiredState||
+      (requiredState==="leased"&&new Date(row.lease_until).getTime()<=at.getTime()))
       fail("lease_denied");
     return row;
   }
@@ -156,13 +158,67 @@ export function createHarnessDispatchLeaseQueue(deps:{
         return {leaseUntil:until.toISOString(),generation:row.generation};
       });
     },
+    /** Commit a durable side-effect marker BEFORE external provider I/O. */
+    async markDispatchStarted(identity:DispatchIdentity,runId:string,token:string){
+      await authorized(identity);
+      const at=clock();
+      return sql.begin(async tx=>{
+        const row=await lockedLease(tx,identity,runId,token,at);
+        const runs=await tx<{status:string;deadline_at:Date}[]>`
+          select status,deadline_at from harness_eval_runs
+          where organization_id=${identity.tenantId} and id=${row.harness_run_id} for update
+        `;
+        if(runs[0]?.status!=="queued"||
+          new Date(runs[0]!.deadline_at).getTime()<=at.getTime())fail("lease_denied");
+        await tx`
+          update harness_eval_dispatch_leases
+          set state='dispatching',updated_at=${at}
+          where id=${row.id}
+        `;
+        await tx`
+          insert into harness_eval_transitions
+            (organization_id,harness_run_id,action,from_status,to_status)
+          values (${identity.tenantId},${row.harness_run_id},'dispatchStarted','queued','queued')
+        `;
+        return {runId,state:"dispatching" as const,generation:row.generation};
+      });
+    },
+    /** Reconciliation hold is terminal for automatic claims; operator must resolve. */
+    async recordUnknownOutcome(identity:DispatchIdentity,runId:string,token:string,
+      reason:"provider_unknown"|"provider_timeout"|"invalid_response"|"ack_failed"){
+      await authorized(identity);
+      if(!["provider_unknown","provider_timeout","invalid_response","ack_failed"].includes(reason))
+        fail("invalid_reason");
+      const at=clock();
+      return sql.begin(async tx=>{
+        const row=await lockedLease(tx,identity,runId,token,at,"dispatching");
+        const runState=await tx<{status:string}[]>`
+          select status from harness_eval_runs
+          where organization_id=${identity.tenantId} and id=${row.harness_run_id}
+          for update
+        `;
+        if(!runState[0])fail("lease_denied");
+        await tx`
+          update harness_eval_dispatch_leases
+          set state='reconciliation',reconciliation_reason=${reason},updated_at=${at}
+          where id=${row.id}
+        `;
+        await tx`
+          insert into harness_eval_transitions
+            (organization_id,harness_run_id,action,from_status,to_status)
+          values (${identity.tenantId},${row.harness_run_id},
+            'reconciliationRequired',${runState[0]!.status},${runState[0]!.status})
+        `;
+        return {runId,state:"reconciliation" as const,reason};
+      });
+    },
     /** Acknowledge an already-dispatched customer harness job. Not provider execution. */
     async acknowledge(identity:DispatchIdentity,runId:string,token:string,externalRunId:string){
       await authorized(identity);
       if(typeof externalRunId!=="string"||!ID.test(externalRunId))fail("invalid_external_run");
       const at=clock();
       return sql.begin(async tx=>{
-        const row=await lockedLease(tx,identity,runId,token,at);
+        const row=await lockedLease(tx,identity,runId,token,at,"dispatching");
         const runs=await tx<{status:string;deadline_at:Date}[]>`
           select status,deadline_at from harness_eval_runs
           where organization_id=${identity.tenantId} and id=${row.harness_run_id}

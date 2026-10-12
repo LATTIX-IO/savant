@@ -12,6 +12,7 @@
     "./git-providers": "./src/git-providers.ts",
     "./assessments": "./src/assessments.ts",
     "./workflow-specification": "./src/workflow-specification.ts",
-    "./capability-reference": "./src/capability-reference.ts"
+    "./capability-reference": "./src/capability-reference.ts",
+    "./harness-adapter": "./src/harness-adapter.ts"
   }
 }

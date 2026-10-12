@@ -12,7 +12,7 @@ alter table harness_eval_dispatch_leases
 alter table harness_eval_dispatch_leases
   add constraint harness_eval_dispatch_leases_reconciliation_reason_check
   check (
-    (state = 'reconciliation' and reconciliation_reason in
+    (state = 'reconciliation' and reconciliation_reason is not null and reconciliation_reason in
       ('provider_unknown','provider_timeout','invalid_response','ack_failed'))
     or (state <> 'reconciliation' and reconciliation_reason is null)
   );

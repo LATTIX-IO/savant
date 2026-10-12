@@ -245,6 +245,21 @@ try {
     error => error instanceof HarnessQuarantineError && error.code === "not_found");
   await assert.rejects(() => quarantineStore.record({...invalidHash,deliveryId:"delivery-signed-four"}),
     error => error instanceof HarnessQuarantineError && error.code === "delivery_conflict");
+  // Bounded growth: 250 authenticated rejection receipts per run maximum.
+  const runForQuota = await sql`select id from harness_eval_runs
+    where organization_id=${orgA} and run_id='run-four'`;
+  await sql`
+    insert into harness_eval_event_quarantine
+      (organization_id,harness_run_id,adapter_id,delivery_id,payload_sha256,
+        reason,rejected_at,expires_at)
+    select ${orgA},${runForQuota[0].id},'sandbox-adapter',
+      'quota-fixture-' || gs::text,${"a".repeat(64)},'invalid_event',
+      ${nowValue.at},${new Date(nowValue.at.getTime() + 7 * 86400000)}
+    from generate_series(1,249) as gs
+  `;
+  await assert.rejects(() => quarantineStore.record({
+    ...invalidHash,deliveryId:"over-quota",payloadSha256:"b".repeat(64),
+  }), error => error instanceof HarnessQuarantineError && error.code === "quarantine_quota");
   await sql`update harness_eval_runs set retention_days=0
     where organization_id=${orgA} and run_id='run-four'`;
   const disabledRetention = await quarantineStore.record({
@@ -252,10 +267,10 @@ try {
   });
   assert.deepEqual(disabledRetention,{retained:false,replay:false});
   assert.equal((await sql`select count(*)::int as n from harness_eval_event_quarantine
-    where organization_id=${orgA}`)[0].n, 1);
+    where organization_id=${orgA}`)[0].n, 250);
   assert.equal(await quarantineStore.purgeExpired(orgB), 0);
   nowValue.at = new Date(nowValue.at.getTime() + 8 * 86400000);
-  assert.equal(await quarantineStore.purgeExpired(orgA), 1);
+  assert.equal(await quarantineStore.purgeExpired(orgA), 250);
   assert.equal(await quarantineStore.purgeExpired(orgA), 0);
 
   // Schema-level composite FK rejects cross-tenant event grafting.

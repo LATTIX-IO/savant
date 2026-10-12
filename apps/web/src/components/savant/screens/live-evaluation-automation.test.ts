@@ -7,7 +7,7 @@ test("MVP QA regression: evaluation screen never fabricates a completed Test Ben
  assert.doesNotMatch(source,/simulateCustomEvaluationTest|CustomTestResultSection/);
  assert.doesNotMatch(source,/onClick=\{runEditorDraft\}|runSavedTestBenchEval/);
  assert.match(source,/Saved Test Bench configurations are local drafts, not executed evaluations/);
- assert.match(source,/<LiveEvaluationAutomation skillId=\{detail\.skill\.id\} readOnly=\{detail\.readOnly\}/);
+ assert.match(source,/<LiveEvaluationAutomation skillId=\{detail\.skill\.id\} readOnly=\{detail\.readOnly\} pathname=\{pathname\}/);
 });
 test("MVP QA regression: server-backed trigger uses existing tenant-authorized APIs only",async()=>{
  const panel=await readFile(new URL("./live-evaluation-automation.tsx",import.meta.url),"utf8");

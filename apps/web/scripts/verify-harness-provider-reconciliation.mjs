@@ -119,6 +119,24 @@ try{
   await denied("unauthorized",()=>reconciler.inspectAndRecord({...args,observationId:"check-denied"}));
   assert.equal((await sql`select count(*)::int as n from
     harness_eval_reconciliation_observations where organization_id=${other}`)[0].n,0);
+  // A concurrent status transition while the provider verifier is pending
+  // cannot cause a stale observation to be committed after its hold disappears.
+  const raced=createHarnessProviderReconciliation({
+    sql,now:()=>now.at,
+    authorizeOperator:async()=>true,
+    verifiedLookup:async pinned=>{
+      await sql`update harness_eval_dispatch_leases set state='acknowledged'
+        where organization_id=${tenant} and state='dispatching'`;
+      return {tenantId:pinned.tenantId,adapterId:pinned.adapterId,
+        runId:pinned.runId,idempotencyKey:pinned.idempotencyKey,
+        providerState:"accepted",evidenceSha256:evidenceHash};
+    },
+  });
+  await denied("state_changed",()=>raced.inspectAndRecord({
+    ...args,observationId:"stale-race",
+  }));
+  assert.equal((await sql`select count(*)::int as n from
+    harness_eval_reconciliation_observations where organization_id=${tenant}`)[0].n,2);
   // A cross-tenant FK graft is rejected by PostgreSQL itself.
   const [owned]=await sql`select id from harness_eval_runs where organization_id=${tenant}`;
   let graftDenied=false;

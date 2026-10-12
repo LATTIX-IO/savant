@@ -192,6 +192,12 @@ export function createHarnessDispatchLeaseQueue(deps:{
       const at=clock();
       return sql.begin(async tx=>{
         const row=await lockedLease(tx,identity,runId,token,at,"dispatching");
+        const runState=await tx<{status:string}[]>`
+          select status from harness_eval_runs
+          where organization_id=${identity.tenantId} and id=${row.harness_run_id}
+          for update
+        `;
+        if(!runState[0])fail("lease_denied");
         await tx`
           update harness_eval_dispatch_leases
           set state='reconciliation',reconciliation_reason=${reason},updated_at=${at}
@@ -200,7 +206,8 @@ export function createHarnessDispatchLeaseQueue(deps:{
         await tx`
           insert into harness_eval_transitions
             (organization_id,harness_run_id,action,from_status,to_status)
-          values (${identity.tenantId},${row.harness_run_id},'reconciliationRequired','queued','queued')
+          values (${identity.tenantId},${row.harness_run_id},
+            'reconciliationRequired',${runState[0]!.status},${runState[0]!.status})
         `;
         return {runId,state:"reconciliation" as const,reason};
       });

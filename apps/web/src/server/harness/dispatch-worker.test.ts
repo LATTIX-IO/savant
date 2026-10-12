@@ -53,6 +53,14 @@ function fixture(options:{
       assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);assert.equal(ms,250);
       return {state:"retry" as const,attempt:1,retryAfterMs:250};
     },
+    markDispatchStarted:async (_:typeof identity,runId:string,token:string)=>{
+      calls.push("dispatchStarted");assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);
+      return {runId,state:"dispatching" as const,generation:1};
+    },
+    recordUnknownOutcome:async (_:typeof identity,runId:string,token:string,reason:string)=>{
+      calls.push("hold:"+reason);assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);
+      return {runId,state:"reconciliation" as const,reason};
+    },
     acknowledge:async (_:typeof identity,runId:string,token:string,external:string)=>{
       calls.push("ack");
       assert.equal(runId,req.runId);assert.equal(token,lease.leaseToken);
@@ -78,7 +86,7 @@ test("PER-1059: no work means no provider, storage or artifact reads",async()=>{
 test("PER-1059: dispatch pinned, budgeted context with the original provider idempotency key",async()=>{
   const f=fixture();
   assert.deepEqual(await f.worker.tick(identity),{state:"dispatched",runId:req.runId});
-  assert.deepEqual(f.calls,["claim","load","resolve","invoke","ack","audit:dispatched"]);
+  assert.deepEqual(f.calls,["claim","load","resolve","dispatchStarted","invoke","ack","audit:dispatched"]);
 });
 test("PER-1059: unverified provider idempotency cannot execute an AI workload",async()=>{
   const f=fixture({idempotent:false});
@@ -142,6 +150,8 @@ test("PER-1059: adapter ignoring AbortSignal cannot hang worker or trigger unsaf
   const worker=createHarnessDispatchWorker({
     queue:{
       claim:async()=>lease,
+      markDispatchStarted:async()=>({runId:req.runId,state:"dispatching" as const,generation:1}),
+      recordUnknownOutcome:async()=>({runId:req.runId,state:"reconciliation" as const,reason:"provider_timeout" as const}),
       acknowledge:async()=>{acknowledgements++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
       releaseForRetry:async()=>{retries++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
     },
@@ -177,6 +187,8 @@ test("PER-1059: miswired queue cannot switch worker tenant or adapter before pro
           leaseToken:"f".repeat(64),leaseUntil:"2026-10-12T12:00:30Z",
           attempt:1,generation:1,...bad,
         }),
+        markDispatchStarted:async()=>{sideEffects++;return {runId:req.runId,state:"dispatching" as const,generation:1};},
+        recordUnknownOutcome:async()=>{sideEffects++;return {runId:req.runId,state:"reconciliation" as const,reason:"provider_unknown" as const};},
         acknowledge:async()=>{sideEffects++;return {runId:req.runId,externalRunId:"x",status:"running" as const};},
         releaseForRetry:async()=>{sideEffects++;return {state:"retry" as const,attempt:1,retryAfterMs:250};},
       },
@@ -188,4 +200,22 @@ test("PER-1059: miswired queue cannot switch worker tenant or adapter before pro
     assert.equal((await worker.tick(identity)).state,"reconciliation_required");
     assert.equal(sideEffects,0);
   }
+});
+
+test("PER-1059: no adapter invocation without committed dispatch-start marker",async()=>{
+  const f=fixture();
+  // The fixture records its call order: dispatchStarted must precede invoke.
+  assert.equal((await f.worker.tick(identity)).state,"dispatched");
+  assert.ok(f.calls.indexOf("dispatchStarted")<f.calls.indexOf("invoke"));
+});
+test("PER-1059: uncertain provider side effects are explicitly recorded as durable holds",async()=>{
+  const provider=fixture({providerThrows:true});
+  assert.equal((await provider.worker.tick(identity)).state,"reconciliation_required");
+  assert.ok(provider.calls.includes("hold:provider_unknown"));
+  const invalid=fixture({run:{...req,status:"succeeded",externalRunId:"bad"}});
+  assert.equal((await invalid.worker.tick(identity)).state,"reconciliation_required");
+  assert.ok(invalid.calls.includes("hold:invalid_response"));
+  const ack=fixture({ackThrows:true});
+  assert.equal((await ack.worker.tick(identity)).state,"reconciliation_required");
+  assert.ok(ack.calls.includes("hold:ack_failed"));
 });

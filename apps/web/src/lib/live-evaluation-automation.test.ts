@@ -104,7 +104,7 @@ test("PER-1420: deny missing or malformed workspace without touching fetch",asyn
  const fetcher:typeof fetch=async()=>{called=true;throw Error("network should not be invoked");};
  for(const slug of [undefined,"","..","foreign?org=1","alpha/beta","UPPER","a".repeat(81)]){
   await assert.rejects(()=>loadLiveEvalAutomation(skillId,{...(slug===undefined?{}:{workspaceSlug:slug}),fetcher}),LiveEvaluationUnavailable);
-  await assert.rejects(()=>startLiveEvalAutomation(skillId,{workspaceSlug:slug,fetcher}),LiveEvaluationUnavailable);
+  await assert.rejects(()=>startLiveEvalAutomation(skillId,{...(slug===undefined?{}:{workspaceSlug:slug}),fetcher}),LiveEvaluationUnavailable);
  }
  assert.equal(called,false);
 });

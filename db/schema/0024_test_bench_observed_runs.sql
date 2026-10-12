@@ -21,7 +21,11 @@ create table if not exists test_bench_runs (
   requested_by text not null,
   -- Per-run frozen encrypted copy: editing/archiving the source suite cannot modify queued inputs.
   snapshot_ciphertext text not null check(left(snapshot_ciphertext,3)='v1:' and length(snapshot_ciphertext)<=32768),
-  results_ciphertext text,
+  results_ciphertext text check (
+    results_ciphertext is null or (
+      left(results_ciphertext,3)='v1:' and length(results_ciphertext)<=87500
+    )
+  ),
   status text not null default 'queued' check(status in ('queued','running','complete','failed')),
   expected_cases integer not null check(expected_cases between 1 and 4),
   completed_cases integer not null default 0 check(completed_cases between 0 and 4),

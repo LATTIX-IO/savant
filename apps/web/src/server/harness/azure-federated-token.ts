@@ -55,7 +55,7 @@ export function createAzureFederatedWorkloadTokenProvider(deps:{
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>5000)
     fail("invalid_configuration");
   const tokenEndpoint=
-    \`https://login.microsoftonline.com/\${deps.tenantId}/oauth2/v2.0/token\`;
+    `https://login.microsoftonline.com/${deps.tenantId}/oauth2/v2.0/token`;
   return async function accessToken():Promise<string>{
     // ONE shared timeout covers potentially hung workload federation and
     // token exchange. Never allow an async assertion source to hang workers.

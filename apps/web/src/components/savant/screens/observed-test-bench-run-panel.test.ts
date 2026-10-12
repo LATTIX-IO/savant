@@ -8,7 +8,7 @@ test("PER-1425: observed case UI never falls back to browser-created scores",asy
  assert.match(panel,/startObservedTestBenchRun\(/);
  assert.match(panel,/listObservedTestBenchRuns\(/);
  assert.match(panel,/status==="complete"/);
- assert.match(panel,/not.*harness.*tool/i);
+ assert.match(panel,/does not execute MCP tools, scripts or customer-owned harnesses/i);
  assert.doesNotMatch(panel,/simulateCustomEvaluationTest|Math\.random|passRate\s*=|fakeScore|setCustomResult/);
  assert.match(editor,/<ObservedTestBenchRunPanel/);
  assert.match(editor,/workspaceSlug=\{slug\}/);

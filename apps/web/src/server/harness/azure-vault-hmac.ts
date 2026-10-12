@@ -106,21 +106,24 @@ export function createAzureKeyVaultHarnessResolver(deps:{
       const name=secretName(tenantId,adapterId,alias);
       const id=`${host}/secrets/${name}/${version}`;
       const url=`${id}?api-version=7.4`;
-      let token:string;
-      try{token=await getToken();}
-      catch{return fail("credential_unavailable");}
-      if(typeof token!=="string"||token.length<20||token.length>8192||
-        !/^[A-Za-z0-9._~-]+$/.test(token))fail("credential_unavailable");
-      const time=nowMs();
-      if(!Number.isFinite(time)||time<=0)fail("invalid_configuration");
+      // One deadline spans workload identity acquisition and Key Vault I/O.
+      // A stalled token source must not occupy a worker indefinitely.
       const ctrl=new AbortController();
       const timer=setTimeout(()=>ctrl.abort(),timeoutMs);
       let onAbort:()=>void=()=>{};
-      const timeout=new Promise<never>((_,reject)=>{
+      const deadline=new Promise<never>((_,reject)=>{
         onAbort=()=>reject(new HarnessAzureVaultError("vault_unavailable"));
         ctrl.signal.addEventListener("abort",onAbort,{once:true});
       });
       try{
+        let token:string;
+        try{
+          token=await Promise.race([Promise.resolve().then(getToken),deadline]);
+        }catch{return fail("credential_unavailable");}
+        if(typeof token!=="string"||token.length<20||token.length>8192||
+          !/^[A-Za-z0-9._~-]+$/.test(token))fail("credential_unavailable");
+        const time=nowMs();
+        if(!Number.isFinite(time)||time<=0)fail("invalid_configuration");
         const response=await Promise.race([
           Promise.resolve().then(()=>transport(url,{
             method:"GET",headers:{
@@ -129,18 +132,25 @@ export function createAzureKeyVaultHarnessResolver(deps:{
             },
             signal:ctrl.signal,redirect:"error",cache:"no-store",
           })),
-          timeout,
+          deadline,
         ]);
         if(!response||response.status!==200||
-          response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/json")
+          response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase()!=="application/json"){
+          // The response body may be arbitrarily large or stalled; abort the
+          // underlying connection before returning a sanitized failure.
+          ctrl.abort();
+          if(response?.body)void response.body.cancel().catch(()=>{});
           fail("vault_unavailable");
-        const raw=await Promise.race([bounded(response,MAX_RESPONSE_BYTES),timeout]);
+        }
+        const raw=await Promise.race([bounded(response,MAX_RESPONSE_BYTES),deadline]);
         let value:unknown;
         try{value=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(raw));}
         catch{return fail("invalid_vault_response");}
         return decodeKey(value,id,nowMs());
       }catch{return fail("vault_unavailable");}
       finally{
+        // Abort outstanding response reads, including a raced timeout.
+        ctrl.abort();
         clearTimeout(timer);
         ctrl.signal.removeEventListener("abort",onAbort);
       }

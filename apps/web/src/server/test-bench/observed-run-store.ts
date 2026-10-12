@@ -50,7 +50,7 @@ function samples(row:RunRow):ObservedCase[]{
     return data as ObservedCase[];
   }catch(error){
     if(error instanceof TestBenchError&&error.code==="test_bench_key_unconfigured")throw error;
-    invalid("test_bench_evidence_invalid",503);
+    return invalid("test_bench_evidence_invalid",503);
   }
 }
 function publicRun(row:RunRow):ObservedRunSummary{

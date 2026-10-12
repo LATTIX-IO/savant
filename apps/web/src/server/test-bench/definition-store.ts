@@ -1,4 +1,4 @@
-import {createHash,randomUUID} from "node:crypto";
+import {randomUUID} from "node:crypto";
 import type {GitActor} from "../git/access-control.ts";
 import {assertGitPermission} from "../git/access-control.ts";
 import {requirePinnedEvaluationCommit} from "../jobs/eval-source-revision.ts";
@@ -6,7 +6,7 @@ import {
   TestBenchError,parseTestBenchCases,
   type TestBenchCase,type TestBenchDefinition,type TestBenchDraft,
 } from "./definition-contract.ts";
-import {encryptTestBenchCases,decryptTestBenchCases} from "./definition-crypto.ts";
+import {encryptTestBenchCases,decryptTestBenchCases,testBenchRequestDigest} from "./definition-crypto.ts";
 
 type Sql=import("postgres").Sql;
 type Row={
@@ -18,9 +18,6 @@ type Row={
 };
 function fail(code:string,status=404):never{throw new TestBenchError(code,status);}
 function iso(value:Date|string):string{return value instanceof Date?value.toISOString():new Date(value).toISOString();}
-function digest(skillId:string,draft:TestBenchDraft):string{
-  return createHash("sha256").update(JSON.stringify({skillId,name:draft.name,cases:draft.cases})).digest("hex");
-}
 function asDefinition(row:Row):TestBenchDefinition{
   let cases:TestBenchCase[];
   try{
@@ -78,7 +75,7 @@ export function createTestBenchDefinitionStore(sql:Sql){
     async create(actor:GitActor,skillId:string,input:TestBenchDraft&{requestId:string}):
       Promise<{definition:TestBenchDefinition;replayed:boolean}>{
       assertActor(actor,true);validateSkillId(skillId);
-      const hash=digest(skillId,input);
+      const hash=testBenchRequestDigest(JSON.stringify({skillId,name:input.name,cases:input.cases}),actor.organizationId);
       return sql.begin(async tx=>{
         // Serialize new definition count and request-ID admission per workspace/skill.
         await tx`select pg_advisory_xact_lock(hashtext(${actor.organizationId}),hashtext(${skillId}))`;

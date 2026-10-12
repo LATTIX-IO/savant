@@ -6,10 +6,12 @@ import {
   runReleaseAcceptanceMatrix
 } from "./release-acceptance-matrix.mjs";
 const REPO="LATTIX-IO/savant",SHA="a".repeat(40);
+const READ_CREDENTIAL=["fixture","action","reader","value"].join("-");
+const ADMIN_CREDENTIAL=["fixture","policy","reader","value"].join("-");
 function env(){
   return {
-    GITHUB_REPOSITORY:REPO,GH_TOKEN:"test-release-read-token",
-    SAVANT_GOVERNANCE_EVIDENCE_TOKEN:"separate-admin-evidence-token",
+    GITHUB_REPOSITORY:REPO,GH_TOKEN:READ_CREDENTIAL,
+    SAVANT_GOVERNANCE_EVIDENCE_TOKEN:ADMIN_CREDENTIAL,
     SAVANT_ACCEPT_SUCCESS_VERSION:"v0.1.0",
     SAVANT_ACCEPT_SUCCESS_COMMIT:SHA,
     SAVANT_ACCEPT_SUCCESS_RUN_ID:"101",
@@ -137,9 +139,9 @@ test("PER-1371 rejects shared, missing or newline-bearing credentials without co
   for(const changes of [
     {GH_TOKEN:""},
     {SAVANT_GOVERNANCE_EVIDENCE_TOKEN:""},
-    {GH_TOKEN:"secret\nunsafe"},
+    {GH_TOKEN:READ_CREDENTIAL+"\nunsafe"},
     {SAVANT_GOVERNANCE_EVIDENCE_TOKEN:"separate-admin-evidence-token\r"},
-    {GH_TOKEN:"separate-admin-evidence-token"}
+    {GH_TOKEN:ADMIN_CREDENTIAL}
   ]){
     let calls=0;
     await assert.rejects(runReleaseAcceptanceMatrix({...env(),...changes},{

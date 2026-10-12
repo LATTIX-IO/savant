@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {encryptTestBenchCases,decryptTestBenchCases} from "./definition-crypto.ts";
+import {encryptTestBenchCases,decryptTestBenchCases,testBenchRequestDigest} from "./definition-crypto.ts";
 import {TestBenchError} from "./definition-contract.ts";
 const ctx={
  organizationId:"11111111-1111-4111-8111-111111111111",
@@ -43,4 +43,16 @@ test("PER-1422: tampering, malformed fragments and unavailable keys never return
    (e:unknown)=>e instanceof TestBenchError&&e.code==="test_bench_key_unconfigured");
   assert.throws(()=>decryptTestBenchCases(value,ctx,broken),TestBenchError);
  }
+});
+
+test("PER-1422: creation fingerprints are keyed, tenant-separated and do not reveal case prompts",()=>{
+ const payload=JSON.stringify({skillId:"skill-1",prompt:"sensitive text"});
+ const left=testBenchRequestDigest(payload,ctx.organizationId,env);
+ assert.match(left,/^[0-9a-f]{64}$/);
+ assert.equal(left,testBenchRequestDigest(payload,ctx.organizationId,env));
+ assert.notEqual(left,testBenchRequestDigest(payload,"foreign-organization",env));
+ assert.notEqual(left,testBenchRequestDigest(payload,ctx.organizationId,
+   {TEST_BENCH_ENCRYPTION_KEY:Buffer.alloc(32,0x39).toString("base64url")}));
+ assert.notEqual(left,testBenchRequestDigest(JSON.stringify({skillId:"skill-1",prompt:"changed"}),ctx.organizationId,env));
+ assert.doesNotMatch(left,/sensitive text/);
 });

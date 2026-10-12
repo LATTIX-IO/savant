@@ -87,3 +87,43 @@ test("PER-1059 config: active connection requires PostgreSQL, not untrusted brow
   await assert.rejects(()=>f.store.resolveActive(tenantId,adapterId),/unexpected db/);
   assert.deepEqual(f.calls,["db"]);
 });
+
+test("PER-1059 admin: reject accessor-based and extra-property inputs before authorization",async()=>{
+  for(const mutation of ["getter","extra","prototype"]){
+    const input:Record<string,unknown>={...valid};
+    if(mutation==="getter")
+      Object.defineProperty(input,"tenantId",{enumerable:true,
+        get(){throw Error("credential-leak-from-getter");}});
+    if(mutation==="extra")input.rawToken="must-not-be-processed";
+    if(mutation==="prototype")Object.setPrototypeOf(input,new Date());
+    const f=fixture();
+    await denied("invalid_scope",()=>f.store.save(input as typeof valid));
+    assert.deepEqual(f.calls,[]);
+  }
+});
+test("PER-1059 admin: snapshot tenant, actor and vault reference before asynchronous admin authorization",async()=>{
+  const input={...valid};
+  const scopes:string[]=[];
+  const sql=Object.assign(()=>{throw Error("unexpected IO");},
+    {begin:()=>{throw Error("expected-db-boundary");}});
+  const store=createHarnessStatusConnectorConfigStore({
+    sql:sql as never,
+    now:()=>new Date("2026-10-12T12:00:00Z"),
+    allowedOrigins:["https://approved.example.com"],
+    authorizeAdmin:async s=>{
+      scopes.push(s.tenantId+":"+s.actor);
+      input.tenantId="22222222-2222-4222-8222-222222222222";
+      input.actor="attacker";
+      input.secretRef="vault:foreign:wrong:key";
+      return true;
+    },
+    attestSecret:async s=>{
+      assert.equal(s.tenantId,tenantId);
+      assert.equal(s.secretRef,secretRef);
+      return true;
+    },
+    verifyEgress:async()=>true,
+  });
+  await assert.rejects(()=>store.save(input),/expected-db-boundary/);
+  assert.deepEqual(scopes,[tenantId+":security-admin"]);
+});

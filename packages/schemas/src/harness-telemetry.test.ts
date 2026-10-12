@@ -122,3 +122,16 @@ test("PER-1093 RED: missing workflow step coverage is explicitly partial, not si
     completeness: "none", observedStepIds: [], missingStepIds: ["step-a"],
   });
 });
+
+test("PER-1103: coverage never joins foreign tenants, runs, traces or version hashes", () => {
+  for (const mutation of [
+    { tenantId: "tenant-foreign" }, { adapterId: "other-adapter" },
+    { runId: "run-foreign" }, { traceId: "trace-foreign" },
+    { specVersionHash: T }, { testSuiteHash: H },
+  ]) {
+    denied("identity_mismatch", () => summarizeHarnessCoverage(
+      ["step-a", "step-b"],
+      [span("s1", { nodeId: "step-a" }), span("s2", { nodeId: "step-b", ...mutation })],
+    ));
+  }
+});

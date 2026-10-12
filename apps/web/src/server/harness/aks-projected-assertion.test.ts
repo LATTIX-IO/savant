@@ -81,12 +81,18 @@ test("PER-1059 AKS: reject unsigned algorithms, malformed JWT and noncanonical b
  await projected(async x=>{
   for(const value of [
    jwt({}, {alg:"none"}), jwt({}, {alg:"HS256"}),
-   "not.a.jwt",jwt().replace(/\.$/,""),
-   jwt().replace(/\./g,"!"),"x".repeat(16500),
+   "not.a.jwt",jwt().split(".").slice(0,2).join("."),
+   jwt().replace(/\./g,"!"),
   ]){
    await x.write(value);
    await denied("invalid_assertion",x.read);
   }
+ });
+});
+test("PER-1059 AKS: oversized projection is unreadable and never parsed",async()=>{
+ await projected(async x=>{
+  await x.write("x".repeat(16500));
+  await denied("assertion_unavailable",x.read);
  });
 });
 test("PER-1059 AKS: projected token symlink escaping trusted mount denied",async()=>{

@@ -125,7 +125,7 @@ try {
   await denied("invalid_event", () => s1.applyEvent(orgA, "run-two",
     event(orgB, "run-two", "e-tenant-forged", 1, "running")));
   await denied("invalid_event", () => s1.applyEvent(orgA, "run-two",
-    event(orgA, "run-two", "e-trace-forged", 1, "running", "wrong-trace"));
+    event(orgA, "run-two", "e-trace-forged", 1, "running", "wrong-trace")));
   const applied = await s1.applyEvent(orgA, "run-two",
     event(orgA, "run-two", "e-running", 1, "running"));
   assert.equal(applied.latestSequence, 1);

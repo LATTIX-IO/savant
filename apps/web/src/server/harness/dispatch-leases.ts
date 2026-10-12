@@ -57,12 +57,18 @@ export function createHarnessDispatchLeaseQueue(deps:{
   async function lockedLease(tx:Sql, identity:DispatchIdentity, runId:string, token:string,at:Date){
     if(typeof runId!=="string"||!ID.test(runId))fail("lease_denied");
     const hash=checkedToken(token);
+    // Global lock order: run row then lease row. Avoids deadlocks with claim,
+    // cancellation, and reservation-store transitions across processes.
+    const runs=await tx<{id:string}[]>`
+      select id from harness_eval_runs
+      where organization_id=${identity.tenantId} and adapter_id=${identity.adapterId}
+        and run_id=${runId} for update
+    `;
+    if(!runs.length)fail("lease_denied");
     const found=await tx<Row[]>`
-      select d.* from harness_eval_dispatch_leases d
-        inner join harness_eval_runs r on r.organization_id=d.organization_id
-          and r.id=d.harness_run_id
-      where d.organization_id=${identity.tenantId} and d.adapter_id=${identity.adapterId}
-        and r.run_id=${runId} for update of d
+      select * from harness_eval_dispatch_leases
+      where organization_id=${identity.tenantId} and adapter_id=${identity.adapterId}
+        and harness_run_id=${runs[0]!.id} for update
     `;
     const row=found[0];
     if(!row||row.worker_id!==identity.workerId||

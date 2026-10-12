@@ -48,6 +48,7 @@ function mockFetch(fixtureData, { responses = {}, calls = [] } = {}) {
     if (path === runPath) return Response.json(fixtureData.run);
     if (path === runPath + "/jobs?per_page=100") return Response.json(fixtureData.jobs);
     if (path === runPath + "/approvals") return Response.json(fixtureData.approvals);
+    if (path === "/releases?per_page=1") return Response.json(fixtureData.release ? [fixtureData.release] : []);
     if (path === "/releases/tags/" + VERSION)
       return fixtureData.release === null ? new Response(null, { status: 404 }) :
         Response.json(fixtureData.release);
@@ -80,8 +81,8 @@ test("PER-1370 read-only preflight refusal evidence verifies and never exposes a
   assert.equal(evidence.schema, "savant.release-negative-uat.v1");
   assert.equal(evidence.scenario, "preflight_denied");
   assert.ok(Object.values(evidence.checks).every(Boolean));
-  assert.equal(calls.length, 4);
-  assert.deepEqual(calls.map(x => x.options.method), ["GET", "GET", "GET", "GET"]);
+  assert.equal(calls.length, 5);
+  assert.deepEqual(calls.map(x => x.options.method), ["GET", "GET", "GET", "GET", "GET"]);
   assert.ok(calls.every(x => x.url.startsWith("https://api.github.com/repos/" + REPO + "/")));
   assert.doesNotMatch(JSON.stringify(evidence), /token|reviewer|actor|approval.*301/i);
 });
@@ -193,6 +194,26 @@ test("PER-1370 missing, paginated, denied, malformed and oversized GitHub eviden
   await assert.rejects(verifyNegativeReleaseEvidence(request(), { token: "" }), /missing_read_token/);
 });
 
+test("PER-1370 exact release absence is not accepted without independent Releases read access", async () => {
+  const f = fixture(), token = "test-read-only-evidence-token";
+  for (const probe of [
+    new Response(null, { status: 403 }),
+    new Response(null, { status: 404 }),
+    new Response("{}", { status: 200 }),
+    new Response("malformed", { status: 200 })
+  ]) {
+    const fetcher = mockFetch(f, { responses: { "/releases?per_page=1": probe } });
+    await assert.rejects(verifyNegativeReleaseEvidence(request(), { token, fetcher }),
+      NegativeEvidenceError);
+  }
+  const proof = await verifyNegativeReleaseEvidence(request(), {
+    token, fetcher: mockFetch(f, { responses: {
+      "/releases?per_page=1": new Response("[]", { status: 200,
+        headers: { link: '<https://api.github.com/next>; rel="next"' } })
+    } })
+  });
+  assert.equal(proof.ready, true);
+});
 test("PER-1370 endpoint allowlist and transport errors cannot redirect or leak secrets", async () => {
   const token = "secret-governance-token";
   const client = makeReadOnlyEvidenceClient({ token,

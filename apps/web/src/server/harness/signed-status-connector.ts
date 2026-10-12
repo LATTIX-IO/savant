@@ -16,13 +16,27 @@ export class HarnessStatusConnectorError extends Error {
 function fail(code:string):never{throw new HarnessStatusConnectorError(code);}
 type Scope={tenantId:string;adapterId:string;runId:string;idempotencyKey:string;traceId:string};
 type Connection={endpoint:string;secretRef:string};
-function validateScope(x:Scope):void{
-  if(!x||typeof x!=="object"||
-    typeof x.tenantId!=="string"||!UUID.test(x.tenantId)||
+function immutableScope(input:Scope):Scope{
+  // Snapshot the authorized DB-derived identity BEFORE the first await.
+  // Reject getters, unexpected properties and hostile prototypes.
+  let descriptors:PropertyDescriptorMap;
+  try{
+    if(!input||typeof input!=="object"||Array.isArray(input)||
+      (Object.getPrototypeOf(input)!==Object.prototype&&
+        Object.getPrototypeOf(input)!==null))fail("invalid_scope");
+    descriptors=Object.getOwnPropertyDescriptors(input);
+  }catch{return fail("invalid_scope");}
+  const keys=["tenantId","adapterId","runId","idempotencyKey","traceId"];
+  if(Object.keys(descriptors).length!==keys.length||
+    keys.some(k=>!descriptors[k]||!("value" in descriptors[k]!)))
+    fail("invalid_scope");
+  const x=Object.fromEntries(keys.map(k=>[k,descriptors[k]!.value])) as Scope;
+  if(typeof x.tenantId!=="string"||!UUID.test(x.tenantId)||
     typeof x.adapterId!=="string"||!ID.test(x.adapterId)||
     typeof x.runId!=="string"||!ID.test(x.runId)||
     typeof x.idempotencyKey!=="string"||!ID.test(x.idempotencyKey)||
     typeof x.traceId!=="string"||!ID.test(x.traceId))fail("invalid_scope");
+  return x;
 }
 function validateEndpoint(raw:string,allowlist:readonly string[]):string{
   if(typeof raw!=="string"||raw.length>512||!Array.isArray(allowlist)||
@@ -80,8 +94,8 @@ export function createSignedHarnessStatusLookup(deps:{
   const timeoutMs=deps.timeoutMs??3000;
   if(!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>5000)
     fail("invalid_configuration");
-  return async function verifiedLookup(scope:Scope){
-    validateScope(scope);
+  return async function verifiedLookup(incoming:Scope){
+    const scope=immutableScope(incoming);
     const current=deps.nowMs();
     if(!Number.isFinite(current)||current<=0)fail("invalid_configuration");
     let connection:Connection|null;

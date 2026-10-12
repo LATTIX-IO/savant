@@ -45,6 +45,7 @@ function fixtures(request=parseAcceptanceMatrixRequest(env())){
       schema:"savant.release-uat-evidence.v2",repository:REPO,ready:true,
       version:request.positive.version,commit:request.positive.commit,
       workflowRunId:request.positive.runId,sha256:"b".repeat(64),
+      verifiedSignerWorkflow:"github.com/LATTIX-IO/savant/.github/workflows/publish-source-release.yml",
       assets:[
         {name:"savant-"+request.positive.version+".tar.gz",sha256:"b".repeat(64),bytes:200},
         {name:"SHA256SUMS",sha256:"c".repeat(64),bytes:72},
@@ -185,6 +186,8 @@ test("PER-1371 rejects forged success and stale run, missing signer check, wrong
     {checks:{...f.successful.checks,signedAttestation:false}},
     {checks:{...f.successful.checks,independentEnvironmentApproval:undefined}},
     {sha256:"0"},
+    {verifiedSignerWorkflow:"github.com/attacker/repo/.github/workflows/fake.yml"},
+    {assets:f.successful.assets.map((a,i)=>i===0?{...a,sha256:"c".repeat(64)}:a)},
     {assets:[...f.successful.assets, f.successful.assets[0]]},
     {assets:f.successful.assets.map((a,i)=>i===0?{...a,name:"../../secret"}:a)},
     {assets:f.successful.assets.map((a,i)=>i===0?{...a,bytes:-5}:a)}

@@ -45,6 +45,26 @@ test("PER-1059 Entra: fixed tenant endpoint and Key Vault only workload scope",a
  const f=fixture();assert.equal(await f.provider(),key);
  assert.deepEqual(f.calls,["assertion","exchange"]);
 });
+test("PER-1059 Entra: RFC 6750 opaque Bearer +, /, padding is accepted",async()=>{
+  const opaque=("Ab9._~+/".repeat(6))+"==";
+  const f=fixture({raw:JSON.stringify({token_type:"Bearer",access_token:opaque,expires_in:3600})});
+  assert.equal(await f.provider(),opaque);
+  assert.deepEqual(f.calls,["assertion","exchange"]);
+});
+test("PER-1059 Entra: reject unsafe Bearer controls, spaces and excessive padding",async()=>{
+  for(const value of [
+    "x".repeat(23)+"\nmalicious",
+    "x".repeat(22)+" bearer",
+    "x".repeat(22)+"\r",
+    "x".repeat(22)+"\t",
+    "x".repeat(21)+"=x",
+    "x".repeat(8193),
+    "x".repeat(18),
+  ]){
+    const f=fixture({raw:JSON.stringify({token_type:"Bearer",access_token:value,expires_in:3600})});
+    await denied("invalid_token_response",()=>f.provider());
+  }
+});
 test("PER-1059 Entra: reject hostile tenant/client deployment identity",()=>{
  for(const bad of ["common","","login.microsoftonline.com","127.0.0.1"]){
   assert.throws(()=>createAzureFederatedWorkloadTokenProvider({

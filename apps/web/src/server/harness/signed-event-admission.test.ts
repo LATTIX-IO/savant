@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash, createHmac } from "node:crypto";
 import test from "node:test";
 import { createSignedHarnessEventAdmission, SignedHarnessEventError } from "./signed-event-admission.ts";
 
@@ -35,9 +35,10 @@ function fixture(options: {secret?: Uint8Array[], runAdapter?: string, runTenant
       return { tenantId:options.runTenant ?? tenantId,adapterId:options.runAdapter ?? "adapter-1",
         runId:"run-1", traceId:"trace-1",status:"running" };
     },
-    applyEvent: async (_t:string,_r:string,e:unknown) => {
+    applyEvent: async (_t:string,_r:string,e:unknown,delivery:{deliveryId:string;payloadSha256:string}) => {
       io.push("apply");
       assert.deepEqual(e,event);
+      assert.deepEqual(delivery,{deliveryId:"delivery-1",payloadSha256:createHash("sha256").update(body).digest("hex")});
       return {status:"succeeded",replay:false};
     },
   };

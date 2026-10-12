@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
+import { LiveEvaluationAutomation } from "@/components/savant/screens/live-evaluation-automation";
 import { CommitRef, Delta, EnvPill, Tier } from "@/components/savant/primitives";
 import {
   Table,
@@ -25,11 +26,9 @@ import {
   buildCustomEvaluationRequestFromPreset,
   cloneEvaluationConfigEntries,
   cloneEvaluationMetricAlignment,
-  simulateCustomEvaluationTest,
   type EvaluationConfigEntry,
   type EvaluationCustomTestPreset,
   type EvaluationCustomTestRequest,
-  type EvaluationCustomTestResult,
   type EvaluationRunDetail,
   type EvaluationArtifactBundle,
   type EvaluationMetric,
@@ -600,8 +599,6 @@ function EvaluationDetailLoadedScreen({
 
   const defaultRequest = buildCustomEvaluationRequestFromPreset(firstPreset);
   const defaultMetricAlignment = cloneEvaluationMetricAlignment(detail.metricAlignment);
-  const [customResult, setCustomResult] = useState<EvaluationCustomTestResult | null>(null);
-  const [lastRunEvalName, setLastRunEvalName] = useState<string | null>(null);
   const [savedTestBenchEvals, setSavedTestBenchEvals] = useState<SavedTestBenchEval[]>(() => {
     if (typeof window === "undefined") {
       return [];
@@ -957,26 +954,6 @@ function EvaluationDetailLoadedScreen({
     }
   }
 
-  function runSavedTestBenchEval(savedEval: SavedTestBenchEval) {
-    if (resolvedDetail.readOnly) {
-      return;
-    }
-
-    const nextRequest = cloneTestBenchRequest(savedEval.request);
-    setLastRunEvalName(savedEval.name);
-    setCustomResult(simulateCustomEvaluationTest(resolvedDetail, nextRequest));
-  }
-
-  function runEditorDraft() {
-    if (resolvedDetail.readOnly) {
-      return;
-    }
-
-    const nextRequest = cloneTestBenchRequest(editorState.request);
-    setLastRunEvalName(editorState.name.trim() || "Unsaved draft");
-    setCustomResult(simulateCustomEvaluationTest(resolvedDetail, nextRequest));
-  }
-
   function setRecommendationDecision(recommendationId: string, decision: RecommendationDecision) {
     persistRecommendationDecisions({
       ...recommendationDecisions,
@@ -1074,13 +1051,9 @@ function EvaluationDetailLoadedScreen({
             <Ic.ExternalLink className="b-icon" />
             Open related skill
           </Link>
-          <button type="button" className="btn btn-ghost">
-            <Ic.ExternalLink className="b-icon" />
-            Export eval
-          </button>
           <a href="#test-bench" className="btn btn-primary">
             <Ic.Refresh className="b-icon" />
-            Run Test Bench eval
+            Open Test Bench drafts
           </a>
         </div>
       </div>
@@ -1088,13 +1061,14 @@ function EvaluationDetailLoadedScreen({
       <div className="grid-2" style={{ alignItems: "start" }}>
         <div className="col" style={{ gap: "var(--gutter)", minWidth: 0 }}>
           <BenchmarkMetricStrip metrics={detail.metrics} />
+          <LiveEvaluationAutomation skillId={detail.skill.id} readOnly={detail.readOnly} pathname={pathname} />
 
           <div className="panel" id="test-bench">
             <div className="panel-hd">
               <div>
                 <div className="panel-title">Test Bench</div>
                 <div className="subtle" style={{ fontSize: 11.5 }}>
-                  Scoped reruns live here. Recommendations and benchmark pressure points stay attached to the same working surface.
+                  Configure future Test Bench cases here. These drafts are local-only and do not execute on the server.
                 </div>
               </div>
               <span className={detail.readOnly ? "chip chip-paper" : "chip chip-moss"}>
@@ -1102,6 +1076,9 @@ function EvaluationDetailLoadedScreen({
               </span>
             </div>
             <div className="panel-bd" style={{ padding: 0 }}>
+              <p style={{ padding: "12px 20px", margin: 0, fontSize: 12, color: "var(--ink-2)", borderBottom: "1px solid var(--rule)" }}>
+                Saved Test Bench configurations are local drafts, not executed evaluations. Running configured cases is not yet supported. Use Server-backed evaluation above for a persisted, chat-only scored run.
+              </p>
               {detail.readOnly ? (
                 <div
                   style={{
@@ -1185,14 +1162,6 @@ function EvaluationDetailLoadedScreen({
                                 </button>
                                 <button
                                   type="button"
-                                  className="btn btn-sm btn-primary"
-                                  onClick={() => runSavedTestBenchEval(savedEval)}
-                                  disabled={detail.readOnly}
-                                >
-                                  Run
-                                </button>
-                                <button
-                                  type="button"
                                   className="btn btn-sm btn-ghost"
                                   onClick={() => deleteSavedTestBenchEval(savedEval.id)}
                                   disabled={detail.readOnly}
@@ -1234,7 +1203,6 @@ function EvaluationDetailLoadedScreen({
                 </div>
               </div>
 
-              {customResult ? <CustomTestResultSection result={customResult} runLabel={lastRunEvalName} /> : null}
             </div>
           </div>
 
@@ -1650,10 +1618,6 @@ function EvaluationDetailLoadedScreen({
                 {editorState.evalId ? "Delete eval" : "Cancel"}
               </button>
               <div className="row" style={{ gap: 8 }}>
-                <button type="button" className="btn btn-sm btn-ghost" onClick={runEditorDraft} disabled={detail.readOnly}>
-                  <Ic.Refresh className="b-icon" />
-                  Run draft
-                </button>
                 <button type="button" className="btn btn-sm btn-primary" onClick={saveTestBenchEval} disabled={detail.readOnly}>
                   <Ic.Check className="b-icon" />
                   Save eval
@@ -2360,49 +2324,6 @@ function CommentSection({
   );
 }
 
-function CustomTestResultSection({
-  result,
-  runLabel,
-}: {
-  result: EvaluationCustomTestResult;
-  runLabel?: string | null;
-}) {
-  return (
-    <div style={{ borderTop: "1px solid var(--rule)", padding: "18px 20px", display: "grid", gap: 14 }}>
-      <div className="row between" style={{ gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{result.headline}</div>
-          {runLabel ? (
-            <div className="subtle" style={{ fontSize: 11.5, marginTop: 4 }}>
-              Test: {runLabel}
-            </div>
-          ) : null}
-          <div className="muted" style={{ fontSize: 11.5, marginTop: 5 }}>
-            Runtime {result.runtimeSeconds}s · pass rate {result.passRate.toFixed(1)}% · score {result.score.toFixed(1)}
-          </div>
-        </div>
-        <span className={resultStatusChipClass(result.status)}>{result.status}</span>
-      </div>
-
-      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
-        <span className="chip chip-paper">Δ {result.delta.toFixed(1)} pts</span>
-        <span className="chip chip-paper">{result.passRate.toFixed(1)}% pass rate</span>
-        <span className="chip chip-paper">{result.runtimeSeconds}s runtime</span>
-      </div>
-
-      <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 8 }}>
-        {result.findings.map((finding) => (
-          <li key={finding} style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.5 }}>{finding}</li>
-        ))}
-      </ul>
-
-      <div style={{ fontSize: 12.5, color: "var(--ink-2)", lineHeight: 1.55 }}>
-        <span style={{ color: "var(--ink)", fontWeight: 600 }}>Suggested next step:</span> {result.suggestedNextStep}
-      </div>
-    </div>
-  );
-}
-
 function MetadataSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section style={{ padding: "16px 18px", borderTop: "1px solid var(--rule)" }}>
@@ -2604,14 +2525,4 @@ function recommendationDecisionButtonClass(decision: RecommendationDecision) {
   return "btn";
 }
 
-function resultStatusChipClass(status: EvaluationCustomTestResult["status"]) {
-  if (status === "promising") {
-    return "chip chip-moss";
-  }
 
-  if (status === "watch") {
-    return "chip chip-brass";
-  }
-
-  return "chip chip-blood";
-}

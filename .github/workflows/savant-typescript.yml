@@ -104,3 +104,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-artifact-permissions.mjs
       - name: Verify policy admin tenant grants, revisions, retries and atomic audit
         run: pnpm --filter @savant/web exec node ./scripts/verify-capability-policy-admin.mjs
+      - name: Verify immutable evaluation enqueue, default-branch race and cross-tenant denial
+        run: pnpm --filter @savant/web exec node ./scripts/verify-eval-source-pinning.mjs
+        env:
+          SAVANT_EVAL_SOURCE_TEST: "1"

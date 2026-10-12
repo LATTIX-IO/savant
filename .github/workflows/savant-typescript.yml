@@ -41,6 +41,9 @@ jobs:
       - name: Test all Node contract and application suites
         run: pnpm test
 
+      - name: Python telemetry SDK conformance and fault tests
+        run: python3 -m unittest discover -s sdks/python -p 'test_*.py'
+
       - name: Lint
         run: pnpm lint
 

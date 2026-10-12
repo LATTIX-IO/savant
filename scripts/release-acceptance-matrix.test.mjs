@@ -93,7 +93,7 @@ test("PER-1371 accepts a full live-observed matrix with independent run/version 
   assert.equal(result.successful.sha256,"b".repeat(64));
   assert.deepEqual(result.negative.map(x=>x.scenario),["preflight_denied","approval_denied"]);
   assert.ok(Object.values(result.checks).every(x=>x===true));
-  assert.deepEqual(secondCalls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
+  assert.deepEqual(calls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
   assert.equal(calls[0][1].SAVANT_GOVERNANCE_MODE,"audit");
   assert.equal(calls[0][1].GH_TOKEN,e.SAVANT_GOVERNANCE_EVIDENCE_TOKEN);
   for(const entry of calls.slice(1))assert.equal(entry[2].token,e.GH_TOKEN);
@@ -221,7 +221,7 @@ test("PER-1371 upstream API rejection is sanitized and stops subsequent verifier
     return fixtures().preflight;
   };
   await assert.rejects(runReleaseAcceptanceMatrix(e,f),/matrix_live_evidence_unavailable/);
-  assert.deepEqual(calls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
+  assert.deepEqual(secondCalls.map(x=>x[0]),["governance","successful","preflight_denied","approval_denied"]);
 });
 test("PER-1371 evidence matrix code contains no publishing, admin mutation or workflow dispatch",()=>{
   const source=readFileSync("scripts/release-acceptance-matrix.mjs","utf8");

@@ -46,6 +46,28 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
   if(!admitted)return "done";
   const {row,cases}=admitted;
   try{
+    // Check the initiating human is STILL authorized before provider egress.
+    // Revoked and offboarded users cannot consume quota from an earlier queue.
+    const [actor]=await sql<{authorized:boolean}[]>`
+      with ordered_users as (
+        select u.id,u.external_subject,u.status,
+          row_number() over (order by u.created_at asc,u.email asc)=1 as first_member
+        from users u where u.organization_id=${row.organization_id}
+      )
+      select (
+        o.first_member or exists(
+          select 1 from group_memberships gm
+          join groups g on g.id=gm.group_id
+          where gm.user_id=o.id and g.organization_id=${row.organization_id}
+            and lower(g.name) in ('repository-managers','platform-admins')
+        )
+      ) as authorized
+      from ordered_users o
+      where o.external_subject=${row.requested_by} and o.status='active'
+      limit 1
+    `;
+    if(!actor?.authorized)
+      throw new ObservedEvaluationError("test_bench_actor_revoked");
     const configured=deps.clients();
     if(!configured)throw new ObservedEvaluationError("test_bench_provider_unconfigured");
     // Read the *admission-time* pinned commit, never today's default branch.

@@ -144,3 +144,35 @@ test("PER-1059 Azure KV: hung remote transport is bounded even if AbortSignal ig
   assert.ok(Date.now()-start<1000);
   assert.deepEqual(f.calls,["token","vault"]);
 });
+
+test("PER-1059 Azure KV: stalled workload identity acquisition obeys one deadline without contacting vault",async()=>{
+  let remoteCalls=0,identityCalls=0;
+  const reader=createAzureKeyVaultHarnessResolver({
+    vaultName:"savant-test",timeoutMs:100,nowMs:()=>now,
+    accessToken:async()=>{identityCalls++;return new Promise<string>(()=>{});},
+    transport:async()=>{remoteCalls++;throw Error("must not contact vault");},
+  });
+  const started=Date.now();
+  await denied("credential_unavailable",()=>reader.readSecret(tenant,adapter,ref));
+  assert.ok(Date.now()-started<1000,"hung managed identity must have a bounded deadline");
+  assert.equal(identityCalls,1);assert.equal(remoteCalls,0);
+});
+test("PER-1059 Azure KV: rejected status cancels the response stream and aborts the request",async()=>{
+  let wasCanceled=false,wasAborted=false;
+  const reader=createAzureKeyVaultHarnessResolver({
+    vaultName:"savant-test",timeoutMs:300,nowMs:()=>now,
+    accessToken:async()=>bearer,
+    transport:async(_url,init)=>{
+      const signal=init.signal as AbortSignal;
+      signal.addEventListener("abort",()=>{wasAborted=true;},{once:true});
+      return new Response(new ReadableStream<Uint8Array>({
+        // Deliberately never complete or yield a body.
+        start(){},
+        cancel(){wasCanceled=true;},
+      }),{status:403,headers:{"content-type":"text/plain"}});
+    },
+  });
+  await denied("vault_unavailable",()=>reader.readSecret(tenant,adapter,ref));
+  assert.equal(wasCanceled,true,"rejecting a vault response must cancel its body");
+  assert.equal(wasAborted,true,"rejecting a vault response must terminate network IO");
+});

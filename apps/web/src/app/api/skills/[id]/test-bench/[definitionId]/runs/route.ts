@@ -9,19 +9,8 @@ import {kickBackgroundJobs} from "@/server/jobs/runner";
 import {TestBenchError} from "@/server/test-bench/definition-contract";
 import {readBoundedTestBenchBody} from "@/server/test-bench/definition-request";
 import {createObservedRunStore} from "@/server/test-bench/observed-run-store";
+import {parseObservedRunAdmission} from "@/server/test-bench/observed-run-contract";
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-export function parseObservedRunAdmission(value:unknown):{requestId:string;expectedRevision:number}{
-  if(!value||typeof value!=="object"||Array.isArray(value))
-    throw new TestBenchError("test_bench_run_request_invalid",422);
-  const row=value as Record<string,unknown>;
-  if(Object.keys(row).length!==2||Object.keys(row).some(k=>k!=="requestId"&&k!=="expectedRevision")||
-    typeof row.requestId!=="string"||!UUID.test(row.requestId)||
-    !Number.isSafeInteger(row.expectedRevision)||
-    (row.expectedRevision as number)<1)
-    throw new TestBenchError("test_bench_run_request_invalid",422);
-  return {requestId:row.requestId,expectedRevision:row.expectedRevision as number};
-}
 /** Read encrypted, observed run receipts. This does not infer missing scores. */
 export async function GET(request:Request,ctx:RouteContext<"/api/skills/[id]/test-bench/[definitionId]/runs">){
   try{

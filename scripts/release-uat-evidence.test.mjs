@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { stageBundle, archiveName } from "./release-publication.mjs";
 import { parseEvidenceRequest, validateRemoteRelease, verifySignedAttestation,
-  verifySourceReleaseEvidence, verifyRemoteTag, verifySuccessfulPublicationRun, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
+  verifySourceReleaseEvidence, verifyRemoteTag, verifySuccessfulPublicationRun, verifyIndependentReleaseApproval, ReleaseEvidenceError } from "./release-uat-evidence.mjs";
 const SHA="a".repeat(40), REPO="LATTIX-IO/savant";
 const request={version:"v0.1.0",commit:SHA,repository:REPO,runId:"124"};
 const versioned=()=>({GITHUB_REPOSITORY:REPO,SAVANT_EVIDENCE_VERSION:request.version,
@@ -38,10 +38,14 @@ function fixture(){
 const response=(metadata,status=200)=>new Response(metadata?JSON.stringify(metadata):null,{status});
 
 const remoteRead=(f,{metadata=f.metadata,tag={type:"commit",sha:SHA},releaseStatus=200,
-  runChanges={},jobsChanges={},seen=[]}={})=>async(url,opts)=>{
+  runChanges={},jobsChanges={},approvals=[
+    {state:"approved",user:{id:301,type:"User"},
+     environments:[{name:"savant-release",id:5}]}
+  ],seen=[]}={})=>async(url,opts)=>{
   seen.push({url,opts});
   if(url.includes("/git/ref/tags/"))return response({object:tag});
   if(url.includes("/git/tags/"))return response({object:{type:"commit",sha:SHA}});
+  if(url.includes("/actions/runs/"+request.runId+"/approvals"))return response(approvals);
   if(url.includes("/actions/runs/"+request.runId+"/jobs"))return response({
     total_count:2,jobs:[
       {name:"Verify, test and attest tagged source",status:"completed",conclusion:"success"},
@@ -52,7 +56,8 @@ const remoteRead=(f,{metadata=f.metadata,tag={type:"commit",sha:SHA},releaseStat
     id:Number(request.runId),head_sha:SHA,
     path:".github/workflows/publish-source-release.yml",
     head_branch:"main",event:"workflow_dispatch",status:"completed",
-    conclusion:"success",repository:{full_name:REPO},...runChanges
+    conclusion:"success",repository:{full_name:REPO},run_attempt:1,
+    actor:{id:300,type:"User"},triggering_actor:{id:300,type:"User"},...runChanges
   });
   if(releaseStatus!==200)return new Response(null,{status:releaseStatus});
   return response(metadata);
@@ -124,6 +129,7 @@ test("PER-1291 attestation requires a nonempty signed SLSA subject for the exact
     Buffer.from(JSON.stringify([{verificationResult:{}}])),
     signed("e".repeat(64)),signed(digest,"https://wrong.example/predicate"),
     signed(digest,"https://slsa.dev/provenance/v1","999"),
+    Buffer.from(JSON.stringify([{verificationResult:{signature:{certificate:{runInvocationURI:"https://github.com/"+REPO+"/actions/runs/124/attempts/2"}},statement:{predicateType:"https://slsa.dev/provenance/v1",subject:[{digest:{sha256:digest}}]}}}])),
     Buffer.alloc(1024*1024+1,0)
   ])assert.throws(()=>verifySignedAttestation(value,digest,request),ReleaseEvidenceError);
 });
@@ -135,12 +141,12 @@ test("PER-1291 read-only end-to-end rehearsal checks local archive, GitHub metad
       runner:fakeRunner(f,{log:calls})
     }));
     assert.equal(result.ready,true);
-    assert.equal(result.schema,"savant.release-uat-evidence.v1");
+    assert.equal(result.schema,"savant.release-uat-evidence.v2");
     assert.equal(result.sha256,f.prov.sha256);
     assert.equal(result.workflowRunId,request.runId);
     assert.equal(result.assets.length,3);
     assert.ok(Object.values(result.checks).every(Boolean));
-    assert.equal(network.length,4);
+    assert.equal(network.length,5);
     assert.ok(network.every(x=>x.opts.redirect==="error" && x.opts.method==="GET" ||
       x.opts.redirect==="error" && x.opts.headers.Authorization==="Bearer read-only-evidence-token"));
     assert.equal(calls.length,2);
@@ -250,6 +256,9 @@ test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs 
       {runChanges:{path:".github/workflows/other.yml"}},
       {runChanges:{head_branch:"feature"}},
       {runChanges:{repository:{full_name:"attacker/other"}}},
+      {runChanges:{run_attempt:2}},
+      {runChanges:{actor:null}},
+      {runChanges:{triggering_actor:{id:301,type:"User"}}},
       {runChanges:{inputs:{version:"v9.9.9",commit_sha:SHA,confirmation:"PUBLISH v9.9.9"}}},
       {runChanges:{inputs:{version:request.version,commit_sha:"f".repeat(40),confirmation:"PUBLISH "+request.version}}},
       {runChanges:{inputs:{version:request.version,commit_sha:SHA,confirmation:"PUBLISH wrong"}}},
@@ -262,7 +271,7 @@ test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs 
     ];
     for(const override of invalid){
       await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
-        remoteRead(f,override)),/workflow_run_unverified|workflow_jobs_unverified|workflow_run_input_mismatch/);
+        remoteRead(f,override)),/workflow_run_unverified|workflow_jobs_unverified|workflow_run_input_mismatch|environment_approval_attempt_unverified|independent_environment_approval_unverified/);
     }
     await assert.rejects(verifySuccessfulPublicationRun(request,"read-only-evidence-token",
       async()=>new Response(null,{status:403})),/workflow_run_unavailable/);
@@ -272,5 +281,64 @@ test("PER-1291 refuse publishing-run mismatch, denied approval, incomplete jobs 
     })),true);
     const other=signed(f.prov.sha256,"https://slsa.dev/provenance/v1","998");
     assert.throws(()=>verifySignedAttestation(other,f.prov.sha256,request),/attestation_subject_mismatch/);
+  }finally{f.cleanup();}
+});
+
+test("PER-1369 approval history must be an independent human for the exact protected environment",()=>{
+  const run={run_attempt:1,actor:{id:300},triggering_actor:{id:300}};
+  const approved={state:"approved",user:{type:"User",id:301},
+    environments:[{name:"savant-release",id:5}]};
+  assert.equal(verifyIndependentReleaseApproval([approved],run),true);
+  for(const history of [
+    [],null,{},[approved,approved],
+    [{...approved,state:"rejected"}],
+    [{...approved,state:"pending"}],
+    [{...approved,state:"bypassed"}],
+    [{...approved,user:{type:"User",id:300}}],
+    [{...approved,user:{type:"Bot",id:301}}],
+    [{...approved,user:{type:"Team",id:301}}],
+    [{...approved,user:{type:"User",id:0}}],
+    [{...approved,user:{type:"User",id:"301"}}],
+    [{...approved,environments:[]}],
+    [{...approved,environments:[{name:"production",id:5}]}],
+    [{...approved,environments:[{name:"savant-release",id:0}]}],
+    [{...approved,environments:[{name:"savant-release",id:5},{name:"other",id:9}]}]
+  ])assert.throws(()=>verifyIndependentReleaseApproval(history,run),ReleaseEvidenceError);
+  for(const bad of [
+    {...run,run_attempt:2},
+    {...run,run_attempt:null},
+    {...run,run_attempt:undefined},
+    {...run,actor:{id:301}},
+    {...run,triggering_actor:{id:301}},
+    {...run,triggering_actor:null},
+    {...run,actor:null}
+  ])assert.throws(()=>verifyIndependentReleaseApproval([approved],bad),ReleaseEvidenceError);
+});
+test("PER-1369 no approval, self approval, wrong environment or API denial blocks download and attestation",async()=>{
+  const f=fixture();
+  try{
+    let writes=0;
+    const neverDownload=()=>{writes++;throw Error("no release downloads permitted");};
+    for(const approvals of [
+      [],[{state:"rejected",user:{type:"User",id:301},environments:[{name:"savant-release",id:5}]}],
+      [{state:"approved",user:{type:"User",id:300},environments:[{name:"savant-release",id:5}]}],
+      [{state:"approved",user:{type:"User",id:301},environments:[{name:"other",id:5}]}],
+    ]){
+      await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
+        fetcher:remoteRead(f,{approvals}),runner:neverDownload
+      })),/environment_approval_history_invalid|independent_environment_approval_unverified/);
+    }
+    await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
+      fetcher:async(url,opts)=>url.endsWith("/approvals")?
+        new Response(null,{status:403}):remoteRead(f)(url,opts),
+      runner:neverDownload
+    })),/workflow_run_unavailable/);
+    await assert.rejects(verifySourceReleaseEvidence(request,options(f,{
+      fetcher:async(url,opts)=>url.endsWith("/approvals")?
+        new Response("[]",{status:200,headers:{link:'<https://api.github.com/page=2>; rel="next"'}}):
+        remoteRead(f)(url,opts),
+      runner:neverDownload
+    })),/workflow_run_unavailable/);
+    assert.equal(writes,0);
   }finally{f.cleanup();}
 });

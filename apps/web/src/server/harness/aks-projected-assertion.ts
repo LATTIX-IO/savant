@@ -80,7 +80,7 @@ export function createAksProjectedAssertionReader(deps:{
       const handle=await open(canonicalFile,constants.O_RDONLY|constants.O_NOFOLLOW);
       try{
         const stat=await handle.stat();
-        if(!stat.isFile()||stat.size<24||stat.size>MAX_BYTES)
+        if(!stat.isFile()||stat.size===0||stat.size>MAX_BYTES)
           fail("assertion_unavailable");
         const raw=await handle.readFile();
         if(raw.length>MAX_BYTES)fail("assertion_unavailable");

@@ -147,7 +147,12 @@ export function createAzureKeyVaultHarnessResolver(deps:{
         try{value=JSON.parse(new TextDecoder("utf-8",{fatal:true}).decode(raw));}
         catch{return fail("invalid_vault_response");}
         return decodeKey(value,id,nowMs());
-      }catch{return fail("vault_unavailable");}
+      }catch(error){
+        // Preserve sanitized credential failures separately from transport outages.
+        if(error instanceof HarnessAzureVaultError &&
+          ["credential_unavailable","invalid_configuration"].includes(error.code))throw error;
+        return fail("vault_unavailable");
+      }
       finally{
         // Abort outstanding response reads, including a raced timeout.
         ctrl.abort();

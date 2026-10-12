@@ -108,7 +108,7 @@ test("PER-1059: malformed provider response must NOT be marked running or blindl
     {...req,status:"running",externalRunId:"provider-1"}, // extra request-only fields
     {tenantId:"foreign",adapterId:req.adapterId,runId:req.runId,
       traceId:req.traceId,specVersionHash:h,testSuiteHash:t,externalRunId:"provider-1",status:"running"},
-    {tenantId,adapterId:req.adapterId,runId:req.runId,traceId:req.traceId,
+    {tenantId:tenant,adapterId:req.adapterId,runId:req.runId,traceId:req.traceId,
       specVersionHash:h,testSuiteHash:t,externalRunId:"provider-1",status:"succeeded"},
   ]){
     const f=fixture({run:invalid});

@@ -110,6 +110,19 @@ try{
   assert.equal(await q1.claim(ident("worker-1"),500),null);
   assert.equal((await sql`select count(*)::int as n from harness_eval_dispatch_leases
     where organization_id=${foreign}`)[0].n,0);
+  // Exhausted retries must not silently re-dispatch or fabricate provider success.
+  await store.reserve({organizationId:tenant,actorSubject:"test-operator",
+    request:request(tenant,"run-exhausted"),capabilities:caps});
+  for(let i=1;i<=4;i++){
+    const leased=await q1.claim(ident("worker-1"),500);
+    assert.equal(leased.runId,"run-exhausted");
+    assert.equal(leased.attempt,i);
+    const outcome=await q1.releaseForRetry(ident("worker-1"),leased.runId,leased.leaseToken,100);
+    assert.equal(outcome.state,i===4?"exhausted":"retry");
+    now.at=new Date(now.at.getTime()+101);
+  }
+  assert.equal(await q2.claim(ident("worker-2"),500),null);
+  assert.equal((await store.getRun(tenant,"run-exhausted")).status,"queued");
   const active=await sql`select status,count(*)::int as n from harness_eval_runs
     where organization_id=${tenant} group by status`;
   assert.equal(active.find(x=>x.status==="running").n,2);
@@ -121,7 +134,7 @@ try{
   assert.equal((await sql`select count(*)::int as n from harness_eval_dispatch_leases`)[0].n,0);
   console.log(JSON.stringify({dispatchLeaseIntegration:"passed",
     assertions:["worker-auth","concurrent unique claim","tenant isolation","hash-only fencing",
-      "retry backoff","generation fencing","crash recovery","cancel race","atomic audit","cascade"]}));
+      "retry backoff","retry exhaustion","generation fencing","crash recovery","cancel race","atomic audit","cascade"]}));
 }finally{
   if(tenant)await sql`delete from organizations where id=${tenant}`;
   if(foreign)await sql`delete from organizations where id=${foreign}`;

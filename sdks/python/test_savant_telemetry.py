@@ -111,6 +111,21 @@ class TelemetryContractTests(unittest.TestCase):
             sdk.record(make_span("s2"))
         self.assertEqual(sdk.pending_count(), 1)
 
+    def test_graph_coverage_rejects_mixed_tenant_run_and_version(self):
+        changes = (
+            {"tenantId": "foreign"}, {"adapterId": "other"},
+            {"runId": "different"}, {"traceId": "different"},
+            {"specVersionHash": HASH_B}, {"testSuiteHash": HASH_A},
+        )
+        for mutation in changes:
+            with self.subTest(mutation=mutation):
+                with self.assertRaisesRegex(TelemetryError, "^identity_mismatch$"):
+                    summarize_coverage(
+                        ["step-a", "step-b"],
+                        [make_span("one", nodeId="step-a"),
+                         make_span("two", nodeId="step-b", **mutation)]
+                    )
+
     def test_graph_coverage_is_partial_when_step_missing(self):
         self.assertEqual(summarize_coverage(
             ["step-a", "step-b"], [make_span(nodeId="step-a")]

@@ -77,6 +77,7 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
       const leaseToken=lease.leaseToken;
       const auditIdentity={tenantId:lease.tenantId,adapterId:lease.adapterId};
       let dispatched=false;
+      let providerTimedOut=false;
       async function hold(reason:"provider_unknown"|"provider_timeout"|"invalid_response"|"ack_failed"){
         try{await deps.queue.recordUnknownOutcome(identity,runId,leaseToken,reason);}
         catch{/* dispatchStarted already durably fences automatic retry */}
@@ -109,7 +110,7 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
         catch{return {state:"reconciliation_required",runId};}
         dispatched=true;
         const controller=new AbortController();
-        const timeout=setTimeout(()=>controller.abort(),timeoutMs);
+        const timeout=setTimeout(()=>{providerTimedOut=true;controller.abort();},timeoutMs);
         try {
           // Adapter is obligated to honour AbortSignal and retain provider-side
           // idempotency. A crashed worker may retry; exactly-once is NOT promised.
@@ -148,9 +149,9 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
           clearTimeout(timeout);
         }
       } catch {
-        // If provider execution began, outcome may be unknown. Conservatively
-        // do not resubmit until a provider idempotency reconciliation exists.
-        if(dispatched)return hold("provider_unknown");
+        // Promise.race rejects on abort; classify that exact path as timeout.
+        // All uncertain outcomes still require a durable reconciliation hold.
+        if(dispatched)return hold(providerTimedOut?"provider_timeout":"provider_unknown");
         return retry("dispatch_preflight_failed");
       }
     },

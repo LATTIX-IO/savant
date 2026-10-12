@@ -151,8 +151,15 @@ export function summarizeHarnessCoverage(expected: readonly string[], spans: rea
   const expectedIds = [...new Set(expected)].sort();
   if (expectedIds.some(step => !id(step))) fail("invalid_telemetry");
   const observed = new Set<string>();
+  let attribution: string | null = null;
   for (const span of spans) {
     const validated = parseHarnessTelemetrySpan(span);
+    const identity = JSON.stringify([
+      validated.tenantId, validated.adapterId, validated.runId, validated.traceId,
+      validated.specVersionHash, validated.testSuiteHash,
+    ]);
+    if (attribution !== null && attribution !== identity) fail("identity_mismatch");
+    attribution = identity;
     if (validated.kind === "step" && validated.nodeId && expectedIds.includes(validated.nodeId))
       observed.add(validated.nodeId);
   }

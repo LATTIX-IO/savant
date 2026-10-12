@@ -1,4 +1,5 @@
 import { readAiServiceConfig } from "../ai/clients.ts";
+import { requirePinnedEvaluationCommit } from "./eval-source-revision.ts";
 import { createJobQueue } from "./queue.ts";
 import { createEvalGenerationStore, type EvalGenerationRun } from "./stores.ts";
 
@@ -31,7 +32,20 @@ export async function queueEvalGeneration(sql: Sql, input: {
   if (active) {
     return active;
   }
-  const run = await runs.create(input.organizationId, input);
+  // Resolve provenance at admission, not when an async worker happens to run.
+  // Only select the indexed version belonging to this tenant, repository, skill
+  // and source path; never resolve the mutable default branch in the worker.
+  const [indexed] = await sql<{ source_commit_sha: string }[]>`
+    select source_commit_sha from indexed_skills
+    where organization_id = ${input.organizationId}
+      and repository_id = ${input.repositoryId}
+      and skill_id = ${input.skillId}
+      and source_path = ${input.sourcePath}
+    order by last_indexed_at desc
+    limit 1
+  `;
+  const commitSha = requirePinnedEvaluationCommit(indexed?.source_commit_sha);
+  const run = await runs.create(input.organizationId, { ...input, commitSha });
   const job = await createJobQueue(sql).enqueue({
     organizationId: input.organizationId,
     repositoryId: input.repositoryId,

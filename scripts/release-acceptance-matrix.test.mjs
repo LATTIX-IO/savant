@@ -140,7 +140,7 @@ test("PER-1371 rejects shared, missing or newline-bearing credentials without co
     {GH_TOKEN:""},
     {SAVANT_GOVERNANCE_EVIDENCE_TOKEN:""},
     {GH_TOKEN:READ_CREDENTIAL+"\nunsafe"},
-    {SAVANT_GOVERNANCE_EVIDENCE_TOKEN:"separate-admin-evidence-token\r"},
+    {SAVANT_GOVERNANCE_EVIDENCE_TOKEN:ADMIN_CREDENTIAL+"\r"},
     {GH_TOKEN:ADMIN_CREDENTIAL}
   ]){
     let calls=0;

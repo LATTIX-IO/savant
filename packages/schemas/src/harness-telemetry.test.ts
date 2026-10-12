@@ -66,6 +66,7 @@ test("PER-1098 RED: enabled SDK stable replay cursor and exactly once queued spa
   });
   assert.equal(sdk.record(span("s1")), true);
   assert.equal(sdk.record(span("s1")), false);
+  denied("replay_conflict", () => sdk.record(span("s1", { testSuiteHash: H })));
   assert.equal(sdk.record(span("s2")), true);
   assert.equal(await sdk.flush(), 2);
   assert.equal(sdk.pendingCount(), 0);

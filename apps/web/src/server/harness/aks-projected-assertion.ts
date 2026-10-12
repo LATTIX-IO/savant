@@ -15,7 +15,18 @@ import {isAbsolute,relative,resolve,sep} from "node:path";
 const MAX_BYTES=16384;
 const B64=/^[A-Za-z0-9_-]+$/;
 const JWT=/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-const SUB=/^system:serviceaccount:[a-z0-9]([-a-z0-9]*[a-z0-9])?:[a-z0-9]([-a-z0-9]*[a-z0-9])?$/;
+// Kubernetes namespace is a DNS label (max 63 chars); a ServiceAccount name
+// is a DNS subdomain (max 253 chars), so dots are valid between labels.
+const DNS_LABEL=/^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/;
+function validServiceAccountSubject(value:string):boolean{
+  const segments=value.split(":");
+  if(segments.length!==4||segments[0]!=="system"||
+    segments[1]!=="serviceaccount")return false;
+  const namespace=segments[2]!,serviceAccount=segments[3]!;
+  return namespace.length<=63&&DNS_LABEL.test(namespace)&&
+    serviceAccount.length>0&&serviceAccount.length<=253&&
+    serviceAccount.split(".").every(label=>label.length<=63&&DNS_LABEL.test(label));
+}
 export class HarnessProjectedIdentityError extends Error{
   readonly code:string;
   constructor(code:string){super(code);this.code=code;this.name="HarnessProjectedIdentityError";}
@@ -64,7 +75,7 @@ export function createAksProjectedAssertionReader(deps:{
   if(issuer.protocol!=="https:"||issuer.username||issuer.password||
     issuer.search||issuer.hash||!issuer.hostname||
     typeof deps.expectedIssuer!=="string"||deps.expectedIssuer.length>512||
-    typeof deps.expectedSubject!=="string"||!SUB.test(deps.expectedSubject))
+    typeof deps.expectedSubject!=="string"||!validServiceAccountSubject(deps.expectedSubject))
     fail("invalid_configuration");
   const audience=deps.expectedAudience??"api://AzureADTokenExchange";
   if(audience!=="api://AzureADTokenExchange")fail("invalid_configuration");

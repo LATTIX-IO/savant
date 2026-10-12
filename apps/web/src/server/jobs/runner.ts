@@ -13,6 +13,7 @@ import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
 import { requirePinnedEvaluationCommit } from "./eval-source-revision.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
+import {runObservedTestBenchJob} from "../test-bench/observed-run-worker.ts";
 
 /**
  * Background work after a sync: SkillSpector safety scans and LLM↔Jev
@@ -297,7 +298,8 @@ export async function runBackgroundJobs(options: { budgetMs?: number; workers?: 
       const job = await ctx.queue.claim();
       if (!job) return;
       try {
-        const outcome = job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
+        const outcome = job.kind === "test_bench_run" ? await runObservedTestBenchJob(ctx, job)
+          : job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
           : job.kind === "eval_generation" ? await runEvalGeneration(ctx, job)
           : job.kind === "hub_sync" ? await runHubSync(ctx, job)
           : job.kind === "hub_hydrate" ? await runHubHydrate(ctx, job)

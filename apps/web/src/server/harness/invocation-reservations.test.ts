@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { HarnessAdapterCapabilities } from "@savant/types/harness-adapter";
 import { createHarnessReservationStore, HarnessReservationError } from "./invocation-reservations.ts";
 
 const org = "11111111-1111-4111-8111-111111111111";
-const caps = {
+const caps: HarnessAdapterCapabilities = {
   protocol: { major: 1, minor: 0 },
   adapterId: "sandbox-adapter",
   features: { execute: true, observe: true, cancel: true, events: true },

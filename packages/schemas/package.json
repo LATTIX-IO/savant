@@ -12,6 +12,7 @@
     "./skill-intelligence": "./src/skill-intelligence.ts",
     "./workflow-specification": "./src/workflow-specification.ts",
     "./capability-reference": "./src/capability-reference.ts",
-    "./harness-adapter": "./src/harness-adapter.ts"
+    "./harness-adapter": "./src/harness-adapter.ts",
+    "./harness-telemetry": "./src/harness-telemetry.ts"
   }
 }

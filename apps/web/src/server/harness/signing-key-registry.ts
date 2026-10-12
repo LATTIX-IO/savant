@@ -121,7 +121,8 @@ export function createHarnessSigningKeyRegistry(deps: {
           update harness_adapter_signing_keys
           set status=case when ${grace}>0 and expires_at>${at} then 'retiring'
             else 'revoked' end,
-            expires_at=least(expires_at,${new Date(at.getTime()+grace)}),
+            expires_at=case when ${grace}>0
+              then least(expires_at,${new Date(at.getTime()+grace)}) else expires_at end,
             updated_at=${at}
           where organization_id=${input.tenantId} and adapter_id=${input.adapterId}
             and status='active'

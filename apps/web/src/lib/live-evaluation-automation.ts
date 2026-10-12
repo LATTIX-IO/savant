@@ -104,7 +104,7 @@ export async function loadLiveEvalAutomation(
 ): Promise<LiveEvalAutomation> {
   const response = await (options.fetcher ?? fetch)(endpoint(skillId, false), {
     method: "GET", credentials: "same-origin", cache: "no-store",
-    headers: {Accept: "application/json"}, signal: options.signal,
+    headers: {Accept: "application/json"}, signal: options.signal ?? null,
   });
   if (!response.ok) throw new LiveEvaluationUnavailable(`Live evaluation unavailable (HTTP ${response.status}).`);
   try { return parseLiveEvalAutomation(await response.json(), skillId); }
@@ -120,7 +120,7 @@ export async function startLiveEvalAutomation(
 ): Promise<LiveEvalRun> {
   const response = await (options.fetcher ?? fetch)(endpoint(skillId, true), {
     method: "POST", mode: "same-origin", credentials: "same-origin", cache: "no-store",
-    headers: {Accept: "application/json"}, signal: options.signal,
+    headers: {Accept: "application/json"}, signal: options.signal ?? null,
   });
   if (response.status !== 202) throw new LiveEvaluationUnavailable(`Evaluation was not queued (HTTP ${response.status}).`);
   try { return parseLiveEvalAccepted(await response.json(), skillId); }

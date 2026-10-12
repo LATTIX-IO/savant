@@ -135,3 +135,11 @@ test("PER-1103: coverage never joins foreign tenants, runs, traces or version ha
     ));
   }
 });
+
+test("PER-1103: hostile hash objects cannot execute toString during parsing", () => {
+  let accessed = 0;
+  const malicious = { toString() { accessed++; throw new Error("untrusted object"); } };
+  denied("invalid_telemetry", () => parseHarnessTelemetrySpan(span("s1", { specVersionHash: malicious })));
+  denied("invalid_telemetry", () => parseHarnessTelemetrySpan(span("s1", { testSuiteHash: malicious })));
+  assert.equal(accessed, 0);
+});

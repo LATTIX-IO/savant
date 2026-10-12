@@ -88,10 +88,15 @@ export function createHarnessProviderReconciliation(deps:{
           idempotencyKey:row.idempotency_key,traceId:row.trace_id,
         });
       }catch{return fail("provider_unavailable");}
-      const evidence=validatedEvidence(raw,{
-        tenantId:input.tenantId,adapterId:input.adapterId,runId:input.runId,
-        idempotencyKey:row.idempotency_key,
-      });
+      // Untrusted provider objects may be proxies with throwing traps. Never
+      // let their raw error text escape a tenant-scoped security boundary.
+      let evidence:{providerState:ProviderState;evidenceSha256:string};
+      try{
+        evidence=validatedEvidence(raw,{
+          tenantId:input.tenantId,adapterId:input.adapterId,runId:input.runId,
+          idempotencyKey:row.idempotency_key,
+        });
+      }catch{return fail("invalid_evidence");}
       const idHash=createHash("sha256").update(row.idempotency_key).digest("hex");
       return sql.begin(async tx=>{
         // Consistent global lock order: run first, lease second.

@@ -46,7 +46,7 @@ export function PersistedTestBench({
     }finally{setLoading(false);}
   }
   useEffect(()=>{
-    if(!slug){setError("A workspace is required to load Test Bench cases.");setLoading(false);return;}
+    if(!slug)return;
     const controller=new AbortController();
     void listPersistedTestBenches(skillId,{workspaceSlug:slug,signal:controller.signal})
       .then(items=>{if(!controller.signal.aborted){setDefinitions(items);setError(null);}})
@@ -120,7 +120,7 @@ export function PersistedTestBench({
         </p>
         <div className="row" style={{gap:8,flexWrap:"wrap"}}>
           <button type="button" className="btn btn-sm btn-ghost" onClick={()=>void refresh()} disabled={loading||busy}>
-            {loading?"Loading…":"Reload saved suites"}
+            {slug&&loading?"Loading…":"Reload saved suites"}
           </button>
           <button type="button" className="btn btn-sm btn-primary" onClick={startNew} disabled={!editable}>
             New case suite
@@ -194,7 +194,7 @@ export function PersistedTestBench({
             ):null}
           </div>
         </div>
-        {error?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{error}</p>:null}
+        {(!slug||error)?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{slug?error:"A workspace is required to load Test Bench cases."}</p>:null}
         {notice?<p role="status" style={{fontSize:12,margin:0}}>{notice}</p>:null}
       </div>
     </section>

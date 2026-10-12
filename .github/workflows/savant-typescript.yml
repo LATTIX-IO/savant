@@ -136,6 +136,8 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-signed-status.mjs
       - name: Verify tenant connector configuration, CAS and outbound egress policy
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-status-connector-config.mjs
+      - name: Verify Azure Key Vault tenant-pinned HMAC through signed status and PostgreSQL
+        run: pnpm --filter @savant/web exec node ./scripts/verify-harness-azure-vault.mjs
       - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
         run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs
       - name: Verify capability reference ACL, cross-tenant denial and p95

@@ -201,12 +201,15 @@ export function createHarnessDispatchLeaseQueue(deps:{
         `;
         if(runs[0]?.status!=="queued")fail("lease_denied");
         const state=row.attempt>=MAX_ATTEMPTS?"exhausted":"retry";
+        // Enforce exponential floor server-side: workers cannot spin retries by
+        // repeatedly asking for a shorter delay. A provider may request longer.
+        const effectiveDelayMs=Math.max(delayMs,Math.min(60000,100*2**(row.attempt-1)));
         await tx`
           update harness_eval_dispatch_leases set state=${state},lease_until=${at},
-            next_eligible_at=${new Date(at.getTime()+delayMs)},updated_at=${at}
+            next_eligible_at=${new Date(at.getTime()+effectiveDelayMs)},updated_at=${at}
           where id=${row.id}
         `;
-        return {state,attempt:row.attempt};
+        return {state,attempt:row.attempt,retryAfterMs:effectiveDelayMs};
       });
     },
   };

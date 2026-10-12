@@ -35,7 +35,7 @@ try{
     values(${"lease-b-"+id},'Lease B') returning id`;
   tenant=first.id;foreign=second.id;
   const store=createHarnessReservationStore({
-    sql,now:()=>now.at,limits:{maxActive:5,maxReservedCostUsd:2},
+    sql,now:()=>now.at,limits:{maxActive:6,maxReservedCostUsd:2},
   });
   for(const runId of ["run-one","run-two","run-canceled"]){
     await store.reserve({organizationId:tenant,actorSubject:"test-operator",

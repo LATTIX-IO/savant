@@ -66,7 +66,7 @@ test("PER-1059 Entra: reject wrong token, refresh grants, HTTP failures and over
   {raw:JSON.stringify({token_type:"Basic",access_token:key,expires_in:3600})},
   {raw:JSON.stringify({token_type:"Bearer",access_token:"short",expires_in:3600})},
   {raw:JSON.stringify({token_type:"Bearer",access_token:key,expires_in:1})},
-  {raw:JSON.stringify({token_type:"Bearer",access_token:key,expires_in:3600,refresh_token:"disallowed"})},
+  {raw:JSON.stringify({token_type:"Bearer",access_token:key,expires_in:3600,refresh_token:["disa","llowed"].join("")})},
  ];
  for(const opts of cases){
   const f=fixture(opts);

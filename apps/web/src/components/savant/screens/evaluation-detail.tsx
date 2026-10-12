@@ -7,6 +7,7 @@ import { type ReactNode, useEffect, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
 import { LiveEvaluationAutomation } from "@/components/savant/screens/live-evaluation-automation";
+import { PersistedTestBench } from "@/components/savant/screens/persisted-test-bench";
 import { CommitRef, Delta, EnvPill, Tier } from "@/components/savant/primitives";
 import {
   Table,
@@ -1062,6 +1063,7 @@ function EvaluationDetailLoadedScreen({
         <div className="col" style={{ gap: "var(--gutter)", minWidth: 0 }}>
           <BenchmarkMetricStrip metrics={detail.metrics} />
           <LiveEvaluationAutomation skillId={detail.skill.id} readOnly={detail.readOnly} pathname={pathname} />
+          <PersistedTestBench skillId={detail.skill.id} readOnly={detail.readOnly} pathname={pathname} />
 
           <div className="panel" id="test-bench">
             <div className="panel-hd">

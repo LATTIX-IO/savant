@@ -157,3 +157,60 @@ test("PER-1059: concurrent mutation cannot swap authenticated tenant, body or de
     payloadSha256:createHash("sha256").update(body).digest("hex"),
   }]);
 });
+
+test("PER-1059: only valid-MAC, tenant-owned invalid events enter metadata-only quarantine",async()=>{
+  const calls: Array<{tenantId:string;adapterId:string;runId:string;deliveryId:string;payloadSha256:string;reason:string}> = [];
+  const admit=createSignedHarnessEventAdmission({
+    nowMs:()=>Number(timestamp)*1000,
+    resolveSecrets:async()=>[key],
+    getRun:async()=>({tenantId,adapterId:"adapter-1",runId:"run-1",traceId:"trace-1",status:"running"}),
+    applyEvent:async()=>{throw Error("must not accept invalid event");},
+    quarantine:async e=>{calls.push(e);return {retained:true};},
+  });
+  const invalidRaw=Buffer.from(JSON.stringify({...event,rawPrompt:"SENSITIVE_CONTENT"}));
+  const signedInvalid=envelope({rawBody:invalidRaw});
+  await denied("invalid_event",()=>admit(signedInvalid));
+  assert.deepEqual(calls,[{
+    tenantId,adapterId:"adapter-1",runId:"run-1",deliveryId:"delivery-1",
+    payloadSha256:createHash("sha256").update(invalidRaw).digest("hex"),reason:"invalid_event",
+  }]);
+  const forged={...signedInvalid,signature:"v1="+"0".repeat(64)};
+  await denied("unauthorized",()=>admit(forged));
+  assert.equal(calls.length,1,"unauthenticated traffic must never reach quarantine");
+  assert.ok(!JSON.stringify(calls).includes("SENSITIVE_CONTENT"));
+});
+
+test("PER-1059: malformed authenticated JSON gets quarantined; missing run does not",async()=>{
+  const receipts:unknown[]=[];
+  const admit=createSignedHarnessEventAdmission({
+    nowMs:()=>Number(timestamp)*1000,
+    resolveSecrets:async()=>[key],
+    getRun:async()=>({tenantId,adapterId:"adapter-1",runId:"run-1",traceId:"trace-1",status:"running"}),
+    applyEvent:async()=>{throw Error("unexpected");},
+    quarantine:async record=>{receipts.push(record);},
+  });
+  await denied("invalid_event",()=>admit(envelope({rawBody:Buffer.from([0xff,0xfe])})));
+  assert.equal(receipts.length,1);
+  const foreign=createSignedHarnessEventAdmission({
+    nowMs:()=>Number(timestamp)*1000,
+    resolveSecrets:async()=>[key],
+    getRun:async()=>({tenantId:otherTenant,adapterId:"adapter-1",runId:"run-1",traceId:"trace-1",status:"running"}),
+    applyEvent:async()=>{throw Error("unexpected");},
+    quarantine:async record=>{receipts.push(record);},
+  });
+  await denied("not_found",()=>foreign(envelope({rawBody:Buffer.from([0xff,0xfe])})));
+  assert.equal(receipts.length,1,"foreign run must not be quarantined");
+});
+
+test("PER-1059: quarantine storage failure rejects without accepting signed invalid event",async()=>{
+  let mutated=false;
+  const admit=createSignedHarnessEventAdmission({
+    nowMs:()=>Number(timestamp)*1000,
+    resolveSecrets:async()=>[key],
+    getRun:async()=>({tenantId,adapterId:"adapter-1",runId:"run-1",traceId:"trace-1",status:"running"}),
+    applyEvent:async()=>{mutated=true;},
+    quarantine:async()=>{throw Error("connection secret in provider error");},
+  });
+  await denied("quarantine_unavailable",()=>admit(envelope({rawBody:Buffer.from("not-json")})));
+  assert.equal(mutated,false);
+});

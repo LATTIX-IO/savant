@@ -26,6 +26,8 @@ export interface SignedHarnessEventDeps {
     tenantId:string;adapterId:string;runId:string;traceId:string;status:string;
   }>;
   applyEvent:(tenantId:string,runId:string,event:unknown,delivery:{deliveryId:string;payloadSha256:string})=>Promise<unknown>;
+  /** Only install a tenant-authorized, durable metadata quarantine behind the signed verifier. */
+  quarantine?:(input:{tenantId:string;adapterId:string;runId:string;deliveryId:string;payloadSha256:string;reason:"invalid_event"})=>Promise<unknown>;
 }
 export function createSignedHarnessEventAdmission(deps:SignedHarnessEventDeps){
   return async function admit(raw:SignedHarnessEventEnvelope):Promise<unknown>{
@@ -65,22 +67,33 @@ export function createSignedHarnessEventAdmission(deps:SignedHarnessEventDeps){
       verified=timingSafeEqual(expected,supplied)||verified;
     }
     if(!verified)reject("unauthorized");
-    let event:unknown;
-    try{
-      const body=new TextDecoder("utf-8",{fatal:true}).decode(req.rawBody);
-      event=JSON.parse(body);
-    }catch {return reject("invalid_event");}
+    // Only a signature-authenticated, tenant/adapter-owned run can create a
+    // quarantine receipt. Unknown/foreign runs and invalid HMACs never reach it.
     let row:Awaited<ReturnType<SignedHarnessEventDeps["getRun"]>>;
     try{row=await deps.getRun(req.tenantId,req.runId);}
     catch{return reject("not_found");}
     if(!row||row.tenantId!==req.tenantId||row.adapterId!==req.adapterId||
       row.runId!==req.runId)reject("not_found");
+    const payloadSha256=createHash("sha256").update(req.rawBody).digest("hex");
+    async function invalidEvent():Promise<never>{
+      if(deps.quarantine){
+        try{
+          await deps.quarantine({tenantId:req.tenantId,adapterId:req.adapterId,
+            runId:req.runId,deliveryId:req.deliveryId,payloadSha256,reason:"invalid_event"});
+        }catch{return reject("quarantine_unavailable");}
+      }
+      return reject("invalid_event");
+    }
+    let event:unknown;
+    try{
+      const body=new TextDecoder("utf-8",{fatal:true}).decode(req.rawBody);
+      event=JSON.parse(body);
+    }catch {return invalidEvent();}
     let parsed:ReturnType<typeof parseHarnessRunEvent>;
     try{parsed=parseHarnessRunEvent(event,{
       tenantId:req.tenantId,runId:req.runId,traceId:row.traceId,
     });}
-    catch{return reject("invalid_event");}
-    const payloadSha256=createHash("sha256").update(req.rawBody).digest("hex");
+    catch{return invalidEvent();}
     return deps.applyEvent(req.tenantId,req.runId,parsed,{deliveryId:req.deliveryId,payloadSha256});
   };
 }

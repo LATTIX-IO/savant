@@ -175,12 +175,19 @@ def summarize_coverage(expected: list[str], spans: list[dict[str, Any]]) -> dict
     if any(not _id(step) for step in expected):
         _fail()
     expected_ids = set(expected)
-    observed = {
-        parsed["nodeId"]
-        for source in spans
-        if (parsed := validate_span(source))["kind"] == "step" and
-        parsed.get("nodeId") in expected_ids
-    }
+    observed: set[str] = set()
+    attribution = None
+    for source in spans:
+        parsed = validate_span(source)
+        identity = tuple(parsed[key] for key in (
+            "tenantId", "adapterId", "runId", "traceId",
+            "specVersionHash", "testSuiteHash"
+        ))
+        if attribution is not None and attribution != identity:
+            _fail("identity_mismatch")
+        attribution = identity
+        if parsed["kind"] == "step" and parsed.get("nodeId") in expected_ids:
+            observed.add(parsed["nodeId"])
     missing = sorted(expected_ids - observed)
     return {
         "completeness": ("none" if not observed else "partial" if missing else "complete"),

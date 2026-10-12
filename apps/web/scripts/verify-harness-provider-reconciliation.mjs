@@ -50,12 +50,15 @@ try{
   now.at=new Date(now.at.getTime()+2000);
   assert.equal(await queue.claim(identity,1000),null);
   let calls=0,allowed=true,providerStatus="accepted",providerEvidence=evidenceHash;
+  let override=null,providerUnavailable=false;
   const reconciler=createHarnessProviderReconciliation({
     sql,now:()=>now.at,
     authorizeOperator:async scope=>allowed&&scope.tenantId===tenant&&
       scope.actor==="security-reviewer"&&scope.adapterId==="sandbox-adapter",
     verifiedLookup:async pinned=>{
       calls++;
+      if(providerUnavailable)throw Error("provider secret exception must not leak");
+      if(override!==null)return override;
       assert.deepEqual(pinned,{
         tenantId:tenant,adapterId:"sandbox-adapter",runId:"run-one",
         idempotencyKey:"idem-run-one",traceId:"trace-run-one",
@@ -70,6 +73,24 @@ try{
   await denied("unauthorized",()=>reconciler.inspectAndRecord({...args,actor:"outsider"}));
   await denied("unauthorized",()=>reconciler.inspectAndRecord({...args,tenantId:other}));
   assert.equal(calls,0);
+  const trusted={tenantId:tenant,adapterId:"sandbox-adapter",runId:"run-one",
+    idempotencyKey:"idem-run-one",providerState:"accepted",evidenceSha256:evidenceHash};
+  for(const forged of [
+    {...trusted,rawPrompt:"NEVER_PERSIST_PROVIDER_CONTENT"},
+    {...trusted,tenantId:other},
+    {...trusted,idempotencyKey:"cross-run"},
+    {...trusted,providerState:"succeeded"},
+    {...trusted,evidenceSha256:"not-sha256"},
+  ]){
+    override=forged;
+    await denied("invalid_evidence",()=>reconciler.inspectAndRecord(args));
+  }
+  override=null;
+  providerUnavailable=true;
+  await denied("provider_unavailable",()=>reconciler.inspectAndRecord(args));
+  providerUnavailable=false;
+  assert.equal((await sql`select count(*)::int as n from
+    harness_eval_reconciliation_observations where organization_id=${tenant}`)[0].n,0);
   assert.deepEqual(await reconciler.inspectAndRecord(args),{
     state:"accepted",runId:"run-one",replay:false,action:"manual_reconciliation_required",
   });

@@ -96,8 +96,6 @@ export function createSignedHarnessStatusLookup(deps:{
     fail("invalid_configuration");
   return async function verifiedLookup(incoming:Scope){
     const scope=immutableScope(incoming);
-    const current=deps.nowMs();
-    if(!Number.isFinite(current)||current<=0)fail("invalid_configuration");
     let connection:Connection|null;
     try{connection=await deps.resolveConnection(scope.tenantId,scope.adapterId);}
     catch{return fail("invalid_connection");}
@@ -112,6 +110,10 @@ export function createSignedHarnessStatusLookup(deps:{
     catch{return fail("credential_unavailable");}
     if(!(supplied instanceof Uint8Array)||supplied.byteLength<32||
       supplied.byteLength>128)fail("credential_unavailable");
+    // Timestamp only AFTER asynchronous connector and vault resolution;
+    // otherwise signed requests may be stale before network dispatch.
+    const current=deps.nowMs();
+    if(!Number.isFinite(current)||current<=0)fail("invalid_configuration");
     // Own a private copy before awaiting untrusted network operations.
     const secret=Buffer.from(supplied);
     const stamp=String(Math.floor(current/1000));

@@ -112,7 +112,7 @@ class TelemetryBuffer:
         self._send = send
         self.max_pending, self.batch_size = max_pending, batch_size
         self._queue: deque[dict[str, Any]] = deque()
-        self._seen: dict[str, None] = {}
+        self._seen: dict[str, tuple[Any, ...]] = {}
         self._cursor = 0
 
     def record(self, raw: Any) -> bool:
@@ -124,13 +124,16 @@ class TelemetryBuffer:
         ):
             _fail("identity_mismatch")
         key = ":".join((item["runId"], item["spanId"], item["status"]))
+        identity = tuple(sorted(item.items()))
         if key in self._seen:
+            if self._seen[key] != identity:
+                _fail("replay_conflict")
             return False
         if len(self._queue) >= self.max_pending:
             _fail("backpressure")
         if len(self._seen) >= 2048:
             del self._seen[next(iter(self._seen))]
-        self._seen[key] = None
+        self._seen[key] = identity
         self._queue.append(item)
         return True
 

@@ -149,3 +149,45 @@ test("PER-1059: provider errors and non-cooperative HTTP requests are timeout-bo
   await denied("transport_or_verification_failed",()=>hung.lookup(scope));
   assert.ok(Date.now()-started<1000);
 });
+
+test("PER-1059: mutable caller cannot switch tenant or idempotency after async connector lookup",async()=>{
+  const mutable={...scope};
+  let vaultScopeCorrect=false;
+  const lookup=createSignedHarnessStatusLookup({
+    allowedOrigins:[origin],nowMs:()=>now,
+    resolveConnection:async()=>{
+      mutable.tenantId="22222222-2222-4222-8222-222222222222";
+      mutable.idempotencyKey="forged-key";
+      return {endpoint,secretRef:`vault:${tenantId}:${adapterId}:current`};
+    },
+    readSecret:async(t,a)=>{
+      vaultScopeCorrect=t===tenantId&&a===adapterId;
+      return secret;
+    },
+    transport:async(_,init)=>{
+      const body=JSON.parse(Buffer.from(init.body as Uint8Array).toString("utf8"));
+      assert.equal(body.tenantId,tenantId);
+      assert.equal(body.idempotencyKey,"idem-1");
+      const hdr=new Headers(init.headers);
+      const stamp=hdr.get("x-savant-timestamp")!,nonce=hdr.get("x-savant-nonce")!;
+      const raw=Buffer.from(JSON.stringify({
+        tenantId,adapterId,runId:"run-1",idempotencyKey:"idem-1",providerState:"unknown",
+      }));
+      return new Response(new Uint8Array(raw),{
+        status:200,headers:{"content-type":"application/json",
+          "x-savant-timestamp":stamp,"x-savant-nonce":nonce,
+          "x-savant-signature":sign("savant-harness-status-response-v1",stamp,nonce,raw)},
+      });
+    },
+  });
+  assert.equal((await lookup(mutable)).providerState,"unknown");
+  assert.equal(vaultScopeCorrect,true);
+});
+test("PER-1059: hostile scope getters never cause vault or provider IO",async()=>{
+  const hostile={...scope};
+  Object.defineProperty(hostile,"tenantId",{enumerable:true,
+    get(){throw Error("RAW_CREDENTIAL_FROM_GETTER");}});
+  const f=fixture();
+  await denied("invalid_scope",()=>f.lookup(hostile));
+  assert.deepEqual(f.calls,[]);
+});

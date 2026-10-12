@@ -11,6 +11,7 @@ import { runHubEval, runHubHydrate, runHubSafety, runHubSync } from "../hub/jobs
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
 import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
+import { requirePinnedEvaluationCommit } from "./eval-source-revision.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
 
 /**
@@ -166,7 +167,9 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
   }
 
   const root = run.sourcePath;
-  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId);
+  // Legacy queued records with null provenance must not silently read current HEAD.
+  const commitSha = requirePinnedEvaluationCommit(run.commitSha);
+  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId, commitSha);
   const files = await repo.readMany([`${root}/SKILL.md`, `${root}/metadata.yaml`, `${root}/eval/dataset.yaml`, `${root}/eval/rubric.yaml`, `${root}/eval/baseline.json`]);
   const instructions = files[`${root}/SKILL.md`];
   if (!instructions) {

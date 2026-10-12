@@ -13,7 +13,7 @@ test("MVP QA regression: server-backed trigger uses existing tenant-authorized A
  const panel=await readFile(new URL("./live-evaluation-automation.tsx",import.meta.url),"utf8");
  const client=await readFile(new URL("../../../lib/live-evaluation-automation.ts",import.meta.url),"utf8");
  const route=await readFile(new URL("../../../app/api/skills/[id]/automation/generate/route.ts",import.meta.url),"utf8");
- assert.match(panel,/startLiveEvalAutomation\(skillId\)/);
+ assert.match(panel,/startLiveEvalAutomation\(skillId,\{workspaceSlug\}\)/);
  assert.match(client,/credentials: "same-origin"/);
  assert.match(client,/method: "POST", mode: "same-origin"/);
  assert.match(route,/assertSameOriginMutationRequest\(request\)/);

@@ -19,6 +19,7 @@ function fixture(scenario = "preflight_denied") {
     id: Number(RUN), repository: { full_name: REPO }, head_sha: SHA,
     path: ".github/workflows/publish-source-release.yml",
     head_branch: "main", event: "workflow_dispatch",
+    display_title: "source-release:" + VERSION + ":" + SHA,
     status: "completed", conclusion: "failure", run_attempt: 1,
     actor: { id: 300 }, triggering_actor: { id: 300 },
     inputs: { version: VERSION, commit_sha: SHA, confirmation: "PUBLISH " + VERSION }
@@ -103,6 +104,9 @@ test("PER-1370 reject forged run identity, successful publication, reruns and un
     f => { f.run.head_sha = "b".repeat(40); },
     f => { f.run.head_branch = "feature"; },
     f => { f.run.repository.full_name = "attacker/repo"; },
+    f => { f.run.display_title = "source-release:v0.2.0:" + SHA; },
+    f => { delete f.run.display_title; },
+    f => { f.run.display_title = "source-release:" + VERSION + ":" + "f".repeat(40); },
     f => { f.run.conclusion = "success"; },
     f => { f.run.status = "in_progress"; },
     f => { f.run.run_attempt = 2; },
@@ -208,4 +212,7 @@ test("PER-1370 immutable negative-evidence path never writes or dispatches GitHu
   assert.doesNotMatch(source, /"workflow","run"|"release","create"|"release","edit"|"release","delete"/);
   assert.match(source, /method: "GET"/);
   assert.match(source, /target_release_exists/);
+  const workflow = readFileSync(".github/workflows/publish-source-release.yml", "utf8");
+  assert.match(workflow, /run-name: "source-release:\$\{\{ inputs\.version \}\}:\$\{\{ inputs\.commit_sha \}\}"/);
+  assert.doesNotMatch(workflow, /^\s*(push|pull_request|workflow_run|schedule):\s*$/m);
 });

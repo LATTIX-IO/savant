@@ -1,0 +1,52 @@
+/* Workbench: evaluation results and Auto-Improve improvement layers */
+.node .rs { display: none; align-items: center; gap: 5px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); font: 11px var(--font-mono); color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.node .rs.p1 { color: var(--crit-fg); font-weight: 600; }
+.node .rs.p2 { color: var(--warn-fg); }
+.node .rs.tele { border-top: 0; margin-top: 0; padding-top: 2px; color: var(--muted); }
+.node.main .rs { color: color-mix(in oklch, var(--surface) 80%, var(--fg)); border-top-color: color-mix(in oklch, var(--surface) 25%, var(--fg)); }
+.node.main .rs.p1 { color: var(--surface); }
+.node.main .rs.tele { color: color-mix(in oklch, var(--surface) 65%, var(--fg)); }
+#cw.layer-results .rs, #cw.layer-improve .rs { display: flex; }
+#cw.layer-improve .evlayer { display: none; }
+.proplayer { display: none; }
+#cw.layer-improve .proplayer { display: block; }
+
+.node.prop { border: 1.5px dashed var(--sim); background: var(--sim-bg); color: var(--fg); width: 196px; }
+.node.prop .k { color: var(--sim-fg); }
+.node.prop:hover { background: color-mix(in oklch, var(--sim-bg) 80%, var(--sim)); }
+.node.prop .ps { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--sim-fg); }
+.node.prop.approved { border: 1px solid var(--border-strong); background: var(--surface); }
+.node.prop.approved .k, .node.prop.approved .ps { color: var(--fg-2); }
+.node.prop.rejected, .node.prop.superseded { border-style: dashed; border-color: var(--border-strong); background: var(--bg); }
+.node.prop.rejected .t, .node.prop.superseded .t { text-decoration: line-through; color: var(--muted); }
+.node.prop.rejected .k, .node.prop.rejected .ps, .node.prop.superseded .k, .node.prop.superseded .ps { color: var(--muted); }
+.node.prop.waiting { opacity: .75; }
+.node.prop .pbar { height: 3px; border-radius: 2px; background: var(--surface); overflow: hidden; margin-top: 4px; }
+.node.prop .pbar i { display: block; height: 100%; background: var(--sim); }
+
+/* loop panel */
+.lp-iter { display: grid; gap: 6px; }
+.lp-iter .it { display: grid; grid-template-columns: 74px minmax(0, 1fr) 46px; gap: 8px; align-items: center; font-size: 12px; }
+.lp-iter .it .lab { color: var(--fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lp-iter .it .num { text-align: right; }
+.lp-iter .bar > i.sim { background: repeating-linear-gradient(135deg, var(--sim) 0 3px, var(--sim-bg) 3px 6px); }
+.lp-props { list-style: none; margin: 0; padding: 0; }
+.lp-props li button { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; width: 100%; padding: 8px; border: 0; border-radius: var(--r-ctl); background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+.lp-props li button:hover { background: var(--recess); }
+.lp-props li.child button { padding-left: 24px; }
+.lp-props .pt { font-weight: 500; }
+.lp-props .pm { grid-column: 1 / -1; font-size: 11px; }
+.crit-grid { display: grid; grid-template-columns: minmax(0, 1fr) 78px; gap: 6px 8px; align-items: center; font-size: 12px; }
+.crit-grid .input { height: 28px; width: 100%; }
+.lp-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; }
+.lp-log li { display: grid; grid-template-columns: 40px 12px 1fr; gap: 6px; align-items: start; }
+.lp-log .t { font: 11px var(--font-mono); color: var(--muted); }
+.lp-log .mk { margin-top: 4px; }
+.pd-back { border: 0; background: none; color: var(--fg-2); font: 500 12px var(--font-body); padding: 0; cursor: pointer; display: inline-flex; align-items: center; gap: 4px; }
+.pd-back:hover { color: var(--fg); text-decoration: underline; }
+.pd-diff { margin: 0; font: 12px/1.6 var(--font-mono); background: var(--recess); border-radius: var(--r-ctl); padding: 8px 0; overflow-x: auto; }
+.pd-diff div { padding: 0 10px; white-space: pre; }
+.pd-diff .add { box-shadow: inset 2px 0 0 var(--fg); background: color-mix(in oklch, var(--fg) 6%, transparent); }
+.pd-diff .del { color: var(--muted); text-decoration: line-through; }
+.ev-tbl td { height: 28px; font-size: 12px; }
+.guard { display: flex; align-items: center; gap: 6px; font-size: 12px; }

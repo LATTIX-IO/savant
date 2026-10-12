@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workflows · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<script src="assets/workflow-engine.js"></script>
+<style>
+  .wf-l { display: grid; grid-template-columns: 240px minmax(0, 1fr) 320px; height: 100%; }
+  .wf-list { border-right: 1px solid var(--border); background: var(--surface); overflow: auto; }
+  .wf-list .hd { padding: 12px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; align-items: center; }
+  .wf-item { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+  .wf-item:hover { background: color-mix(in oklch, var(--recess) 60%, var(--surface)); }
+  .wf-item[aria-current="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
+  .wf-main { display: grid; grid-template-rows: auto auto minmax(0, 1fr); min-width: 0; min-height: 0; }
+  .wf-head { padding: 14px 20px 0; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .wf-head .tabs { margin: 8px 0 0; border-bottom: 0; }
+  .wf-tool { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
+  .wf-body { overflow: auto; position: relative; min-height: 0; }
+  .graph-wrap { position: relative; min-height: 100%; background-color: var(--bg); background-image: radial-gradient(color-mix(in oklch, var(--fg) 14%, transparent) 1px, transparent 1px); background-size: 16px 16px; }
+  .graph { position: relative; }
+  .graph svg { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+  .gn { position: absolute; width: 190px; display: grid; gap: 2px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); background: var(--surface); text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+  .gn:hover { background: color-mix(in oklch, var(--recess) 50%, var(--surface)); }
+  .gn .k { font: 500 10px var(--font-mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .gn .t { font-weight: 500; font-size: 13px; }
+  .gn .s { font-size: 11px; color: var(--muted); }
+  .gn.branch { border-style: dashed; }
+  .gn.trigger, .gn.output { background: var(--recess); }
+  .gn.sel { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+  .gn.st-running { border-color: var(--fg); box-shadow: inset 0 -3px 0 var(--fg); }
+  .gn.st-done .k::after { content: "done"; margin-left: auto; color: var(--fg-2); }
+  .gn.st-failed { border-color: var(--crit); background: var(--crit-bg); }
+  .gn.st-waiting { border-color: var(--warn); background: var(--warn-bg); }
+  .gn.st-skipped { opacity: .4; }
+  .wf-side { border-left: 1px solid var(--border); background: var(--surface); overflow: auto; }
+  .wf-side .sect { padding: 14px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 10px; }
+  .trace { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 12px; }
+  .trace li { display: grid; grid-template-columns: 12px 1fr auto; gap: 8px; align-items: center; }
+  .attr { display: grid; gap: 8px; }
+  .attr .row > span:first-child { width: 170px; font-size: 12px; color: var(--fg-2); }
+  .attr .bar { flex: 1; }
+  .pad { padding: 16px 20px; }
+  @media (max-width: 1200px) { .wf-l { grid-template-columns: 200px minmax(0, 1fr); } .wf-side { grid-column: 1 / -1; border-left: 0; border-top: 1px solid var(--border); max-height: 40vh; } }
+  @media (max-width: 760px) { .wf-l { grid-template-columns: minmax(0, 1fr); } .wf-list { max-height: 30vh; } }
+</style>
+</head>
+<body data-page="workbench">
+<div class="app" id="app">
+<main class="main" id="main" style="overflow:hidden">
+<div class="wf-l">
+  <nav class="wf-list" aria-label="Workflows" data-od-id="workflow-list">
+    <div class="hd"><strong>Workflows</strong><span class="cap plan">Planned</span><span class="spacer"></span><button class="btn sm" id="new-wf" data-ic="plus">New</button></div>
+    <div id="wf-items"></div>
+  </nav>
+  <section class="wf-main" data-od-id="workflow-editor">
+    <div class="wf-head">
+      <div class="crumbs"><a href="workbench.html">Workbench</a><span>/</span><span>Workflows</span><span>/</span><span id="crumb"></span></div>
+      <div class="ctx" style="margin:0"><div class="ttl"><div class="row wrap"><h1 id="wf-t"></h1><select class="select mono" id="ver" aria-label="Version" style="height:28px"></select><span id="ver-st"></span></div></div>
+        <div class="acts"><span class="small muted" id="dirty"></span><button class="btn" id="save-ver">Save as new version</button><button class="btn primary" id="eval-ver" data-ic="play">Evaluate version</button></div></div>
+      <div class="tabs" role="tablist" id="tabs">
+        <button role="tab" aria-selected="true" aria-controls="v-graph" data-tab="graph">Graph</button>
+        <button role="tab" aria-selected="false" aria-controls="v-evals" data-tab="evals">Versions and evaluation</button>
+      </div>
+    </div>
+    <div class="wf-tool" id="tool">
+      <button class="btn sm" id="add" data-ic="plus">Add step</button>
+      <button class="btn sm" id="validate" data-ic="check">Validate</button>
+      <span class="spacer"></span>
+      <label class="small fg2" for="sample">Test input</label>
+      <select class="select" id="sample" style="height:28px" aria-label="Test input"></select>
+      <button class="btn sm" id="test" data-ic="play">Test run</button>
+    </div>
+    <div class="wf-body">
+      <div id="v-graph" class="graph-wrap"><div class="graph" id="graph"><svg id="edges" aria-hidden="true"></svg></div></div>
+      <div id="v-evals" hidden class="pad stack"></div>
+    </div>
+  </section>
+  <aside class="wf-side" id="side" aria-label="Step details" data-od-id="workflow-side"></aside>
+</div>
+</main>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$, e = S.esc;
+  const nm = id => S.skills.find(k => k.id === id)?.name || id;
+  const V1 = { steps: [
+      { id: 't', type: 'trigger', t: 'PagerDuty alert', s: 'webhook' }, { id: 's1', type: 'skill', skill: 'incident-triage', pin: 'v3.0', s: '' },
+      { id: 's2', type: 'skill', skill: 'customer-email-tone-pass', pin: 'v3.2', s: 'status page draft' }, { id: 'out', type: 'output', t: 'Incident brief', s: 'Slack #incidents' }],
+    edges: [['t', 's1'], ['s1', 's2'], ['s2', 'out']] };
+  const V2 = { steps: [
+      { id: 't', type: 'trigger', t: 'PagerDuty alert', s: 'webhook' }, { id: 's1', type: 'skill', skill: 'incident-triage', pin: 'v3.0', s: '' },
+      { id: 'b1', type: 'branch', t: 'severity ≥ SEV-2', cond: ['severity', '≥', 'SEV-2'] }, { id: 'a1', type: 'approval', t: 'Incident commander confirms', s: 'sre-leads · 10m' },
+      { id: 'f1', type: 'parallel', t: 'In parallel', s: '2 branches' }, { id: 's2', type: 'skill', skill: 'customer-email-tone-pass', pin: 'v3.2', s: 'status page draft' },
+      { id: 's3', type: 'skill', skill: 'pr-summarizer', pin: 'v2.3', s: 'recent deploys' }, { id: 'j1', type: 'join', t: 'Wait for both', s: '' }, { id: 'out', type: 'output', t: 'Incident brief', s: 'Slack #incidents' }],
+    edges: [['t', 's1'], ['s1', 'b1'], ['b1', 'f1', 'yes'], ['b1', 'a1', 'no'], ['a1', 'f1'], ['f1', 's2'], ['f1', 's3'], ['s2', 'j1'], ['s3', 'j1'], ['j1', 'out']] };
+  const SEED = [
+    { id: 'incident-response', name: 'Incident response', owner: 'min.park', versions: [{ v: 'v1', st: 'published', g: V1, eval: { q: 84.0, pass: 151, n: 180, cost: 0.034, p95: 9.1, attr: [['Incident triage', 21], ['Customer email tone pass', 8]], paths: [['main path', 180]] } }, { v: 'v2', st: 'draft', g: V2, eval: null }] },
+    { id: 'vendor-intake', name: 'Vendor intake', owner: 'jdv', versions: [{ v: 'v1', st: 'draft', g: { steps: [{ id: 't', type: 'trigger', t: 'New vendor request', s: 'Coupa' }, { id: 's1', type: 'skill', skill: 'vendor-onboarding-memo', pin: 'v0.4', s: '' }, { id: 'a1', type: 'approval', t: 'Legal ops sign-off', s: 'grp-legal-ops · 2d' }, { id: 'out', type: 'output', t: 'Approved vendor', s: 'Coupa' }], edges: [['t', 's1'], ['s1', 'a1'], ['a1', 'out']] }, eval: null }] }
+  ];
+  let W = S.store.get('workflows-v3', null) || JSON.parse(JSON.stringify(SEED));
+  // evaluated v1 evidence belongs to its exact graph snapshot
+  W.forEach(w => w.versions.forEach(v => { if (v.eval && !v.eval.hash) { v.eval.hash = WFEngine.hash(v.g); v.eval.graph = JSON.parse(JSON.stringify(v.g)); } }));
+  let cur = S.store.get('wf-cur', 'incident-response'), verIdx = null, sel = null, dirty = false, exec = null;
+  const save = () => S.store.set('workflows-v3', W);
+  const wf = () => W.find(x => x.id === cur) || W[0];
+  const ver = () => wf().versions[verIdx ?? wf().versions.length - 1];
+  const G = () => ver().g;
+  const KIND = { trigger: 'TRIGGER', skill: 'SKILL', branch: 'BRANCH', approval: 'HUMAN APPROVAL', parallel: 'PARALLEL', join: 'JOIN', output: 'OUTPUT' };
+  const title = st => st.type === 'skill' ? nm(st.skill) : st.type === 'branch' ? 'If ' + st.cond.join(' ') : st.t;
+
+  function list() {
+    $('#wf-items').innerHTML = W.map(w => { const last = w.versions[w.versions.length - 1], pub = w.versions.find(v => v.st === 'published');
+      return `<button class="wf-item" data-w="${e(w.id)}" aria-current="${w.id === cur}"><strong>${e(w.name)}</strong><span class="small muted">${w.versions.length} version${w.versions.length > 1 ? 's' : ''} · ${pub ? pub.v + ' published' : 'not published'}</span><span class="small">${last.eval ? `<span class="num">${last.eval.q.toFixed(1)}</span> end to end` : '<span class="muted">Latest not evaluated</span>'}</span></button>`; }).join('');
+    $$('#wf-items [data-w]').forEach(b => b.onclick = () => { if (dirty && !confirm('Discard unsaved changes to this version?')) return; cur = b.dataset.w; S.store.set('wf-cur', cur); verIdx = null; sel = null; dirty = false; exec = null; all(); });
+  }
+  const evalState = v => !v.eval ? 'none' : v.eval.hash === WFEngine.hash(v.g) ? 'current' : 'stale';
+  const issuesOf = v => WFEngine.validate(v.g);
+  function head() {
+    const w = wf(), v = ver();
+    $('#crumb').textContent = w.name; $('#wf-t').textContent = w.name;
+    $('#ver').innerHTML = w.versions.map((x, i) => `<option value="${i}" ${x === v ? 'selected' : ''}>${x.v}</option>`).join('');
+    const es = evalState(v), iss = issuesOf(v);
+    $('#ver-st').innerHTML = (v.st === 'published' ? '<span class="st"><i class="mk ok"></i>Published · read-only</span>' : v.st === 'retired' ? '<span class="st unk"><i class="mk unk"></i>Retired</span>' : '<span class="st sim"><i class="mk sim"></i>Draft</span>')
+      + (iss.length ? ` <span class="st p2"><i class="mk p2"></i>${iss.length} validation issue${iss.length > 1 ? 's' : ''}</span>` : '')
+      + (es === 'stale' ? ' <span class="st p2"><i class="mk p2"></i>Evaluation outdated</span>' : es === 'current' ? ` <span class="st"><i class="mk ok"></i>Evaluated ${v.eval.q.toFixed(1)}</span>` : '');
+    $('#eval-ver').disabled = v.st !== 'draft' || !!iss.length || !!v.running;
+    $('#eval-ver').title = iss.length ? 'Fix validation issues first' : v.st !== 'draft' ? 'Only drafts are evaluated' : '';
+    $('#dirty').textContent = dirty ? 'Unsaved changes' : '';
+    $('#save-ver').disabled = v.st === 'draft' && !dirty;
+    $('#save-ver').textContent = v.st === 'draft' ? 'Save draft' : 'New draft from this version';
+  }
+  // layered layout: depth = longest path from the trigger
+  function layout(g) {
+    const depth = {}; g.steps.forEach(s => depth[s.id] = 0);
+    for (let k = 0; k < g.steps.length; k++) g.edges.forEach(([a, b]) => { if (depth[b] < depth[a] + 1) depth[b] = depth[a] + 1; });
+    const cols = {}; g.steps.forEach(s => (cols[depth[s.id]] = cols[depth[s.id]] || []).push(s.id));
+    const widest = Math.max(...Object.values(cols).map(c => c.length)), pos = {};
+    const noTarget = new Set(g.edges.filter(z => z[2] === 'no').map(z => z[1]));
+    Object.entries(cols).forEach(([d, ids]) => ids.forEach((id, i) => pos[id] = { x: 32 + (widest - ids.length) * 105 + i * 210 + (noTarget.has(id) && ids.length === 1 ? 230 : 0), y: 28 + d * 108 }));
+    return pos;
+  }
+  function graph() {
+    const g = G(), pos = layout(g), W2 = Math.max(...Object.values(pos).map(p => p.x)) + 240, H2 = Math.max(...Object.values(pos).map(p => p.y)) + 100;
+    const st = id => exec ? exec.state[id] || 'pending' : null;
+    $('#graph').style.width = W2 + 'px'; $('#graph').style.height = H2 + 'px';
+    $$('#graph .gn').forEach(n => n.remove());
+    g.steps.forEach(s => { const p = pos[s.id], x = st(s.id);
+      $('#graph').insertAdjacentHTML('beforeend', `<button class="gn ${s.type} ${sel === s.id ? 'sel' : ''} ${x ? 'st-' + x : ''}" data-s="${s.id}" style="left:${p.x}px;top:${p.y}px" aria-label="${KIND[s.type]}: ${e(title(s))}${x ? ', ' + x : ''}">
+        <span class="k">${x === 'failed' ? '<i class="mk p1"></i>' : x === 'waiting' ? '<i class="mk p2"></i>' : ''}${KIND[s.type]}${s.pin ? ' · ' + s.pin : ''}</span><span class="t">${e(title(s))}</span>${s.s ? `<span class="s">${e(s.s)}</span>` : ''}</button>`); });
+    requestAnimationFrame(() => {
+      const box = $('#graph').getBoundingClientRect();
+      $('#edges').innerHTML = g.edges.map(([a, b, lab]) => { const A = $(`.gn[data-s="${a}"]`), B = $(`.gn[data-s="${b}"]`); if (!A || !B) return '';
+        const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect(), x1 = ra.left + ra.width / 2 - box.left, y1 = ra.bottom - box.top, x2 = rb.left + rb.width / 2 - box.left, y2 = rb.top - box.top, m = (y1 + y2) / 2;
+        const skip = exec && (exec.state[b] === 'skipped' || exec.state[a] === 'skipped');
+        return `<path d="M${x1} ${y1} C ${x1} ${m}, ${x2} ${m}, ${x2} ${y2}" fill="none" stroke="var(--border-strong)" stroke-width="1.25" ${skip ? 'stroke-dasharray="3 3" opacity=".5"' : ''}/><circle cx="${x2}" cy="${y2}" r="2.5" fill="var(--border-strong)"/>${lab ? `<text x="${(x1 + x2) / 2 + 6}" y="${m - 2}" text-anchor="start" style="font:10px var(--font-mono);fill:var(--fg-2)">${lab}</text>` : ''}`; }).join('');
+    });
+    $$('#graph .gn').forEach(n => n.onclick = () => { sel = n.dataset.s; graph(); side(); });
+  }
+
+  /* side panel: step configuration, or execution trace while testing */
+  function side() {
+    const g = G(), s = g.steps.find(x => x.id === sel), editable = ver().st === 'draft';
+    let html = '';
+    if (exec) html += `<div class="sect"><div class="row"><span class="lbl">Test run</span><span class="tag sim">Simulated</span><span class="spacer"></span><span class="small muted">${exec.label}</span></div>
+      <ul class="trace">${exec.log.map(l => `<li><i class="mk ${l[2]}"></i><span>${e(l[0])}</span><span class="num small muted">${l[1]}</span></li>`).join('')}</ul>
+      ${exec.waiting ? `<div class="banner p2"><i class="mk p2"></i><span>Waiting for incident commander approval</span><span class="acts"><button class="btn sm" id="ap-go">Approve</button><button class="btn sm tertiary" id="ap-no">Reject</button></span></div>` : ''}
+      ${exec.done ? `<div class="row small"><span class="st ${exec.failed ? 'p1' : ''}"><i class="mk ${exec.failed ? 'p1' : 'ok'}"></i>${exec.failed ? 'Failed' : 'Completed'}</span><span class="num muted" style="margin-left:auto">${exec.total}s · $${exec.cost.toFixed(3)}</span></div>` : ''}</div>`;
+    if (!s) { $('#side').innerHTML = html + `<div class="sect"><span class="lbl">Version ${ver().v}</span><dl class="kv"><dt>Steps</dt><dd class="num">${g.steps.length}</dd><dt>Skills</dt><dd>${g.steps.filter(x => x.type === 'skill').map(x => e(nm(x.skill))).join(', ')}</dd><dt>Owner</dt><dd>${e(wf().owner)}</dd></dl>${ver().st === 'published' ? '<span class="small muted">Published versions are read-only. Edit the latest draft.</span>' : ''}</div>`; bindSide(); return; }
+    const opts = S.skills.filter(k => k.score != null || k.id === s.skill);
+    let body = '';
+    if (s.type === 'skill') body = `<div class="field"><label for="f-skill">Skill</label><select class="select" id="f-skill" ${editable ? '' : 'disabled'}>${opts.map(k => `<option value="${e(k.id)}" ${k.id === s.skill ? 'selected' : ''}>${e(k.name)}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-pin">Pinned version</label><select class="select mono" id="f-pin" ${editable ? '' : 'disabled'}>${[...new Set([S.skills.find(k => k.id === s.skill)?.ver, S.skills.find(k => k.id === s.skill)?.cand, s.pin].filter(Boolean))].map(v => `<option ${v === s.pin ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="f-on">On failure</label><select class="select" id="f-on" ${editable ? '' : 'disabled'}>${[['stop', 'Stop the workflow'], ['continue', 'Continue without this output'], ['retry', 'Retry once']].map(([v, l]) => `<option value="${v}" ${(s.onfail || 'stop') === v ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <a class="btn sm" href="workbench.html?skill=${encodeURIComponent(s.skill)}" style="justify-self:start">Open skill in Workbench</a>`;
+    else if (s.type === 'branch') body = `<div class="field"><span class="lbl">Condition on the previous output</span><div class="row" style="gap:6px"><select class="select mono" id="c0" ${editable ? '' : 'disabled'}>${['severity', 'confidence', 'owner'].map(x => `<option ${x === s.cond[0] ? 'selected' : ''}>${x}</option>`).join('')}</select><select class="select mono" id="c1" ${editable ? '' : 'disabled'}>${['≤', '=', '≥'].map(x => `<option ${x === s.cond[1] ? 'selected' : ''}>${x}</option>`).join('')}</select><input class="input mono" id="c2" value="${e(s.cond[2])}" style="width:90px" ${editable ? '' : 'disabled'} aria-label="Value"></div></div><span class="small muted">yes → ${e(title(g.steps.find(x => x.id === (g.edges.find(z => z[0] === s.id && z[2] === 'yes') || [])[1]) || { t: '—', type: '' }))} · no → ${e(title(g.steps.find(x => x.id === (g.edges.find(z => z[0] === s.id && z[2] === 'no') || [])[1]) || { t: '—', type: '' }))}</span>`;
+    else if (s.type === 'approval') body = `<div class="field"><label for="f-grp">Approver group</label><input class="input mono" id="f-grp" value="${e(s.s.split(' · ')[0])}" ${editable ? '' : 'disabled'}></div><div class="field"><label for="f-to">Timeout</label><input class="input mono" id="f-to" value="${e(s.s.split(' · ')[1] || '30m')}" ${editable ? '' : 'disabled'}></div>`;
+    else body = `<dl class="kv"><dt>Type</dt><dd>${KIND[s.type].toLowerCase()}</dd>${s.s ? `<dt>Detail</dt><dd>${e(s.s)}</dd>` : ''}</dl>`;
+    $('#side').innerHTML = html + `<div class="sect"><span class="small muted">${KIND[s.type].toLowerCase()}</span><h2>${e(title(s))}</h2></div><div class="sect">${body}${editable && !['trigger', 'output'].includes(s.type) ? '<button class="btn sm tertiary" id="del" style="justify-self:start;color:var(--crit-fg)">Remove step</button>' : ''}</div>`;
+    const mark = () => { dirty = true; head(); };
+    $('#f-skill') && ($('#f-skill').onchange = ev => { s.skill = ev.target.value; const k = S.skills.find(x => x.id === s.skill); s.pin = k.ver; mark(); graph(); side(); });
+    $('#f-pin') && ($('#f-pin').onchange = ev => { s.pin = ev.target.value; mark(); graph(); });
+    $('#f-on') && ($('#f-on').onchange = ev => { s.onfail = ev.target.value; mark(); });
+    ['c0', 'c1', 'c2'].forEach((k, i) => $('#' + k) && ($('#' + k).onchange = ev => { s.cond[i] = ev.target.value; mark(); graph(); }));
+    $('#f-grp') && ($('#f-grp').onchange = () => { s.s = `${$('#f-grp').value} · ${$('#f-to').value}`; mark(); graph(); });
+    $('#f-to') && ($('#f-to').onchange = () => { s.s = `${$('#f-grp').value} · ${$('#f-to').value}`; mark(); graph(); });
+    $('#del') && ($('#del').onclick = () => { const ins = g.edges.filter(z => z[1] === s.id).map(z => z[0]), outs = g.edges.filter(z => z[0] === s.id).map(z => z[1]);
+      g.edges = g.edges.filter(z => z[0] !== s.id && z[1] !== s.id); ins.forEach(a => outs.slice(0, 1).forEach(b => g.edges.push([a, b]))); g.steps = g.steps.filter(z => z.id !== s.id); sel = null; mark(); graph(); side(); });
+    bindSide();
+  }
+  function bindSide() {
+    $('#ap-go') && ($('#ap-go').onclick = () => exec.resume(true));
+    $('#ap-no') && ($('#ap-no').onclick = () => exec.resume(false));
+  }
+
+  /* add steps: inserted after the selected step (or before the output) */
+  $('#add').onclick = ev => {
+    if (ver().st !== 'draft') return S.toast('This version is read-only · save it as a new version to edit');
+    S.menu(ev.currentTarget, [{ hd: 'Add after ' + (sel ? title(G().steps.find(x => x.id === sel)) : 'the last step') },
+      { label: 'Skill step', icon: 'library', act: () => insert({ type: 'skill', skill: 'pr-summarizer', pin: 'v2.3', s: '' }) },
+      { label: 'Branch', icon: 'branch', act: () => insert({ type: 'branch', cond: ['confidence', '≥', '0.8'] }) },
+      { label: 'Human approval', icon: 'user', act: () => insert({ type: 'approval', t: 'Review', s: 'grp-platform · 30m' }) }]);
+  };
+  function insert(step) {
+    const g = G(), after = sel && sel !== 'out' ? sel : g.edges.find(z => z[1] === 'out')?.[0] || 't';
+    step.id = step.type[0] + Date.now().toString(36).slice(-4);
+    const outs = g.edges.filter(z => z[0] === after); g.edges = g.edges.filter(z => z[0] !== after);
+    g.edges.push([after, step.id, outs[0]?.[2]]); outs.forEach((z, i) => g.edges.push([step.id, z[1], step.type === 'branch' ? (i ? 'no' : 'yes') : undefined]));
+    if (step.type === 'branch' && outs.length === 1) g.edges.push([step.id, 'out', 'no']);
+    g.steps.push(step); sel = step.id; dirty = true; head(); graph(); side();
+  }
+  function showIssues(iss) {
+    $('#side').insertAdjacentHTML('afterbegin', `<div class="sect" id="iss"><div class="row"><span class="lbl">Validation</span><span class="spacer"></span>${iss.length ? `<span class="st p2"><i class="mk p2"></i>${iss.length} issue${iss.length > 1 ? 's' : ''}</span>` : '<span class="st"><i class="mk ok"></i>Valid</span>'}</div>${iss.map(x => `<button class="btn sm tertiary" data-go="${e(x.step || '')}" style="justify-content:flex-start;white-space:normal;height:auto;padding:4px 8px;text-align:left">${e(x.msg)}</button>`).join('')}</div>`);
+    $$('#iss [data-go]').forEach(b => b.onclick = () => { if (b.dataset.go) { sel = b.dataset.go; graph(); side(); showIssues(iss); } });
+  }
+  $('#validate').onclick = () => { const iss = issuesOf(ver()); $('#iss')?.remove(); showIssues(iss); S.toast(iss.length ? `${iss.length} issue${iss.length > 1 ? 's' : ''} found` : 'Graph valid · no cycles, every step reachable, branches and joins complete'); };
+
+  /* execution simulation along the graph */
+  $('#sample').innerHTML = Object.entries(WFEngine.SAMPLES).map(([k, v]) => `<option value="${k}">${e(v.label)}</option>`).join('');
+  function animate(res, from) {
+    let k = from;
+    const tick = () => {
+      exec.log = res.log.slice(0, k).map(l => [l.text, l.d, l.mk]);
+      exec.state = {}; res.log.slice(0, k).forEach(l => exec.state[l.id] = res.state[l.id] === 'failed-continued' ? 'failed' : res.state[l.id]);
+      if (k < res.log.length) { const cur = res.log[k]; if (cur) exec.state[cur.id] = 'running'; k++; graph(); side(); return setTimeout(tick, 450); }
+      exec.state = Object.fromEntries(Object.entries(res.state).map(([id, st2]) => [id, st2 === 'failed-continued' ? 'failed' : st2]));
+      Object.assign(exec, { done: res.done, waiting: !!res.waitingAt, failed: res.failed, total: res.total, cost: res.cost });
+      graph(); side();
+    };
+    tick();
+  }
+  $('#test').onclick = () => {
+    const iss = issuesOf(ver()); if (iss.length) { $('#iss')?.remove(); showIssues(iss); return S.toast('Fix validation issues before a test run'); }
+    const g = G(), key = $('#sample').value, decisions = {};
+    exec = { state: {}, log: [], label: WFEngine.SAMPLES[key].label, done: false, waiting: false, failed: false, total: 0, cost: 0 };
+    exec.resume = ok => { const res0 = WFEngine.run(g, key, decisions), at = res0.waitingAt; decisions[at] = ok; const res = WFEngine.run(g, key, decisions); exec.waiting = false; animate(res, res0.log.length); };
+    sel = null; animate(WFEngine.run(g, key, decisions), 0);
+  };
+
+  /* versions and versioned evaluation */
+  function evals() {
+    const w = wf(), base = w.versions.find(v => v.st === 'published' && v.eval);
+    $('#v-evals').innerHTML = `<section class="panel"><div class="panel-h"><h2>Versions</h2></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Version</th><th>Steps</th><th>State</th><th class="r">End-to-end quality</th><th class="r">Cases passed</th><th class="r">Cost per run</th><th class="r">p95</th><th></th></tr></thead><tbody>
+      ${w.versions.map((v, i) => `<tr><td class="mono">${v.v}</td><td class="num">${v.g.steps.length}</td><td>${v.st === 'published' ? '<span class="st"><i class="mk ok"></i>Published</span>' : '<span class="st sim"><i class="mk sim"></i>Draft</span>'}</td>
+        <td class="r num">${v.eval && evalState(v) === 'stale' ? '<span class="st p2" title="Graph changed after evaluation"><i class="mk p2"></i>outdated</span> ' : ''}${v.eval ? v.eval.q.toFixed(1) + (base && v !== base ? ` <span class="delta ${v.eval.q < base.eval.q - 2 ? 'bad' : ''}">${v.eval.q >= base.eval.q ? '+' : ''}${(v.eval.q - base.eval.q).toFixed(1)}</span>` : '') : v.running ? 'Running…' : '—'}</td>
+        <td class="r num">${v.eval ? `${v.eval.pass} / ${v.eval.n}` : '—'}</td><td class="r num">${v.eval ? '$' + v.eval.cost.toFixed(3) : '—'}</td><td class="r num">${v.eval ? v.eval.p95 + 's' : '—'}</td>
+        <td class="r">${v.st === 'draft' ? (evalState(v) === 'current' && !issuesOf(v).length ? `<button class="btn sm" data-pub="${i}">Publish</button>` : `<span class="small ${evalState(v) === 'stale' ? 'st p2' : 'muted'}">${issuesOf(v).length ? 'Fix validation' : evalState(v) === 'stale' ? 'Re-evaluate' : 'Evaluate first'}</span>`) : ''}</td></tr>`).join('')}</tbody></table></div></section>
+      ${w.versions.filter(v => v.eval).map(v => `<section class="panel"><div class="panel-h"><h2>${v.v} · where failures happen</h2>${evalState(v) === 'stale' ? '<span class="st p2"><i class="mk p2"></i>Measured on an earlier graph</span>' : ''}<span class="tag sim">${v.sim ? 'Simulated' : 'Sample data'}</span></div><div class="panel-b grid g-2">
+        <div class="attr"><span class="lbl">Failing cases by step</span>${v.eval.attr.map(a => `<div class="row"><span>${e(a[0])}</span><div class="bar p1"><i style="width:${a[1] / (v.eval.n - v.eval.pass) * 100}%"></i></div><span class="num small">${a[1]}</span></div>`).join('')}</div>
+        <div class="attr"><span class="lbl">Cases by path</span>${v.eval.paths.map(a => `<div class="row"><span>${e(a[0])}</span><div class="bar"><i style="width:${a[1] / v.eval.n * 100}%"></i></div><span class="num small">${a[1]}</span></div>`).join('')}</div></div></section>`).join('')}`;
+    $$('#v-evals [data-pub]').forEach(b => b.onclick = async () => { const v = w.versions[+b.dataset.pub]; if (evalState(v) !== 'current' || issuesOf(v).length) return S.toast('Publishing needs a valid graph with a current evaluation'); if (!await S.confirm({ title: `Publish ${w.name} ${v.v}?`, body: `${v.v} replaces the published version for new runs. Skill versions stay pinned as shown in the graph.`, confirm: 'Publish' })) return; w.versions.forEach(x => { if (x.st === 'published') x.st = 'retired'; }); v.st = 'published'; save(); all(); S.simToast(`${w.name} ${v.v} published`); });
+  }
+  $('#eval-ver').onclick = () => {
+    const w = wf(), v = ver(); if (v.running || v.st !== 'draft') return;
+    const iss = issuesOf(v); if (iss.length) { $('#iss')?.remove(); showIssues(iss); return S.toast('Fix validation issues before evaluating'); }
+    const snap = JSON.parse(JSON.stringify(v.g)), h = WFEngine.hash(snap);
+    v.running = true; save(); all(); S.simToast(`Evaluating ${w.name} ${v.v} end to end on 180 cases`);
+    setTimeout(() => { const branches = v.g.steps.some(s => s.type === 'branch'), approvals = v.g.steps.filter(s => s.type === 'approval').length;
+      const q = +(84 + (branches ? 2.4 : 0) + (approvals ? 0.8 : 0) - Math.max(0, v.g.steps.length - 9) * 0.6).toFixed(1), pass = Math.round(180 * q / 100);
+      v.eval = { q, pass, n: 180, cost: +(0.011 * v.g.steps.filter(s => s.type === 'skill').length + 0.002).toFixed(3), p95: +(4 + v.g.steps.length * 0.7).toFixed(1),
+        attr: v.g.steps.filter(s => s.type === 'skill').map((s, i) => [nm(s.skill), Math.max(1, Math.round((180 - pass) * [0.6, 0.25, 0.15, 0.1][i] || 1))]),
+        paths: branches ? [['yes path', 142], ['no path', 38]] : [['main path', 180]], hash: h, graph: snap, at: Date.now() };
+      if (WFEngine.hash(v.g) !== h) S.toast(`${v.v} changed while evaluating · result marked outdated`);
+      v.sim = true; delete v.running; save(); all(); $('[data-tab="evals"]').click(); S.simToast(`${w.name} ${v.v} scored ${q} end to end`); }, 2200);
+  };
+  $('#save-ver').onclick = () => { const w = wf(), v = ver(), nv = { v: 'v' + (w.versions.length + 1), st: 'draft', g: JSON.parse(JSON.stringify(v.g)), eval: null };
+    if (v.st === 'draft') { dirty = false; save(); head(); return S.toast(evalState(v) === 'stale' ? `${v.v} saved · its evaluation is now outdated` : `${v.v} saved`); }
+    w.versions.push(nv); verIdx = null; dirty = false; save(); all(); S.toast(`Saved as ${nv.v} · evaluate it before publishing`); };
+  $('#ver').onchange = ev => { if (dirty && !confirm('Discard unsaved changes?')) { head(); return; } verIdx = +ev.target.value; dirty = false; exec = null; sel = null; all(); };
+  $('#new-wf').onclick = () => { const id = 'workflow-' + (W.length + 1); W.push({ id, name: 'Untitled workflow', owner: 'priya.a', versions: [{ v: 'v1', st: 'draft', g: { steps: [{ id: 't', type: 'trigger', t: 'Manual start', s: '' }, { id: 's1', type: 'skill', skill: 'pr-summarizer', pin: 'v2.3', s: '' }, { id: 'out', type: 'output', t: 'Result', s: '' }], edges: [['t', 's1'], ['s1', 'out']] }, eval: null }] }); cur = id; save(); all(); };
+  S.tabs($('#tabs'), t => { $('#tool').hidden = t !== 'graph'; if (t === 'evals') evals(); });
+  addEventListener('beforeunload', ev => { if (dirty) { ev.preventDefault(); ev.returnValue = ''; } });
+  function all() { list(); head(); graph(); side(); if (!$('#v-evals').hidden) evals(); }
+  all();
+});
+</script>
+</body>
+</html>

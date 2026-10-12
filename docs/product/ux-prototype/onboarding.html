@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Setup guide · Savant</title>
+<script>try{localStorage.setItem('sv-ws','"rs"');var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .loop { display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr; align-items: center; margin-bottom: 16px; }
+  .loop .st-n { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); }
+  .loop .st-n b { font-weight: 600; font-size: 13px; }
+  .loop .st-n span { font-size: 12px; color: var(--muted); }
+  .loop .ar { text-align: center; color: var(--muted); }
+  .ob { display: grid; grid-template-columns: 260px minmax(0, 1fr) 280px; gap: 16px; align-items: start; }
+  .vsteps { list-style: none; margin: 0; padding: 8px; }
+  .vsteps li button { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; width: 100%; padding: 10px 8px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--fg-2); text-align: left; font: inherit; cursor: pointer; }
+  .vsteps li button:hover:not(:disabled) { background: var(--recess); }
+  .vsteps li button:disabled { cursor: default; color: var(--muted); }
+  .vsteps li button[aria-current="step"] { background: var(--selected); color: var(--fg); }
+  .vsteps .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font: 500 11px var(--font-mono); border: 1px solid var(--border-strong); background: var(--surface); }
+  .vsteps .done .n { background: var(--fg); color: var(--surface); border-color: var(--fg); }
+  .vsteps .warn .n { background: var(--warn-bg); color: var(--warn-fg); border-color: var(--warn); }
+  .vsteps small { display: block; font-size: 11px; color: var(--muted); }
+  .prov-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .opt { display: flex; gap: 10px; align-items: center; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); cursor: pointer; background: var(--surface); }
+  .opt:hover { background: var(--recess); }
+  .opt:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--selected); }
+  .opt input { accent-color: var(--accent); margin: 0; }
+  .opt .d { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .idx { display: grid; grid-template-columns: 180px 1fr 120px; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .checks { list-style: none; margin: 0; padding: 0; }
+  .checks li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .checks li:last-child { border: 0; }
+  .checks .tag { margin-left: auto; }
+  @media (max-width: 1100px) { .ob { grid-template-columns: minmax(0, 1fr); } .loop { grid-template-columns: 1fr 1fr; gap: 8px; } .loop .ar { display: none; } }
+</style>
+</head>
+<body data-page="onboarding">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="index.html">Research sandbox</a><span>/</span><span>Setup guide</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Set up Research sandbox</h1></div>
+    <div class="acts"><button class="btn tertiary" id="restart" data-ic="refresh">Restart guide</button></div>
+  </div>
+
+  <div class="loop" aria-label="How Savant works" data-od-id="how-it-works">
+    <div class="st-n"><b>Index</b><span>Skills from your repositories</span></div><span class="ar">→</span>
+    <div class="st-n"><b>Evaluate</b><span>Against datasets and criteria</span></div><span class="ar">→</span>
+    <div class="st-n"><b>Inspect</b><span>Every case, step and tool call</span></div><span class="ar">→</span>
+    <div class="st-n"><b>Improve</b><span>Compare versions, gate releases</span></div>
+  </div>
+
+  <div class="ob">
+    <nav class="panel" aria-label="Setup steps" data-od-id="setup-steps"><ol class="vsteps" id="vsteps"></ol></nav>
+    <section class="panel" id="stage" data-od-id="setup-stage" aria-live="polite"></section>
+    <aside class="panel" data-od-id="prerequisites"><div class="panel-h"><h2>Prerequisites</h2></div><div class="panel-b"><ul class="checks" id="checks"></ul></div></aside>
+  </div>
+</div>
+</main>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  const def = () => ({ step: 0, provider: 'GitHub', authed: false, repos: ['research/eval-skills', 'research/agents'], indexed: false, imported: 0, failed: 0, model: 'Anthropic', keyOk: false, skill: null, ran: false });
+  let st = Object.assign(def(), S.store.get('ob', {}));
+  const save = () => S.store.set('ob', st);
+  const titles = [['Connect source control', 'Required'], ['Choose repositories', 'Required'], ['Index skills', 'Required'], ['Connect a model provider', 'Required to run'], ['Run a first evaluation', 'Outcome']];
+  const doneAt = i => [st.authed, st.authed && st.repos.length && st.step > 1, st.indexed, st.keyOk, st.ran][i];
+  const repoList = [['research/eval-skills', 7, 'main'], ['research/agents', 4, 'main'], ['research/notebooks', 0, 'main'], ['research/infra', 0, 'trunk']];
+
+  function nav() {
+    $('#vsteps').innerHTML = titles.map((t, i) => { const d = doneAt(i), w = i === 2 && st.indexed && st.failed;
+      return `<li><button class="${d ? (w ? 'warn' : 'done') : ''}" ${i === st.step ? 'aria-current="step"' : ''} ${i > st.step && !d ? 'disabled' : ''} data-i="${i}"><span class="n">${d ? (w ? '!' : '✓') : i + 1}</span><span>${t[0]}<small>${d ? (w ? `${st.imported} imported · ${st.failed} failed` : 'Done') : t[1]}</small></span></button></li>`; }).join('');
+    $('#checks').innerHTML = [
+      ['Source control', st.authed ? 'ok' : 'req', st.authed ? 'GitHub app' : 'Required'], ['Repositories', st.indexed ? 'ok' : 'req', st.indexed ? `${st.repos.length} indexed` : 'Required'],
+      ['Model provider', st.keyOk ? 'ok' : 'req', st.keyOk ? st.model : 'Required to run'], ['Teammates', 'opt', 'Optional'], ['Agent clients via router', 'opt', 'Optional']
+    ].map(c => `<li><i class="mk ${c[1] === 'ok' ? 'ok' : 'unk'}"></i>${c[0]}<span class="tag">${c[2]}</span></li>`).join('') + `<li style="padding-top:12px"><a href="integrations.html" class="small">Manage integrations</a></li>`;
+  }
+  const head = (t, d) => `<div class="panel-h"><div><div class="small muted">Step ${st.step + 1} of 5</div><h2>${t}</h2></div></div><div class="panel-b stack">${d ? `<p class="fg2">${d}</p>` : ''}`;
+  const views = [
+    () => head('Connect source control', 'Savant reads SKILL.md manifests and evaluation assets. It opens pull requests only when you approve a proposal.') + `
+      <div class="prov-grid">${[['GitHub', 'App installation'], ['GitLab', 'OAuth'], ['Bitbucket', 'OAuth'], ['Azure Repos', 'Personal access token']].map(([p, a]) => `<label class="opt"><input type="radio" name="pv" value="${p}" ${st.provider === p ? 'checked' : ''}>${p}<span class="d">${a}</span></label>`).join('')}</div>
+      ${st.authed ? `<div class="banner"><i class="mk ok"></i>Connected to ${st.provider} · organization <span class="mono">research</span> · read access to 4 repositories</div>` : ''}
+      <div class="row"><span class="spacer"></span>${st.authed ? '<button class="btn primary" data-go="1">Continue</button>' : `<button class="btn primary" id="auth">Authorize ${st.provider}</button>`}</div></div>`,
+    () => head('Choose repositories', 'Only repositories with SKILL.md files can be indexed. You can add more later from the library.') + `
+      <table class="tbl"><thead><tr><th class="cb"></th><th>Repository</th><th>Branch</th><th class="r">SKILL.md found</th></tr></thead><tbody>
+      ${repoList.map(r => `<tr><td style="width:36px"><input type="checkbox" class="chk" data-r="${r[0]}" ${st.repos.includes(r[0]) ? 'checked' : ''} ${r[1] ? '' : 'disabled'} aria-label="${r[0]}"></td><td class="mono">${r[0]}</td><td class="mono small muted">${r[2]}</td><td class="r">${r[1] ? `<span class="num">${r[1]}</span>` : '<span class="st unk"><i class="mk unk"></i>None</span>'}</td></tr>`).join('')}</tbody></table>
+      <span class="err small" id="rep-err"></span>
+      <div class="row"><button class="btn" data-go="0">Back</button><span class="spacer"></span><button class="btn primary" id="rep-next">Index ${st.repos.length} repositor${st.repos.length === 1 ? 'y' : 'ies'}</button></div></div>`,
+    () => head('Index skills', st.indexed ? null : 'Validating manifests and importing skills as drafts.') + `<div id="idx">${st.repos.map(r => `<div class="idx" data-r="${r}"><span class="mono small">${r}</span><div class="bar"><i style="width:${st.indexed ? 100 : 0}%"></i></div><span class="small st-l">${st.indexed ? '' : 'Waiting'}</span></div>`).join('')}</div>
+      ${st.indexed ? `${st.failed ? `<div class="banner p2"><i class="mk p2"></i><span>${st.imported} skills imported. 1 manifest failed validation: <span class="mono">skills/lit-review/SKILL.md</span> is missing <span class="mono">description</span>.</span><span class="acts"><button class="btn sm" id="fixpr">Propose fix as PR</button></span></div>` : ''}
+        <div class="row"><span class="spacer"></span><button class="btn primary" data-go="3">Continue with ${st.imported} skills</button></div>` : ''}</div>`,
+    () => head('Connect a model provider', 'Evaluations call the model with your key. Keys are encrypted and never shown again after saving.') + `
+      <div class="field"><label for="mp">Provider</label><select class="select" id="mp">${['Anthropic', 'OpenAI', 'Azure OpenAI', 'OpenAI-compatible'].map(p => `<option ${st.model === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div class="field"><label for="key">API key</label><input class="input mono" id="key" type="password" autocomplete="off" placeholder="${st.model === 'Anthropic' ? 'sk-ant-…' : 'sk-…'}" ${st.keyOk ? 'value="••••••••••••••••" disabled' : ''}><span class="hint" id="key-h">${st.keyOk ? 'Connection verified' : 'Paste a key with access to the models you evaluate against.'}</span></div>
+      <div class="row"><button class="btn" data-go="2">Back</button><span class="spacer"></span>${st.keyOk ? '<button class="btn primary" data-go="4">Continue</button>' : '<button class="btn primary" id="test">Test and save</button>'}</div></div>`,
+    () => st.ran ? `<div class="panel-b"><div class="empty" style="color:var(--fg-2)"><span class="st p1"><i class="mk p1"></i>Gate failed</span><h2>Baseline recorded: 81.7</h2><p class="muted">27 of 30 cases passed. Below the 85 quality gate, so this version cannot be promoted yet.</p>
+        <div class="measures" style="width:100%;max-width:520px;margin:12px 0;text-align:left"><div class="measure"><span class="l">Quality</span><span class="v">81.7</span></div><div class="measure"><span class="l">Passed</span><span class="v">27<small>/ 30</small></span></div><div class="measure"><span class="l">Cost</span><span class="v">$0.58</span></div></div>
+        <div class="row"><a class="btn" href="runs.html${st.runId ? '#' + st.runId : ''}">Inspect the 3 failures</a><a class="btn primary" href="library.html">Open the library</a></div></div></div>`
+      : head('Run a first evaluation', 'Pick a skill. Savant generates a starter dataset from its manifest and records the result as a baseline.') + `
+      <div class="stack" style="gap:8px">${[['Literature summarizer', 'T2 · research/eval-skills'], ['Experiment log writer', 'T3 · research/eval-skills'], ['Agent trace explainer', 'T2 · research/agents']].map(([n, d], i) => `<label class="opt"><input type="radio" name="sk" value="${n}" ${(st.skill || 'Literature summarizer') === n ? 'checked' : ''}>${n}<span class="d">${d}</span></label>`).join('')}</div>
+      <div class="field"><span class="lbl">Dataset</span><div class="fg2">Generate 30 cases from the manifest · review later in Evaluations</div></div>
+      <div id="runp" hidden class="stack"><div class="row"><span class="small">Generating cases, then running</span><span class="num small muted" id="runn" style="margin-left:auto">0 / 30</span></div><div class="bar"><i id="runb" style="width:0"></i></div></div>
+      <div class="row"><button class="btn" data-go="3">Back</button><span class="spacer"></span><button class="btn primary" id="run">${S.icon('play')}Run first evaluation</button></div></div>`
+  ];
+  function render() {
+    nav(); $('#stage').innerHTML = views[st.step](); save();
+    $$('#stage [data-go]').forEach(b => b.onclick = () => { st.step = +b.dataset.go; render(); });
+    $$('[name="pv"]').forEach(r => r.onchange = () => { st.provider = r.value; st.authed = false; render(); });
+    $('#auth') && ($('#auth').onclick = e => { e.currentTarget.disabled = true; e.currentTarget.textContent = `Waiting for ${st.provider}…`; setTimeout(() => { st.authed = true; render(); }, 1400); });
+    $$('[data-r]', $('#stage')).forEach(c => c.type === 'checkbox' && (c.onchange = () => { st.repos = $$('#stage input[data-r]:checked').map(x => x.dataset.r); render(); }));
+    $('#rep-next') && ($('#rep-next').onclick = () => { if (!st.repos.length) { $('#rep-err').textContent = 'Select at least one repository with SKILL.md files.'; return; } st.step = 2; st.indexed = false; render(); index(); });
+    $('#fixpr') && ($('#fixpr').onclick = e => { e.currentTarget.disabled = true; e.currentTarget.textContent = 'PR #12 opened'; S.toast('Fix proposed as pull request #12 on research/eval-skills'); });
+    $('#mp') && ($('#mp').onchange = e => { st.model = e.target.value; render(); });
+    $('#test') && ($('#test').onclick = e => {
+      const k = $('#key').value.trim(), ok = st.model === 'Anthropic' ? /^sk-ant-\S{8,}$/.test(k) : /^sk-\S{8,}$/.test(k);
+      if (!ok) { $('#key').setAttribute('aria-invalid', 'true'); $('#key-h').className = 'err'; $('#key-h').textContent = `That does not look like a${st.model === 'Anthropic' ? 'n Anthropic key (sk-ant-…)' : ' valid key (sk-…)'}. Check for missing characters.`; return; }
+      e.currentTarget.disabled = true; e.currentTarget.textContent = 'Testing…'; setTimeout(() => { st.keyOk = true; render(); S.toast(`${st.model} connection verified`); }, 1200);
+    });
+    $('#run') && ($('#run').onclick = e => {
+      st.skill = $('[name="sk"]:checked').value; e.currentTarget.disabled = true; $('#runp').hidden = false; let n = 0;
+      const t = setInterval(() => { n = Math.min(30, n + 2); $('#runn').textContent = `${n} / 30`; $('#runb').style.width = n / 30 * 100 + '%'; if (n === 30) { clearInterval(t); const k = S.skills.find(x => x.name === st.skill); if (k) st.runId = S.db.addRun({ skill: k.id, v: k.ver, b: '—', n: 30, t0: Date.now() - 30 * 600, result: { q: 81.7, dq: 0, fail: 3 } }); st.ran = true; render(); } }, 220);
+    });
+  }
+  const NAMES = { 'research/eval-skills': ['Literature summarizer', 'Experiment log writer', 'Dataset card writer', 'Paper triage', 'Citation checker', 'Benchmark summary'], 'research/agents': ['Agent trace explainer', 'Tool call auditor', 'Prompt diff reviewer', 'Run cost estimator'] };
+  function index() {
+    const rows = $$('#idx .idx'); let k = 0;
+    rows.forEach((r, i) => { const tot = repoList.find(x => x[0] === r.dataset.r)[1]; let n = 0;
+      const t = setInterval(() => { n++; r.querySelector('.bar i').style.width = n / tot * 100 + '%'; r.querySelector('.st-l').textContent = `${n} / ${tot} manifests`;
+        if (n >= tot) { clearInterval(t); const f = r.dataset.r === 'research/eval-skills' ? 1 : 0; r.querySelector('.st-l').innerHTML = f ? `<span class="st p2"><i class="mk p2"></i>${tot - f} ok · ${f} failed</span>` : `<span class="st"><i class="mk ok"></i>${tot} imported</span>`;
+          S.db.addRepo({ n: r.dataset.r, pv: st.provider }); S.db.indexRepo(r.dataset.r, (NAMES[r.dataset.r] || []).slice(0, tot - f));
+          st.imported += tot - f; st.failed += f; if (++k === rows.length) { st.indexed = true; setTimeout(render, 500); } } }, 260 + i * 80); });
+    st.imported = 0; st.failed = 0;
+  }
+  $('#vsteps').addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b && !b.disabled) { st.step = +b.dataset.i; render(); } });
+  $('#restart').onclick = async () => { if (await S.confirm({ title: 'Restart the setup guide?', body: 'This resets the guide only. Connections and imported skills in Research sandbox are kept.', confirm: 'Restart guide' })) { st = def(); render(); } };
+  render();
+  if (st.step === 2 && !st.indexed) index();
+});
+</script>
+</body>
+</html>

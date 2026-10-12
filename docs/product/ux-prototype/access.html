@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Access and roles · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .set { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .snav { display: grid; gap: 2px; position: sticky; top: 0; }
+  .snav button { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--fg-2); font: 500 13px var(--font-body); text-align: left; cursor: pointer; }
+  .snav button:hover { background: var(--recess); color: var(--fg); }
+  .snav button[aria-current="page"] { background: var(--recess); color: var(--fg); box-shadow: inset 3px 0 0 var(--accent); }
+  @media (max-width: 900px) { .set { grid-template-columns: minmax(0, 1fr); } .snav { position: static; grid-auto-flow: column; overflow-x: auto; } }
+  .attn { margin-bottom: 16px; border-radius: var(--r-ctl); background: var(--recess); }
+  .attn.p2 { background: var(--warn-bg); }
+  .attn-h { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 12px; border: 0; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; border-radius: var(--r-ctl); }
+  .attn.p2 .attn-h { color: var(--warn-fg); }
+  .attn-h:hover { background: color-mix(in oklch, currentColor 6%, transparent); }
+  .attn-h .small { color: var(--fg-2); }
+  .attn-b { list-style: none; margin: 0; padding: 0 12px 8px; }
+  .attn-b li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid color-mix(in oklch, var(--fg) 10%, transparent); font-size: 13px; }
+  .attn-b li button { margin-left: auto; }
+  .mx td, .mx th { text-align: center; }
+  .mx td:first-child, .mx th:first-child { text-align: left; }
+  .mx select { height: 28px; font-size: 12px; padding: 0 6px; }
+  .mx select.lv-none { color: var(--muted); }
+  .mx select.chg { box-shadow: 0 0 0 2px var(--accent); }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 12px; }
+  .chain .tag { font-family: var(--font-body); }
+  .chain .ar { color: var(--muted); }
+  .ua { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 16px; }
+  @media (max-width: 1000px) { .ua { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body data-page="settings">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><a href="settings.html">Settings</a><span>/</span><span>Access and roles</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Workspace settings</h1></div>
+    <div class="acts"><span class="small muted"><span id="idp-name">Okta · wexlerhahn</span> · <span id="sync-state">Synced 4m ago · 412 users</span></span><span class="small muted" id="pend"></span><button class="btn" id="idp-change">Identity provider</button><button class="btn" id="discard" hidden>Discard</button><button class="btn" id="sync" data-ic="refresh">Sync now</button><button class="btn primary" id="save" disabled>Save changes</button></div>
+  </div>
+
+
+  <div class="set">
+    <nav class="snav" aria-label="Settings sections" data-od-id="settings-nav">
+      <button type="button" onclick="location.href='settings.html#general'">General</button>
+      <button type="button" onclick="location.href='settings.html#members'">Members</button>
+      <button type="button" aria-current="page" data-od-id="nav-access">Access and roles</button>
+      <button type="button" onclick="location.href='settings.html#policies'">Policies</button>
+      <button type="button" onclick="location.href='settings.html#auto-improve'">Auto-Improve</button>
+      <button type="button" onclick="location.href='settings.html#audit'">Audit log</button>
+      <button type="button" onclick="location.href='settings.html#billing'">Billing</button>
+    </nav>
+    <div>
+  <div class="row" style="margin-bottom:12px"><h2>Access and roles</h2><span class="cap plan">Identity sync planned</span></div>
+  <div id="alerts" class="attn" data-od-id="sync-alerts"></div>
+
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" aria-selected="true" aria-controls="t-map" data-tab="map">Group mapping</button>
+    <button role="tab" aria-selected="false" aria-controls="t-mx" data-tab="mx">Access by role</button>
+    <button role="tab" aria-selected="false" aria-controls="t-ea" data-tab="ea">Check a user</button>
+    <button role="tab" aria-selected="false" aria-controls="t-log" data-tab="log">Sync log</button>
+  </div>
+
+  <section id="t-map" data-od-id="group-mapping">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="map"><thead><tr><th>Identity provider group</th><th class="r">Members</th><th>Savant role</th><th>Scope</th><th>State</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Attribute rules</h2></div>
+      <div class="tbl-wrap"><table class="tbl compact" id="rules"><thead><tr><th>When</th><th>Then</th><th class="r">Users affected</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="t-mx" hidden data-od-id="access-matrix">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl mx" id="mx"><thead><tr><th>Role</th><th>Tier 1 skills</th><th>Tier 2 skills</th><th>Tier 3 skills</th><th title="Extensions and tool packs that skills can load">Mods</th><th>Evaluations</th><th>Auto-Improve approvals</th><th>Releases</th></tr></thead><tbody></tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Skill and mod exceptions</h2></div><div class="tbl-wrap"><table class="tbl compact"><tbody>
+      <tr><td><strong>Contract clause reviewer</strong></td><td class="small">Use limited to <span class="tag">grp-legal-ops</span></td><td class="r small muted">overrides Tier 1 role access</td></tr>
+      <tr><td><strong>SOC 2 evidence drafter</strong></td><td class="small">Use limited to <span class="tag">grp-security</span> and <span class="tag">grp-audit</span></td><td class="r small muted">overrides Tier 1 role access</td></tr>
+      <tr><td><strong>pagerduty-tools</strong> <span class="tag">mod</span></td><td class="small">Load only for <span class="tag">grp-sre</span></td><td class="r small muted">overrides Mods access</td></tr>
+    </tbody></table></div></div>
+  </section>
+
+  <section id="t-ea" hidden data-od-id="effective-access">
+    <div class="ua">
+      <div class="panel"><div class="panel-h"><label class="search" style="flex:1"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input class="input" id="uq" placeholder="Search people" aria-label="Search people"></label></div><ul class="lp" id="ulist" style="list-style:none;margin:0;padding:4px"></ul></div>
+      <div class="panel" id="udetail" aria-live="polite"></div>
+    </div>
+  </section>
+
+  <section id="t-log" hidden data-od-id="sync-log">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl compact" id="log"><thead><tr><th>Time</th><th>Event</th><th>Detail</th><th>Result</th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+    </div>
+  </div>
+</div>
+</main>
+</div>
+
+<dialog class="dialog wide" id="idpd" aria-labelledby="idp-t">
+  <form method="dialog">
+    <div class="dh"><h2 id="idp-t">Identity provider</h2></div>
+    <div class="db stack">
+      <div class="field"><label for="idp-p">Provider</label><select class="select" id="idp-p"><option>Okta</option><option>Microsoft Entra ID</option><option>Ping Identity</option><option>Google Workspace</option><option>Agency ICAM (SAML or OIDC with SCIM)</option></select></div>
+      <div class="field"><label for="idp-u">SCIM endpoint for your provider</label><div class="row"><input class="input mono" id="idp-u" readonly value="https://savant.example/scim/v2/wexler-hahn" style="flex:1"><button type="button" class="btn" id="idp-copy" data-ic="copy">Copy</button></div></div>
+      <div class="field"><span class="lbl">Attributes to sync</span><div class="row wrap small" style="gap:12px"><label class="row"><input type="checkbox" class="chk" checked>department</label><label class="row"><input type="checkbox" class="chk" checked>employeeType</label><label class="row"><input type="checkbox" class="chk" checked>clearance</label><label class="row"><input type="checkbox" class="chk">citizenship</label><label class="row"><input type="checkbox" class="chk">costCenter</label></div></div>
+      <label class="row small"><input type="checkbox" class="chk" id="idp-strict" checked>Remove direct grants that the provider does not back</label>
+    </div>
+    <div class="df"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok">Save and sync</button></div>
+  </form>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  const ROLES = ['Viewer', 'Skill user', 'Skill author', 'Reviewer', 'Release approver', 'Platform admin'];
+  const LV = ['None', 'Use', 'Edit', 'Approve', 'Admin'];
+  const COLS = ['t1', 't2', 't3', 'mods', 'evals', 'ai', 'rel'];
+  const MX0 = {
+    'Viewer': ['None', 'Use', 'Use', 'None', 'None', 'None', 'None'],
+    'Skill user': ['Use', 'Use', 'Use', 'Use', 'None', 'None', 'None'],
+    'Skill author': ['Use', 'Edit', 'Edit', 'Use', 'Edit', 'None', 'None'],
+    'Reviewer': ['Use', 'Edit', 'Edit', 'Use', 'Edit', 'Approve', 'None'],
+    'Release approver': ['Use', 'Use', 'Use', 'Use', 'Use', 'Approve', 'Approve'],
+    'Platform admin': ['Admin', 'Admin', 'Admin', 'Admin', 'Admin', 'Admin', 'Admin']
+  };
+  const GROUPS = [
+    ['grp-all-staff', 388, 'Viewer', 'All skills'], ['grp-engineering', 142, 'Skill user', 'All skills'], ['grp-sre', 24, 'Skill author', 'Incident triage, mods'],
+    ['grp-legal-ops', 31, 'Skill author', 'Legal skills'], ['grp-security', 12, 'Reviewer', 'All skills'], ['grp-platform', 9, 'Platform admin', 'Workspace'],
+    ['grp-release-mgmt', 6, 'Release approver', 'All skills'], ['grp-finance', 18, 'Skill user', 'Finance skills'], ['grp-contractors', 0, 'Skill user', 'Tier 2 and 3'], ['grp-audit', 4, 'Reviewer', 'Compliance skills']
+  ];
+  const UNMAPPED = [['grp-research', 27], ['grp-sales-ops', 15]];
+  const RULES = [['employeeType = contractor', 'Deny use of Tier 1 skills', 23], ['clearance below Secret', 'Deny mods tagged restricted', 61], ['department = Legal', 'Grant use of Contract clause reviewer', 31]];
+  const USERS = [
+    { u: 'contractor-07', name: 'Contractor 07', groups: ['grp-all-staff', 'grp-engineering'], attrs: { employeeType: 'contractor', department: 'Engineering', clearance: 'none' } },
+    { u: 'min.park', name: 'Min Park', groups: ['grp-all-staff', 'grp-engineering', 'grp-sre'], attrs: { employeeType: 'employee', department: 'SRE', clearance: 'Secret' } },
+    { u: 'renata.m', name: 'Renata M.', groups: ['grp-all-staff', 'grp-legal-ops', 'grp-release-mgmt'], attrs: { employeeType: 'employee', department: 'Legal', clearance: 'Secret' } },
+    { u: 'kalia.b', name: 'Kalia B.', groups: ['grp-all-staff', 'grp-finance'], attrs: { employeeType: 'employee', department: 'Sales ops', clearance: 'none' }, direct: 'Skill author on RFP response drafter' }
+  ];
+  let mx = S.store.get('rbac-mx', JSON.parse(JSON.stringify(MX0))), map = S.store.get('rbac-map', GROUPS.map(g => g.slice())), saved = JSON.stringify([mx, map]);
+  let alerts = S.store.get('rbac-alerts', ['direct', 'removed', 'unmapped']);
+  const dirty = () => JSON.stringify([mx, map]) !== saved;
+  function bar() { const n = dirty(); $('#save').disabled = !n; $('#discard').hidden = !n; $('#pend').textContent = n ? 'Unsaved changes' : ''; }
+
+  function drawAlerts() {
+    const A = {
+      direct: ['p2', '1 user has a direct grant that the identity provider does not back', 'kalia.b · Skill author on RFP response drafter', 'Review', () => { $('[data-tab="ea"]').click(); pick('kalia.b'); }, '1 direct grant'],
+      removed: ['p2', 'grp-contractors was emptied in Okta but still maps to Skill user', '0 members since the 08:40 sync', 'Remove mapping', () => { map = map.filter(g => g[0] !== 'grp-contractors'); drawMap(); bar(); alerts = alerts.filter(a => a !== 'removed'); S.store.set('rbac-alerts', alerts); drawAlerts(); }, '1 emptied group'],
+      unmapped: ['', '2 provider groups are not mapped to a role', 'grp-research · grp-sales-ops', 'Map groups', () => { $('[data-tab="map"]').click(); }, '2 unmapped groups']
+    };
+    if (!alerts.length) { $('#alerts').innerHTML = ''; $('#alerts').hidden = true; return; }
+    $('#alerts').hidden = false;
+    const open = S.store.get('rbac-attn-open', false), warn = alerts.filter(k => A[k][0] === 'p2').length;
+    $('#alerts').className = 'attn' + (warn ? ' p2' : '');
+    $('#alerts').innerHTML = `<button class="attn-h" id="attn-t" aria-expanded="${open}" aria-controls="attn-b"><i class="mk ${warn ? 'p2' : 'unk'}"></i><strong>${alerts.length} sync item${alerts.length > 1 ? 's' : ''} need${alerts.length > 1 ? '' : 's'} attention</strong><span class="small">${alerts.map(k => A[k][5]).join(' · ')}</span><span class="spacer"></span>${S.icon(open ? 'chevd' : 'chev')}</button>
+      <ul class="attn-b" id="attn-b" ${open ? '' : 'hidden'}>${alerts.map(k => `<li><i class="mk ${A[k][0] || 'unk'}"></i><span><strong>${A[k][1]}</strong><span class="small fg2"> · ${A[k][2]}</span></span><button class="btn sm" data-al="${k}">${A[k][3]}</button></li>`).join('')}</ul>`;
+    $('#attn-t').onclick = () => { S.store.set('rbac-attn-open', !open); drawAlerts(); };
+    $$('#alerts [data-al]').forEach(b => b.onclick = () => A[b.dataset.al][4]());
+  }
+  function drawMap() {
+    $('#map tbody').innerHTML = map.map((g, i) => `<tr class="${g[1] === 0 ? '' : ''}"><td class="mono">${g[0]}</td><td class="r num">${g[1]}</td>
+      <td><select class="select" data-g="${i}" aria-label="Role for ${g[0]}">${ROLES.map(r => `<option ${r === g[2] ? 'selected' : ''}>${r}</option>`).join('')}</select></td><td class="small fg2">${g[3]}</td>
+      <td>${g[1] === 0 ? '<span class="st p2"><i class="mk p2"></i>Empty in provider</span>' : '<span class="st"><i class="mk ok"></i>Synced</span>'}</td><td class="r"><button class="icon-btn" data-rm="${i}" aria-label="Remove mapping for ${g[0]}">${S.icon('x')}</button></td></tr>`).join('') +
+      UNMAPPED.filter(u => !map.some(g => g[0] === u[0])).map(u => `<tr><td class="mono muted">${u[0]}</td><td class="r num">${u[1]}</td><td><select class="select" data-new="${u[0]}" data-n="${u[1]}" aria-label="Map ${u[0]}"><option value="">Not mapped</option>${ROLES.map(r => `<option>${r}</option>`).join('')}</select></td><td class="small muted">—</td><td><span class="st unk"><i class="mk unk"></i>Not mapped</span></td><td></td></tr>`).join('');
+    $$('#map [data-g]').forEach(sel => sel.onchange = () => { map[+sel.dataset.g][2] = sel.value; bar(); });
+    $$('#map [data-new]').forEach(sel => sel.onchange = () => { if (!sel.value) return; map.push([sel.dataset.new, +sel.dataset.n, sel.value, 'All skills']); drawMap(); bar(); if (!UNMAPPED.some(u => !map.some(g => g[0] === u[0]))) { alerts = alerts.filter(a => a !== 'unmapped'); drawAlerts(); } });
+    $$('#map [data-rm]').forEach(b => b.onclick = () => { map.splice(+b.dataset.rm, 1); drawMap(); bar(); });
+    $('#rules tbody').innerHTML = RULES.map(r => `<tr><td class="mono small">${r[0]}</td><td class="small">${r[1]}</td><td class="r num">${r[2]}</td><td class="r"><span class="st"><i class="mk ok"></i>Active</span></td></tr>`).join('');
+  }
+  function drawMx() {
+    $('#mx tbody').innerHTML = ROLES.map(r => `<tr><td><strong>${r}</strong><div class="sub">${map.filter(g => g[2] === r).map(g => g[0]).join(', ') || 'no groups'}</div></td>${COLS.map((c, i) => `<td><select class="select ${mx[r][i] === 'None' ? 'lv-none' : ''} ${mx[r][i] !== MX0[r][i] ? 'chg' : ''}" data-r="${r}" data-i="${i}" aria-label="${r} ${c}" ${r === 'Platform admin' ? 'disabled' : ''}>${LV.map(l => `<option ${l === mx[r][i] ? 'selected' : ''}>${l}</option>`).join('')}</select></td>`).join('')}</tr>`).join('');
+    $$('#mx select').forEach(sel => sel.onchange = () => { mx[sel.dataset.r][+sel.dataset.i] = sel.value; drawMx(); bar(); });
+  }
+  // effective access for one person: groups → roles → levels, then attribute rules
+  function effective(u) {
+    const roles = map.filter(g => u.groups.includes(g[0])).map(g => g[2]);
+    const best = i => roles.reduce((a, r) => LV.indexOf(mx[r][i]) > LV.indexOf(a) ? mx[r][i] : a, 'None');
+    const out = COLS.map((c, i) => ({ c, lv: best(i), why: roles.filter(r => mx[r][i] === best(i)).join(', ') }));
+    const deny = [];
+    if (u.attrs.employeeType === 'contractor' && out[0].lv !== 'None') { deny.push(['Tier 1 skills', 'employeeType = contractor']); out[0].lv = 'None'; out[0].why = 'Attribute rule'; }
+    if (u.attrs.clearance === 'none') deny.push(['Mods tagged restricted', 'clearance below Secret']);
+    return { roles, out, deny };
+  }
+  const NAMES = { t1: 'Tier 1 skills', t2: 'Tier 2 skills', t3: 'Tier 3 skills', mods: 'Mods', evals: 'Evaluations', ai: 'Auto-Improve approvals', rel: 'Releases' };
+  let cur = 'contractor-07';
+  function drawUsers() {
+    const q = $('#uq').value.toLowerCase();
+    $('#ulist').innerHTML = USERS.filter(u => !q || (u.u + u.name).toLowerCase().includes(q)).map(u => `<li><button class="nav-item" style="width:100%;border:0;background:${u.u === cur ? 'var(--selected)' : 'none'};cursor:pointer;font:inherit" data-u="${u.u}"><span class="avatar" style="width:24px;height:24px;font-size:10px">${u.name.split(' ').map(x => x[0]).join('').slice(0, 2)}</span><span>${u.name}</span><span class="mono small muted" style="margin-left:auto">${u.u}</span></button></li>`).join('') || '<li class="empty">No people match</li>';
+    $$('#ulist [data-u]').forEach(b => b.onclick = () => pick(b.dataset.u));
+  }
+  function pick(id) {
+    cur = id; drawUsers(); const u = USERS.find(x => x.u === id), e = effective(u);
+    $('#udetail').innerHTML = `<div class="panel-h"><div><h2>${u.name}</h2><span class="mono small muted">${u.u}</span></div><div class="r"><span class="small muted">From Okta · synced 4m ago</span></div></div>
+      <div class="panel-b stack">
+        <div class="chain">${u.groups.map(g => `<span class="tag mono">${g}</span>`).join('')}<span class="ar">→</span>${[...new Set(e.roles)].map(r => `<span class="tag">${r}</span>`).join('') || '<span class="muted">no role</span>'}</div>
+        <div class="row wrap small" style="gap:12px">${Object.entries(u.attrs).map(([k, v]) => `<span><span class="mono muted">${k}</span> ${v}</span>`).join('')}</div>
+        <table class="tbl compact"><thead><tr><th>Resource</th><th>Access</th><th>Because of</th></tr></thead><tbody>${e.out.map(o => `<tr><td>${NAMES[o.c]}</td><td>${o.lv === 'None' ? '<span class="muted">None</span>' : `<strong>${o.lv}</strong>`}</td><td class="small fg2">${o.why || '—'}</td></tr>`).join('')}</tbody></table>
+        ${e.deny.map(d => `<div class="row small"><span class="st p1"><i class="mk p1"></i>Denied: ${d[0]}</span><span class="mono muted" style="margin-left:auto">${d[1]}</span></div>`).join('')}
+        ${u.direct ? `<div class="banner p2"><i class="mk p2"></i><span>Direct grant not backed by the provider: ${u.direct}</span><span class="acts"><button class="btn sm" id="keep">Keep as exception</button><button class="btn sm" id="revoke">Revoke</button></span></div>` : ''}
+      </div>`;
+    $('#revoke') && ($('#revoke').onclick = async () => { if (!await S.confirm({ title: `Revoke direct grant for ${u.u}?`, body: `${u.direct} is removed now. Access then comes only from provider groups. Open Workbench sessions on that skill end.`, confirm: 'Revoke grant', danger: true })) return; delete u.direct; alerts = alerts.filter(a => a !== 'direct'); S.store.set('rbac-alerts', alerts); drawAlerts(); pick(id); S.simToast(`Direct grant revoked for ${u.u}`); });
+    $('#keep') && ($('#keep').onclick = () => { u.direct = null; alerts = alerts.filter(a => a !== 'direct'); S.store.set('rbac-alerts', alerts); drawAlerts(); pick(id); S.simToast('Kept as a documented exception · reviewed again in 90 days'); });
+  }
+  const LOG = [['10:21', 'Scheduled sync', '412 users · 38 groups', 'ok'], ['09:02', 'User deprovisioned', 'j.ortiz removed from grp-engineering · 3 skill sessions ended', 'ok'], ['08:40', 'Group emptied', 'grp-contractors · 0 members', 'p2'], ['08:40', 'Attribute changed', 'contractor-07 employeeType → contractor · Tier 1 access removed', 'ok'], ['Yest.', 'Scheduled sync', '411 users · 38 groups', 'ok'], ['Yest.', 'Sync failed', 'Okta rate limit · retried after 2m', 'p2']];
+  const drawLog = () => $('#log tbody').innerHTML = LOG.map(l => `<tr><td class="num muted">${l[0]}</td><td>${l[1]}</td><td class="small fg2">${l[2]}</td><td>${l[3] === 'ok' ? '<span class="st"><i class="mk ok"></i>Applied</span>' : '<span class="st p2"><i class="mk p2"></i>Attention</span>'}</td></tr>`).join('');
+
+  S.tabs($('#tabs'), t => { if (t === 'mx') drawMx(); if (t === 'ea') pick(cur); if (t === 'log') drawLog(); history.replaceState(null, '', '#' + t); });
+  $('#uq').oninput = drawUsers;
+  drawAlerts(); drawMap(); bar();
+
+  $('#save').onclick = async () => {
+    const lost = ROLES.reduce((n, r) => n + COLS.filter((c, i) => LV.indexOf(mx[r][i]) < LV.indexOf(MX0[r][i])).length * map.filter(g => g[2] === r).reduce((a, g) => a + g[1], 0), 0);
+    if (!await S.confirm({ title: 'Save access changes?', body: lost ? `About <strong>${lost}</strong> user-resource grants are reduced. Affected people lose access on their next skill load.` : 'No one loses access. Changes apply on the next skill load.', confirm: 'Save changes', danger: lost > 0 })) return;
+    S.store.set('rbac-mx', mx); S.store.set('rbac-map', map); saved = JSON.stringify([mx, map]); bar(); drawMx(); S.simToast('Access saved · written to the audit log');
+  };
+  $('#discard').onclick = () => { [mx, map] = JSON.parse(saved); drawMap(); drawMx(); bar(); };
+  $('#sync').onclick = e => { const b = e.currentTarget; b.disabled = true; b.lastChild.textContent = 'Syncing…'; setTimeout(() => { b.disabled = false; b.lastChild.textContent = 'Sync now'; $('#sync-state').textContent = 'Synced just now · 412 users'; LOG.unshift(['now', 'Manual sync', '412 users · 38 groups · no changes', 'ok']); if (!$('#t-log').hidden) drawLog(); S.simToast('Synced with Okta · no changes'); }, 1500); };
+  $('#idp-change').onclick = () => $('#idpd').showModal();
+  $('#idp-copy').onclick = () => { navigator.clipboard?.writeText($('#idp-u').value).catch(() => {}); S.simToast('SCIM endpoint copied'); };
+  $('#idpd').addEventListener('close', () => { if ($('#idpd').returnValue !== 'ok') return; const p = $('#idp-p').value; $('#idp-name').textContent = p.startsWith('Agency') ? 'Agency ICAM' : p + ' · wexlerhahn'; S.simToast(`${p.split(' (')[0]} connected · first sync running`); $('#sync').click(); });
+  addEventListener('beforeunload', e => { if (dirty()) { e.preventDefault(); e.returnValue = ''; } });
+  const h = location.hash.slice(1); if (['map', 'mx', 'ea', 'log'].includes(h)) $(`[data-tab="${h}"]`).click();
+});
+</script>
+</body>
+</html>

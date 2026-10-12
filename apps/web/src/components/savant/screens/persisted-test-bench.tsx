@@ -23,7 +23,7 @@ export function PersistedTestBench({
   const [definitions,setDefinitions]=useState<TestBenchDefinition[]>([]);
   const [selected,setSelected]=useState<TestBenchDefinition|null>(null);
   const [name,setName]=useState("My Test Bench cases");
-  const [cases,setCases]=useState<TestBenchCase[]>([newCase()]);
+  const [cases,setCases]=useState<TestBenchCase[]>([{caseId:"case-1",kind:"positive",prompt:"",context:null,expectedBehavior:""}]);
   const [loading,setLoading]=useState(true);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState<string|null>(null);

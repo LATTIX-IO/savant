@@ -24,7 +24,8 @@ export class AcceptanceMatrixError extends Error {
 }
 function fail(code){throw new AcceptanceMatrixError(code);}
 function safeToken(value){
-  return typeof value==="string"&&value.trim().length>=10&&!/[\r\n]/.test(value);
+  return typeof value==="string" && value.length>=10 && value.trim()===value &&
+    !/[\s\x00-\x1f\x7f]/.test(value);
 }
 function evidenceEnv(env,prefix){
   return {

@@ -128,6 +128,8 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-signing-keys.mjs
       - name: Verify concurrent worker dispatch leases, fencing and backoff
         run: pnpm --filter @savant/web exec node ./scripts/verify-harness-dispatch-leases.mjs
+      - name: Verify authorized DB-backed customer harness dispatch and uncertain outcome recovery
+        run: pnpm --filter @savant/web exec node ./scripts/verify-harness-dispatch-worker.mjs
       - name: Test tenant FK, revision uniqueness, transaction rollback and cascade
         run: pnpm --filter @savant/web exec node ./scripts/verify-workflow-schema.mjs
       - name: Verify capability reference ACL, cross-tenant denial and p95

@@ -84,6 +84,9 @@ export function validateMatrixEvidence(request,{governance,successful,preflight,
   strictChecks(governance,GOVERNANCE_CHECKS);
   identity(successful,request.positive,"savant.release-uat-evidence.v2");
   strictChecks(successful,POSITIVE_CHECKS);
+  if(successful.verifiedSignerWorkflow!==
+      "github.com/LATTIX-IO/savant/.github/workflows/publish-source-release.yml")
+    fail("matrix_signer_unverified");
   if(typeof successful.sha256!=="string" || !HEX.test(successful.sha256) ||
      !Array.isArray(successful.assets) || successful.assets.length!==3 ||
      successful.assets.some(a=>typeof a?.name!=="string" || !HEX.test(a.sha256||"") ||
@@ -93,7 +96,9 @@ export function validateMatrixEvidence(request,{governance,successful,preflight,
   const expected=new Set([
     "savant-"+request.positive.version+".tar.gz","SHA256SUMS","release-provenance.json"
   ]);
-  if(successful.assets.some(a=>!expected.has(a.name)))fail("matrix_release_artifacts_unverified");
+  if(successful.assets.some(a=>!expected.has(a.name)) ||
+     successful.assets.find(a=>a.name==="savant-"+request.positive.version+".tar.gz")?.sha256!==successful.sha256)
+    fail("matrix_release_artifacts_unverified");
   identity(preflight,request.preflight,"savant.release-negative-uat.v1");
   if(preflight.scenario!=="preflight_denied")fail("matrix_negative_scenario_mismatch");
   strictChecks(preflight,NEGATIVE_CHECKS);

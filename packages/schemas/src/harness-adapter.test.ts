@@ -34,7 +34,7 @@ function denied(code: string, fn: () => unknown | Promise<unknown>) {
     error instanceof AdapterProtocolError && error.code === code);
 }
 
-function fixture(options: { features?: Partial<typeof capabilities.features>; status?: string; events?: unknown[] } = {}) {
+function fixture(options: { features?: Partial<typeof capabilities.features>; status?: string; events?: unknown[]; fail?: boolean; malformedRun?: boolean } = {}) {
   const history: string[] = [];
   const audit: string[] = [];
   let result = run(options.status ?? "queued");
@@ -42,7 +42,7 @@ function fixture(options: { features?: Partial<typeof capabilities.features>; st
     async discoverCapabilities() { history.push("discover"); return { ...capabilities, features: { ...capabilities.features, ...options.features },
     coverage: { ...capabilities.coverage, execution: options.features?.execute === false ? "unsupported" : "partial" } }; },
     async validateConfiguration() { history.push("validate"); return true; },
-    async executeTest() { history.push("execute"); return result; },
+    async executeTest() { history.push("execute"); if (options.fail) throw new Error("provider secret 123"); return options.malformedRun ? { ...result, tenantId: "tenant-B" } : result; },
     async cancel() { history.push("cancel"); result = { ...result, status: "canceled" }; return result; },
     async getRun() { history.push("get"); return result; },
     async *streamEvents() {
@@ -161,4 +161,66 @@ test("PER-1092 RED: healthy/read/config operations need authenticated scope, do 
   const f2 = fixture();
   await denied("unauthorized", () => f2.gateway.health(caller("revoked")));
   assert.deepEqual(f2.history, []);
+});
+
+test("PER-1102: repeat and concurrent same-key requests execute exactly once", async () => {
+  const f = fixture();
+  const [one, two] = await Promise.all([
+    f.gateway.execute(caller(), request()),
+    f.gateway.execute(caller(), request()),
+  ]);
+  assert.deepEqual(one, two);
+  assert.equal(f.history.filter((name) => name === "execute").length, 1);
+  assert.deepEqual(f.audit, ["executeTest"]);
+  const replay = await f.gateway.execute(caller(), request());
+  assert.deepEqual(replay, one);
+  assert.equal(f.history.filter((name) => name === "execute").length, 1);
+  await denied("idempotency_conflict", () => f.gateway.execute(caller(), { ...request(), testSuiteHash: hash }));
+  await denied("idempotency_conflict", () => f.gateway.execute(caller(), {
+    ...request(), idempotencyKey: "other",
+  }));
+});
+
+test("PER-1102: adapter errors and forged run identity are sanitized", async () => {
+  const failure = fixture({ fail: true });
+  await denied("provider_unavailable", () => failure.gateway.execute(caller(), request()));
+  assert.deepEqual(failure.audit, []);
+  const forged = fixture({ malformedRun: true });
+  await denied("invalid_response", () => forged.gateway.execute(caller(), request()));
+  assert.deepEqual(forged.audit, []);
+});
+
+test("PER-1102: event delivery is ordered, tenant-bound, and stops at terminal state", async () => {
+  const f = fixture({ events: [
+    { eventId: "evt-1", tenantId: "tenant-A", runId: "run-1", traceId: "trace-1", sequence: 1, status: "running" },
+    { eventId: "evt-2", tenantId: "tenant-A", runId: "run-1", traceId: "trace-1", sequence: 3, status: "succeeded" },
+    { eventId: "evt-3", tenantId: "tenant-A", runId: "run-1", traceId: "trace-1", sequence: 4, status: "failed" },
+  ] });
+  const statuses: string[] = [];
+  for await (const e of f.gateway.events(caller("read"), "run-1", request())) statuses.push(e.status);
+  assert.deepEqual(statuses, ["running", "succeeded"]);
+  const foreign = fixture();
+  await denied("not_found", async () => {
+    for await (const _ of foreign.gateway.events(caller("read"), "unknown-run", request())) void _;
+  });
+  assert.deepEqual(foreign.history, []);
+});
+
+test("PER-1102: invalid credential and untrusted accessors cannot run side effects", async () => {
+  const f = fixture();
+  const suspicious = { ...request() };
+  Object.defineProperty(suspicious, "inputRef", { enumerable: true, get() { throw new Error("secret getter"); } });
+  await denied("invalid_payload", () => f.gateway.execute(caller(), suspicious));
+  assert.deepEqual(f.history, []);
+  const g = fixture();
+  await denied("insufficient_scope", () => g.gateway.cancel(caller("read"), "run-1"));
+  assert.deepEqual(g.history, []);
+});
+
+test("PER-1102: declared concurrency and budget are enforced before execute", async () => {
+  const f = fixture();
+  await denied("invalid_payload", () => f.gateway.execute(caller(), {
+    ...request(), budget: { maxDurationMs: 40_000, maxCostUsd: 0.25 },
+  }));
+  assert.deepEqual(f.history, ["discover"]);
 });

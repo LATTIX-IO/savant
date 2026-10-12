@@ -129,6 +129,21 @@ export function createHarnessStatusConnectorConfigStore(deps:{
       if(!validRevision(input.expectedRevision)||input.expectedRevision===null)
         fail("version_conflict");
       const at=clock();
+      // External credential and egress attestation must NEVER hold a DB lock.
+      // Snapshot the row, verify externally, then compare under the same
+      // organization-row lock used by save/disable before activation.
+      const snapshot=await sql<Row[]>`
+        select * from harness_status_connector_configs
+        where organization_id=${input.tenantId} and adapter_id=${input.adapterId}
+      `;
+      const candidate=snapshot[0];
+      if(!candidate)fail("not_found");
+      if(candidate.revision!==input.expectedRevision)fail("version_conflict");
+      if(candidate.status==="active")fail("already_active");
+      validateUrl(candidate.endpoint,deps.allowedOrigins);
+      validateRef(input.tenantId,input.adapterId,candidate.secret_ref);
+      await attest(input.tenantId,input.adapterId,candidate.secret_ref);
+      await egress(input.tenantId,candidate.endpoint);
       return sql.begin(async tx=>{
         const org=await tx<{id:string}[]>`
           select id from organizations where id=${input.tenantId} for update
@@ -140,13 +155,10 @@ export function createHarnessStatusConnectorConfigStore(deps:{
           for update
         `;
         const current=existing[0];
-        if(!current)fail("not_found");
-        if(current.revision!==input.expectedRevision)fail("version_conflict");
-        if(current.status==="active")fail("already_active");
-        validateUrl(current.endpoint,deps.allowedOrigins);
-        validateRef(input.tenantId,input.adapterId,current.secret_ref);
-        await attest(input.tenantId,input.adapterId,current.secret_ref);
-        await egress(input.tenantId,current.endpoint);
+        if(!current||current.revision!==candidate.revision||
+          current.status!=="disabled"||
+          current.endpoint!==candidate.endpoint||current.secret_ref!==candidate.secret_ref)
+          fail("version_conflict");
         const updated=await tx<Row[]>`
           update harness_status_connector_configs
             set status='active',revision=revision+1,

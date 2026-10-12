@@ -52,7 +52,7 @@ export interface HarnessDispatchTransport {
   })=>Promise<unknown>;
 }
 export interface HarnessDispatchWorkerDeps {
-  queue:Pick<LeaseQueue,"claim"|"releaseForRetry"|"acknowledge">;
+  queue:Pick<LeaseQueue,"claim"|"releaseForRetry"|"acknowledge"|"markDispatchStarted"|"recordUnknownOutcome">;
   nowMs:()=>number;
   /** MUST read tenant-owned pinned request + authorized Git artifacts. */
   loadAuthorizedRequest:(lease:Lease)=>Promise<unknown>;
@@ -77,6 +77,11 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
       const leaseToken=lease.leaseToken;
       const auditIdentity={tenantId:lease.tenantId,adapterId:lease.adapterId};
       let dispatched=false;
+      async function hold(reason:"provider_unknown"|"provider_timeout"|"invalid_response"|"ack_failed"){
+        try{await deps.queue.recordUnknownOutcome(identity,runId,leaseToken,reason);}
+        catch{/* dispatchStarted already durably fences automatic retry */}
+        return {state:"reconciliation_required" as const,runId};
+      }
       async function retry(outcome:string){
         try{await deps.queue.releaseForRetry(identity,runId,leaseToken,250);}
         catch{return {state:"reconciliation_required" as const,runId};}
@@ -98,10 +103,14 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
         const timeoutMs=Math.min(req.budget.maxDurationMs,expires-now);
         if(!Number.isFinite(now)||!Number.isFinite(expires)||timeoutMs<100)
           return retry("lease_deadline");
+        // Durable side-effect marker must commit before ANY external call.
+        // Crash or uncertainty after this point cannot trigger automatic reclaim.
+        try{await deps.queue.markDispatchStarted(identity,runId,leaseToken);}
+        catch{return {state:"reconciliation_required",runId};}
+        dispatched=true;
         const controller=new AbortController();
         const timeout=setTimeout(()=>controller.abort(),timeoutMs);
         try {
-          dispatched=true;
           // Adapter is obligated to honour AbortSignal and retain provider-side
           // idempotency. A crashed worker may retry; exactly-once is NOT promised.
           // Promise.race bounds the worker's wait even if a faulty adapter
@@ -122,13 +131,15 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
           } finally {
             controller.signal.removeEventListener("abort",onAbort);
           }
-          if(controller.signal.aborted)return {state:"reconciliation_required",runId};
-          const result=validatedRun(raw,req);
+          if(controller.signal.aborted)return hold("provider_timeout");
+          let result:HarnessRun;
+          try{result=validatedRun(raw,req);}
+          catch{return hold("invalid_response");}
           try {
             await deps.queue.acknowledge(identity,runId,lease.leaseToken,result.externalRunId);
           } catch {
             // Provider may have accepted work: do not retry blindly here.
-            return {state:"reconciliation_required",runId};
+            return hold("ack_failed");
           }
           try{await deps.audit({tenantId:lease.tenantId,adapterId:lease.adapterId,runId,outcome:"dispatched"});}
           catch{/* no raw provider payload is captured */}
@@ -139,7 +150,7 @@ export function createHarnessDispatchWorker(deps:HarnessDispatchWorkerDeps){
       } catch {
         // If provider execution began, outcome may be unknown. Conservatively
         // do not resubmit until a provider idempotency reconciliation exists.
-        if(dispatched)return {state:"reconciliation_required",runId};
+        if(dispatched)return hold("provider_unknown");
         return retry("dispatch_preflight_failed");
       }
     },

@@ -3,7 +3,7 @@
  * The credential resolver MUST bind active adapter keys to tenant and adapter.
  * All external calls are injected for testability and explicit fail-close.
  */
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { parseHarnessRunEvent } from "@savant/schemas/harness-adapter";
 
 const ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
@@ -25,7 +25,7 @@ export interface SignedHarnessEventDeps {
   getRun:(tenantId:string,runId:string)=>Promise<{
     tenantId:string;adapterId:string;runId:string;traceId:string;status:string;
   }>;
-  applyEvent:(tenantId:string,runId:string,event:unknown)=>Promise<unknown>;
+  applyEvent:(tenantId:string,runId:string,event:unknown,delivery:{deliveryId:string;payloadSha256:string})=>Promise<unknown>;
 }
 export function createSignedHarnessEventAdmission(deps:SignedHarnessEventDeps){
   return async function admit(raw:SignedHarnessEventEnvelope):Promise<unknown>{
@@ -73,6 +73,7 @@ export function createSignedHarnessEventAdmission(deps:SignedHarnessEventDeps){
       tenantId:raw.tenantId,runId:raw.runId,traceId:row.traceId,
     });}
     catch{return reject("invalid_event");}
-    return deps.applyEvent(raw.tenantId,raw.runId,parsed);
+    const payloadSha256=createHash("sha256").update(raw.rawBody).digest("hex");
+    return deps.applyEvent(raw.tenantId,raw.runId,parsed,{deliveryId:raw.deliveryId,payloadSha256});
   };
 }

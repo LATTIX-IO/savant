@@ -1061,7 +1061,7 @@ function EvaluationDetailLoadedScreen({
       <div className="grid-2" style={{ alignItems: "start" }}>
         <div className="col" style={{ gap: "var(--gutter)", minWidth: 0 }}>
           <BenchmarkMetricStrip metrics={detail.metrics} />
-          <LiveEvaluationAutomation skillId={detail.skill.id} readOnly={detail.readOnly} />
+          <LiveEvaluationAutomation skillId={detail.skill.id} readOnly={detail.readOnly} pathname={pathname} />
 
           <div className="panel" id="test-bench">
             <div className="panel-hd">

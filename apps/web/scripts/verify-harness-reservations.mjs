@@ -128,8 +128,13 @@ try {
     event(orgA, "run-two", "e-trace-forged", 1, "running", "wrong-trace")));
   const signedDelivery = { deliveryId: "delivery-one", payloadSha256: "c".repeat(64) };
   const runningEvent = event(orgA, "run-two", "e-running", 1, "running");
-  const applied = await s1.applyEvent(orgA, "run-two", runningEvent, signedDelivery);
-  assert.equal(applied.latestSequence, 1);
+  const concurrentDeliveries = await Promise.all([
+    s1.applyEvent(orgA, "run-two", runningEvent, signedDelivery),
+    s2.applyEvent(orgA, "run-two", runningEvent, signedDelivery),
+  ]);
+  assert.equal(concurrentDeliveries.filter(r => r.replay === false).length, 1);
+  assert.equal(concurrentDeliveries.filter(r => r.replay === true).length, 1);
+  assert.ok(concurrentDeliveries.every(r => r.latestSequence === 1));
   // Exactly one signed receipt, atomically attached to the accepted event.
   assert.equal((await sql`select count(*)::int as n from harness_eval_deliveries where organization_id=${orgA}`)[0].n, 1);
   const replaySigned = await s2.applyEvent(orgA, "run-two", runningEvent, signedDelivery);

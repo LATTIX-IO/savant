@@ -94,19 +94,23 @@ export function createHarnessProviderReconciliation(deps:{
       });
       const idHash=createHash("sha256").update(row.idempotency_key).digest("hex");
       return sql.begin(async tx=>{
-        const checked=await tx<Row[]>`
-          select r.id,r.organization_id,r.adapter_id,r.run_id,r.idempotency_key,
-            r.trace_id,d.state as lease_state
-          from harness_eval_runs r
-          inner join harness_eval_dispatch_leases d on
-            d.harness_run_id=r.id and d.organization_id=r.organization_id
-          where r.organization_id=${input.tenantId}
-            and r.adapter_id=${input.adapterId} and r.run_id=${input.runId}
-          for update of r,d
+        // Consistent global lock order: run first, lease second.
+        // A joined FOR UPDATE can invert the order used by queue workers.
+        const checked=await tx<{id:string;idempotency_key:string}[]>`
+          select id,idempotency_key from harness_eval_runs
+          where organization_id=${input.tenantId}
+            and adapter_id=${input.adapterId} and run_id=${input.runId}
+          for update
         `;
         const current=checked[0];
-        if(!current||!["dispatching","reconciliation"].includes(current.lease_state)||
-          current.id!==row.id||current.idempotency_key!==row.idempotency_key)
+        if(!current||current.id!==row.id||
+          current.idempotency_key!==row.idempotency_key)fail("state_changed");
+        const lease=await tx<{state:string}[]>`
+          select state from harness_eval_dispatch_leases
+          where organization_id=${input.tenantId} and harness_run_id=${current.id}
+          for update
+        `;
+        if(!lease.length||!["dispatching","reconciliation"].includes(lease[0]!.state))
           fail("state_changed");
         const prior=await tx<Receipt[]>`
           select provider_state,evidence_sha256,idempotency_sha256

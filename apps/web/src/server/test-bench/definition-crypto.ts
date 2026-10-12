@@ -32,8 +32,9 @@ function aad(ctx:TestBenchCipherContext):Buffer{
 export function encryptTestBenchCases(
   casesJson:string,ctx:TestBenchCipherContext,
   env:Record<string,string|undefined>=process.env,
+  maxBytes:16384|65536=16384,
 ):string{
-  if(Buffer.byteLength(casesJson,"utf8")>16384)throw new TestBenchError("test_bench_case_bytes_exceeded",422);
+  if(Buffer.byteLength(casesJson,"utf8")>maxBytes)throw new TestBenchError("test_bench_case_bytes_exceeded",422);
   const key=configuredKey(env),nonce=randomBytes(12);
   const cipher=createCipheriv("aes-256-gcm",key,nonce);
   cipher.setAAD(aad(ctx));
@@ -44,14 +45,15 @@ export function encryptTestBenchCases(
 export function decryptTestBenchCases(
   blob:string,ctx:TestBenchCipherContext,
   env:Record<string,string|undefined>=process.env,
+  maxBytes:16384|65536=16384,
 ):string{
   const key=configuredKey(env);
   try{
-    if(typeof blob!=="string"||blob.length>32768)throw Error("invalid");
+    if(typeof blob!=="string"||blob.length>Math.ceil(maxBytes*4/3)+120)throw Error("invalid");
     const parts=blob.split(":");
     if(parts.length!==4||parts[0]!=="v1")throw Error("version");
     const nonce=base64url(parts[1]!),tag=base64url(parts[2]!),ciphertext=base64url(parts[3]!);
-    if(nonce.length!==12||tag.length!==16||ciphertext.length>16384)throw Error("length");
+    if(nonce.length!==12||tag.length!==16||ciphertext.length>maxBytes)throw Error("length");
     const decipher=createDecipheriv("aes-256-gcm",key,nonce);
     decipher.setAAD(aad(ctx));decipher.setAuthTag(tag);
     const body=Buffer.concat([decipher.update(ciphertext),decipher.final()]);

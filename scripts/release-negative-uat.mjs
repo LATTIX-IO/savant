@@ -64,8 +64,11 @@ export function assessNegativeReleaseRun(request, run, jobs, approvals, release)
       run?.head_sha !== request.commit || run?.path !== WORKFLOW ||
       run?.head_branch !== "main" || run?.event !== "workflow_dispatch" ||
       run?.status !== "completed" || !["failure", "cancelled"].includes(run?.conclusion) ||
+      run?.display_title !== "source-release:" + request.version + ":" + request.commit ||
       run?.run_attempt !== 1 || !POSITIVE_ID(run?.actor?.id) ||
       !POSITIVE_ID(run?.triggering_actor?.id)) fail("negative_run_unverified");
+  // For releases created by the version-bound workflow, display_title is
+  // always present even if the Actions API omits workflow_dispatch inputs.
   if (run.inputs !== undefined && run.inputs !== null) {
     if (typeof run.inputs !== "object" || run.inputs.version !== request.version ||
         run.inputs.commit_sha !== request.commit) fail("negative_run_inputs_mismatch");

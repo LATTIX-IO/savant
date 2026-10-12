@@ -6,6 +6,7 @@ import {
 } from "./live-evaluation-automation.ts";
 
 const skillId="team/core+agent";
+const workspaceSlug="acme-qa";
 const sha="a".repeat(40);
 const finished={
   id:"run-1",skillId,status:"needs_review",commitSha:sha,
@@ -31,9 +32,9 @@ test("PER MVP live eval: tenant-bound persisted runs display real SHA and score"
 });
 test("PER MVP live eval: same-origin GET with escaped skill and no-store",async()=>{
  let observed=false;
- const result=await loadLiveEvalAutomation(skillId,{fetcher:stub(payload,200,(url,init)=>{
+ const result=await loadLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub(payload,200,(url,init)=>{
   observed=true;
-  assert.equal(url,"/api/skills/team%2Fcore%2Bagent/automation?skillId=team%2Fcore%2Bagent");
+  assert.equal(url,"/api/skills/team%2Fcore%2Bagent/automation?skillId=team%2Fcore%2Bagent&workspaceSlug=acme-qa");
   assert.equal(init.method,"GET");
   assert.equal(init.credentials,"same-origin");
   assert.equal(init.cache,"no-store");
@@ -43,9 +44,9 @@ test("PER MVP live eval: same-origin GET with escaped skill and no-store",async(
 });
 test("PER MVP live eval: POST is same-origin, explicitly accepted and bound to requested skill",async()=>{
  let observed=false;
- const run=await startLiveEvalAutomation(skillId,{fetcher:stub({data:{...finished,status:"queued"}},202,(url,init)=>{
+ const run=await startLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({data:{...finished,status:"queued"}},202,(url,init)=>{
   observed=true;
-  assert.equal(url,"/api/skills/team%2Fcore%2Bagent/automation/generate?skillId=team%2Fcore%2Bagent");
+  assert.equal(url,"/api/skills/team%2Fcore%2Bagent/automation/generate?skillId=team%2Fcore%2Bagent&workspaceSlug=acme-qa");
   assert.equal(init.method,"POST");
   assert.equal(init.mode,"same-origin");
   assert.equal(init.credentials,"same-origin");
@@ -78,22 +79,32 @@ test("PER MVP live eval: deny mismatched tenant skill, status injection and forg
   LiveEvaluationUnavailable);
 });
 test("PER MVP live eval: failed requests, unexpected status, missing JSON and invalid IDs fail closed",async()=>{
- await assert.rejects(()=>startLiveEvalAutomation(skillId,{fetcher:stub({data:finished},200)}),LiveEvaluationUnavailable);
- await assert.rejects(()=>startLiveEvalAutomation(skillId,{fetcher:stub({error:"forbidden"},403)}),LiveEvaluationUnavailable);
- await assert.rejects(()=>loadLiveEvalAutomation(skillId,{fetcher:stub({error:"unauthorized"},401)}),LiveEvaluationUnavailable);
- await assert.rejects(()=>loadLiveEvalAutomation(skillId,{fetcher:stub({data:null})}),LiveEvaluationUnavailable);
+ await assert.rejects(()=>startLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({data:finished},200)}),LiveEvaluationUnavailable);
+ await assert.rejects(()=>startLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({error:"forbidden"},403)}),LiveEvaluationUnavailable);
+ await assert.rejects(()=>loadLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({error:"unauthorized"},401)}),LiveEvaluationUnavailable);
+ await assert.rejects(()=>loadLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({data:null})}),LiveEvaluationUnavailable);
  await assert.rejects(()=>loadLiveEvalAutomation(" "+skillId,{fetcher:stub(payload)}),LiveEvaluationUnavailable);
  await assert.rejects(()=>loadLiveEvalAutomation("",{fetcher:stub(payload)}),LiveEvaluationUnavailable);
 });
 
 test("PER MVP live eval: abort signal is forwarded or explicitly null, never undefined",async()=>{
  const controller=new AbortController();
- await loadLiveEvalAutomation(skillId,{signal:controller.signal,
+ await loadLiveEvalAutomation(skillId,{workspaceSlug,signal:controller.signal,
   fetcher:stub(payload,200,(_url,init)=>{
    assert.equal(init.signal,controller.signal);
   }),
  });
- await startLiveEvalAutomation(skillId,{fetcher:stub({data:{...finished,status:"queued"}},202,(_url,init)=>{
+ await startLiveEvalAutomation(skillId,{workspaceSlug,fetcher:stub({data:{...finished,status:"queued"}},202,(_url,init)=>{
   assert.equal(init.signal,null);
  })});
+});
+
+test("PER-1420: deny missing or malformed workspace without touching fetch",async()=>{
+ let called=false;
+ const fetcher:typeof fetch=async()=>{called=true;throw Error("network should not be invoked");};
+ for(const slug of [undefined,"","..","foreign?org=1","alpha/beta","UPPER","a".repeat(81)]){
+  await assert.rejects(()=>loadLiveEvalAutomation(skillId,{...(slug===undefined?{}:{workspaceSlug:slug}),fetcher}),LiveEvaluationUnavailable);
+  await assert.rejects(()=>startLiveEvalAutomation(skillId,{workspaceSlug:slug,fetcher}),LiveEvaluationUnavailable);
+ }
+ assert.equal(called,false);
 });

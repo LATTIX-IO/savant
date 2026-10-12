@@ -57,7 +57,7 @@ export function parseTestBenchCases(value:unknown):TestBenchCase[]{
       context,expectedBehavior:bounded(row.expectedBehavior,1000,"test_bench_expected_invalid"),
     };
   });
-  if(Buffer.byteLength(JSON.stringify(cases),"utf8")>MAX_TEST_BENCH_BYTES)
+  if(new TextEncoder().encode(JSON.stringify(cases)).length>MAX_TEST_BENCH_BYTES)
     invalid("test_bench_case_bytes_exceeded");
   return cases;
 }

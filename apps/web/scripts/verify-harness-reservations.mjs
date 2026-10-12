@@ -218,7 +218,7 @@ try {
     select action,count(*)::int as n from harness_eval_transitions
     where organization_id=${orgA} group by action
   `;
-  assert.ok(audit.some(x => x.action === "reserved" && x.n === 3));
+  assert.ok(audit.some(x => x.action === "reserved" && x.n === 4));
   assert.ok(audit.some(x => x.action === "cancelRequested" && x.n === 1));
   assert.ok(audit.some(x => x.action === "expired" && x.n === 1));
   assert.equal((await sql`select count(*)::int as n from harness_eval_runs where organization_id=${orgB}`)[0].n, 0);
@@ -232,7 +232,7 @@ try {
     assertions: [
       "tenant-matched authorization", "durable cross-process replay", "tenant quotas",
       "duplicate run/receipt safety", "cancel-vs-complete race", "deadline recovery",
-      "malicious event rejection", "DB composite tenant FK", "transactional audit", "cascade",
+      "malicious event rejection", "signed HMAC to DB ingest", "DB composite tenant FK", "transactional audit", "cascade",
     ],
   }));
 } finally {

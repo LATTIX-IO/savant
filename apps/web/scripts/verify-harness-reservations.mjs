@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { createHarnessReservationStore, HarnessReservationError } from "../src/server/harness/invocation-reservations.ts";
+import { createSignedHarnessEventAdmission, SignedHarnessEventError } from "../src/server/harness/signed-event-admission.ts";
 
 const url = process.env.DATABASE_URL;
 if (!url || process.env.SAVANT_HARNESS_SCHEMA_TEST !== "1" ||
@@ -162,6 +163,45 @@ try {
   assert.equal(await s1.expireDue(orgA), 0);
   await denied("late_event", () => s1.applyEvent(orgA, "run-three",
     event(orgA, "run-three", "e-late", 1, "succeeded")));
+  // Signed HMAC admission -> real durable store end-to-end (no production provider).
+  await s1.reserve({
+    organizationId: orgA, actorSubject: "test-operator",
+    request: request(orgA, "run-four"), capabilities: caps,
+  });
+  await s1.markRunning(orgA, "run-four", "sandbox-external-four");
+  const signingSecret = Buffer.alloc(32, 0x43);
+  const signedEvent = event(orgA, "run-four", "e-signed-complete", 1, "succeeded");
+  const signedBody = Buffer.from(JSON.stringify(signedEvent));
+  const signedTimestamp = String(Math.floor(nowValue.at.getTime() / 1000));
+  const signedHeader = Buffer.from(
+    `savant-harness-v1\n${signedTimestamp}\n${orgA}\nsandbox-adapter\nrun-four\ndelivery-signed-four\n`,
+  );
+  const signedSig = "v1=" + createHmac("sha256", signingSecret)
+    .update(Buffer.concat([signedHeader, signedBody])).digest("hex");
+  const signedAdmission = createSignedHarnessEventAdmission({
+    nowMs: () => nowValue.at.getTime(),
+    resolveSecrets: async () => [signingSecret],
+    getRun: (tenant, runId) => s1.getRun(tenant, runId),
+    applyEvent: (tenant, runId, parsed, delivery) => s1.applyEvent(tenant, runId, parsed, delivery),
+  });
+  const signedReq = {
+    tenantId: orgA, adapterId: "sandbox-adapter", runId: "run-four",
+    deliveryId: "delivery-signed-four", timestamp: signedTimestamp,
+    rawBody: signedBody, signature: signedSig,
+  };
+  assert.equal((await signedAdmission(signedReq)).replay, false);
+  assert.equal((await signedAdmission(signedReq)).replay, true);
+  const tamperedReq = { ...signedReq, signature: "v1=" + "0".repeat(64) };
+  await assert.rejects(() => signedAdmission(tamperedReq),
+    err => err instanceof SignedHarnessEventError && err.code === "unauthorized");
+  assert.equal((await s2.getRun(orgA, "run-four")).status, "succeeded");
+  const receipts = await sql`
+    select delivery_id,payload_sha256 from harness_eval_deliveries
+    where organization_id=${orgA} and delivery_id='delivery-signed-four'
+  `;
+  assert.equal(receipts.length, 1);
+  assert.match(receipts[0].payload_sha256, /^[a-f0-9]{64}$/);
+
   // Schema-level composite FK rejects cross-tenant event grafting.
   const [run] = await sql`select id from harness_eval_runs where organization_id=${orgA} and run_id='run-two'`;
   let foreignDenied = false;

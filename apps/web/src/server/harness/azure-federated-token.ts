@@ -8,7 +8,8 @@
  */
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const JWT=/^[a-zA-Z0-9_-]{1,8192}\.[a-zA-Z0-9_-]{1,8192}\.[a-zA-Z0-9_-]{1,8192}$/;
-const TOKEN=/^[A-Za-z0-9._~-]{20,8192}$/;
+// RFC 6750 b64token permits + / and trailing = padding; never permit controls.
+const TOKEN=/^[A-Za-z0-9._~+/-]+=*$/;
 const MAX_BYTES=4096;
 
 export class HarnessFederatedIdentityError extends Error{
@@ -105,7 +106,8 @@ export function createAzureFederatedWorkloadTokenProvider(deps:{
       if(!obj||typeof obj!=="object"||Array.isArray(obj))fail("invalid_token_response");
       const value=obj as Record<string,unknown>;
       if(value.token_type!=="Bearer"||typeof value.access_token!=="string"||
-        !TOKEN.test(value.access_token)||typeof value.expires_in!=="number"||
+        (value.access_token.length<20||value.access_token.length>8192||
+          !TOKEN.test(value.access_token))||typeof value.expires_in!=="number"||
         !Number.isSafeInteger(value.expires_in)||
         value.expires_in<60||value.expires_in>86400||
         "refresh_token" in value)

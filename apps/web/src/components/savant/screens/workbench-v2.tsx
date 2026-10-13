@@ -175,14 +175,14 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
 
       <div className={styles.layout}>
         <aside className={styles.tree} aria-label="Indexed skill files">
-          <h2>Repository files</h2>
-          {sourceData ? (
+          <h2>Source files</h2>
+          {sourceData?.mode === "repository" ? (
             <div className={styles.file} aria-current="page">
               <Ic.Repo className={styles.icon} aria-hidden="true" />
               <span>{sourceData.sourcePath}</span>
               {gate.kind === "ready" ? <span className={styles.dirty} title="Draft not yet proposed">*</span> : null}
             </div>
-          ) : <p className={styles.muted}>Source not loaded.</p>}
+          ) : <p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
           <p className={styles.note}>Only the indexed SKILL.md is available through the production source API. Other files and graph dependencies are not editable here.</p>
         </aside>
 

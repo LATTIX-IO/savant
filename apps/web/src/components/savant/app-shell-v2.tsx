@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
@@ -91,8 +92,8 @@ export function SavantShellV2({
       <header className={styles.topbar}>
         <Link className={styles.brand} href={dashboardHref} aria-label="Savant Overview">
           <span className={styles.brandMark} aria-hidden="true">
-            <img className={styles.brandMarkLight} src="/brand/savant-ui-v2-light.svg" alt="" width={24} height={24} />
-            <img className={styles.brandMarkDark} src="/brand/savant-ui-v2-dark.svg" alt="" width={24} height={24} />
+            <Image className={styles.brandMarkLight} src="/brand/savant-ui-v2-light.svg" alt="" width={24} height={24} />
+            <Image className={styles.brandMarkDark} src="/brand/savant-ui-v2-dark.svg" alt="" width={24} height={24} />
           </span><span>SAVANT</span>
         </Link>
         <div className={styles.workspaceMenu}>

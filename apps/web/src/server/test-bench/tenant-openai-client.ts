@@ -29,7 +29,7 @@ export function assertValidTenantOpenAiConnection(
     row.default_model.length>160||!Array.isArray(row.allowed_models)||
     row.allowed_models.some(v=>typeof v!=="string"||v.length>160)||
     (row.allowed_models.length>0&&!row.allowed_models.includes(row.default_model)))
-    err("test_bench_workspace_openai_unavailable");
+    return err("test_bench_workspace_openai_unavailable");
   return {
     organizationId,connectionId:row.id,model:row.default_model,
     fingerprint:row.secret_fingerprint!,

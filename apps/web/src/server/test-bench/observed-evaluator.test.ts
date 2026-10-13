@@ -144,3 +144,55 @@ test("PER-1429: cancellation between cases retains only real observations and av
  assert.deepEqual(seen,["case-1"]);
  assert.equal(stub.counts.nim,1);assert.equal(stub.counts.jev,1);
 });
+
+test("PER-1447: per-phase provider-reported usage is durably acknowledged before following calls",async()=>{
+ const stub=mocks(),seen:{index:number;phase:string;sum:number;model:string}[]=[];
+ await executeObservedCases({
+  skillName:"calc",instructions:"Answer precisely",cases,clients:stub,
+  onUsage:async usage=>{
+    seen.push({index:usage.index,phase:usage.phase,
+      sum:usage.promptTokens+usage.completionTokens,model:usage.model});
+  },
+ });
+ assert.deepEqual(seen,[
+  {index:1,phase:"executor",sum:95,model:"nim-test"},
+  {index:1,phase:"judge",sum:82,model:"jev-test"},
+  {index:2,phase:"executor",sum:95,model:"nim-test"},
+  {index:2,phase:"judge",sum:82,model:"jev-test"},
+ ]);
+});
+test("PER-1447: cancellation during model I/O captures acknowledged executor tokens without judge or score",async()=>{
+ const stub=mocks(),seen:string[]=[];
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Answer exactly",cases,clients:stub,
+  onUsage:async usage=>{seen.push(usage.phase);},
+  beforeJudge:async()=>{throw new ObservedEvaluationError("test_bench_run_cancelled");},
+ }),error=>error instanceof ObservedEvaluationError&&error.code==="test_bench_run_cancelled");
+ assert.deepEqual(seen,["executor"]);
+ assert.equal(stub.counts.nim,1);assert.equal(stub.counts.jev,0);
+});
+test("PER-1447: receipt database outage prevents subsequent billable provider egress",async()=>{
+ const stub=mocks();let calls=0;
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Be accurate",cases,clients:stub,
+  onUsage:async()=>{calls++;throw Error("durable usage receipt unavailable");},
+ }),/durable usage receipt unavailable/);
+ assert.equal(calls,1);assert.equal(stub.counts.nim,1);assert.equal(stub.counts.jev,0);
+});
+test("PER-1447: unverified usage cannot emit a forged positive receipt",async()=>{
+ const stub=mocks();let receipts=0;
+ const invalidExecutor:ChatClient={
+  model:stub.executor.model,
+  complete:async(messages,options)=>({
+    ...await stub.executor.complete(messages,options),
+    usage:{promptTokens:-1,completionTokens:20},
+  }),
+ };
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Answer",cases,clients:{
+   executor:invalidExecutor,judge:stub.judge,
+  },
+  onUsage:async()=>{receipts++;},
+ }),ObservedEvaluationError);
+ assert.equal(receipts,0);assert.equal(stub.counts.jev,0);
+});

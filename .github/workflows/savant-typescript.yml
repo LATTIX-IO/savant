@@ -146,3 +146,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-run-comparison.mjs
         env:
           SAVANT_OBSERVED_COMPARISON_TEST: "1"
+      - name: Verify BYO OpenAI tenant execution, credential rotation and no platform fallback
+        run: pnpm --filter @savant/web exec node ./scripts/verify-tenant-openai-test-bench.mjs
+        env:
+          SAVANT_TENANT_OPENAI_TEST: "1"

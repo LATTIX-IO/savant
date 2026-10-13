@@ -58,7 +58,7 @@ test("PER-1422: creation fingerprints are keyed, tenant-separated and do not rev
 });
 
 test("PER-1425: complete-case receipts have a separate capped encrypted envelope",()=>{
- const observed=JSON.stringify({samples:[{output:"x".repeat(12000)}]});
+ const observed=JSON.stringify({samples:[{output:"x".repeat(20000)}]});
  const blob=encryptTestBenchCases(observed,ctx,env,65536);
  assert.equal(decryptTestBenchCases(blob,ctx,env,65536),observed);
  assert.throws(()=>decryptTestBenchCases(blob,ctx,env),TestBenchError);

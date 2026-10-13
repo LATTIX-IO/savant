@@ -8,6 +8,8 @@ import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import type { SkillListItem } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
+import { useUiV2Mode } from "@/components/savant/ui-v2/mode";
+import { LibraryV2 } from "@/components/savant/screens/library-v2";
 import { SkillCreateModal } from "@/components/savant/skill-create-modal";
 import { fetchSkillList } from "@/lib/control-plane-client";
 import { buildSkillDetailPath } from "@/lib/skill-paths";
@@ -37,7 +39,7 @@ function isPlainLeftClick(event: MouseEvent<HTMLTableRowElement>): boolean {
     && !event.shiftKey;
 }
 
-export function CatalogScreen() {
+function ClassicCatalogScreen() {
   const pathname = usePathname() || "/";
   const router = useRouter();
   const [tierFilter, setTierFilter] = useState<TierFilter>("all");
@@ -458,4 +460,10 @@ function PreviewRow({ label, children }: { label: string; children: React.ReactN
       <div>{children}</div>
     </div>
   );
+}
+
+/** Preserve the original catalog unless the authorized server shell selected UX v2. */
+export function CatalogScreen() {
+  const useV2 = useUiV2Mode();
+  return useV2 ? <LibraryV2 /> : <ClassicCatalogScreen />;
 }

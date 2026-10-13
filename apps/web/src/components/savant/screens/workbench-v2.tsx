@@ -14,7 +14,7 @@ import { proposeFileEdits } from "@/lib/git-connections-client";
 import { parseMarkdownPreviewBlocks } from "@/lib/skill-builder";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
-  getWorkbenchGate, matchesWorkbenchSourceSnapshot,
+  getWorkbenchGate, submitReviewedWorkbenchProposal,
   sourceRevisionLabel, workbenchChangeStats,
 } from "@/lib/ui-v2-workbench-model";
 import styles from "./workbench-v2.module.css";
@@ -115,29 +115,33 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
     setSaveBusy(true);
     setNotice(null);
     try {
-      // Compare the live repository snapshot immediately before requesting a proposal.
-      // API-side review/merge guards still provide the final concurrency boundary.
-      const latest = await fetchSkillSource(skillId, { workspaceSlug });
-      if (liveScopeRef.current !== scope) return; // Navigation invalidated this edit intent.
-      if (!matchesWorkbenchSourceSnapshot(sourceData, latest.data)) {
+      const outcome = await submitReviewedWorkbenchProposal({
+        source: sourceData,
+        draft: editorText,
+        isCurrent: () => liveScopeRef.current === scope,
+        readCurrentSource: async () => {
+          const result = await fetchSkillSource(skillId, { workspaceSlug });
+          return result.data;
+        },
+        createProposal: async input => {
+          const result = await proposeFileEdits(input.repositoryId, {
+            title: `Savant: revise ${input.name} SKILL.md`,
+            body: `Source: ${sourceData.repository}/${input.path}. Submitted from the Savant Workbench for review.`,
+            files: [{ path: input.path, content: input.content }],
+          }, { workspaceSlug });
+          return { id: result.data.id, status: result.data.status };
+        },
+      });
+      if (liveScopeRef.current !== scope) return;
+      if (outcome.kind === "blocked") {
         setReviewed(null);
-        setNotice({
-          scope, kind: "error",
-          message: "The repository source changed after you loaded it. No proposal was created. Reload and reconcile your draft.",
-          proposalId: null,
-        });
+        setNotice({ scope, kind: "error", message: outcome.message, proposalId: null });
         return;
       }
-      const submitted = await proposeFileEdits(sourceData.repositoryId!, {
-        title: `Savant: revise ${sourceData.name} SKILL.md`,
-        body: `Source: ${sourceData.repository}/${sourceData.sourcePath}. Submitted from the Savant Workbench for review.`,
-        files: [{ path: sourceData.sourcePath, content: editorText }],
-      }, { workspaceSlug });
-      if (liveScopeRef.current !== scope) return;
       setNotice({
         scope, kind: "proposal",
-        proposalId: submitted.data.id,
-        message: `Change proposal ${submitted.data.id} created with status ${submitted.data.status}. Source was not committed or merged by this action.`,
+        proposalId: outcome.proposalId,
+        message: `Change proposal ${outcome.proposalId} created with status ${outcome.status}. Source was not committed or merged by this action.`,
       });
       setReviewed(null);
     } catch (error) {

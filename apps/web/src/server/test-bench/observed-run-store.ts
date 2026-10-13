@@ -4,7 +4,7 @@ import {assertGitPermission} from "../git/access-control.ts";
 import {requirePinnedEvaluationCommit} from "../jobs/eval-source-revision.ts";
 import {parseTestBenchCases,TestBenchError,type TestBenchCase} from "./definition-contract.ts";
 import {decryptTestBenchCases,encryptTestBenchCases} from "./definition-crypto.ts";
-import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
+import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,ObservedEvaluationError,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
 import {assertValidTenantOpenAiConnection,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
@@ -150,8 +150,15 @@ export function createObservedRunStore(sql:Sql){
                 and c.status='active' and c.provider_type='openai'
               limit 1
             `: [];
-          const selected=executionSource==="workspace-openai"?
-            assertValidTenantOpenAiConnection(candidate,actor.organizationId):null;
+          let selected:ReturnType<typeof assertValidTenantOpenAiConnection>|null=null;
+          if(executionSource==="workspace-openai"){
+            try{selected=assertValidTenantOpenAiConnection(candidate,actor.organizationId);}
+            catch(error){
+              if(error instanceof ObservedEvaluationError)
+                return invalid("test_bench_workspace_openai_unavailable",503);
+              throw error;
+            }
+          }
           const id=randomUUID();
           const snapshot=encryptTestBenchCases(JSON.stringify(cases),{
             organizationId:actor.organizationId,definitionId:id,

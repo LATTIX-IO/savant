@@ -6,6 +6,7 @@ import {parseTestBenchCases,TestBenchError,type TestBenchCase} from "./definitio
 import {decryptTestBenchCases,encryptTestBenchCases} from "./definition-crypto.ts";
 import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,ObservedEvaluationError,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
 import {assertValidTenantOpenAiConnection,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
+import {readDailyAdmissionQuota,reserveDailyAdmission} from "./observed-admission-quota.ts";
 
 type Sql=import("postgres").Sql;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -164,6 +165,10 @@ export function createObservedRunStore(sql:Sql){
             organizationId:actor.organizationId,definitionId:id,
             revision:def.revision,commitSha,
           });
+          // Count every accepted run, regardless of provider mode. Reserve only
+          // after idempotency and source/credential validation. Transactional
+          // rollback makes failed jobs or failed inserts unable to leak units.
+          await reserveDailyAdmission(tx,actor.organizationId);
           const [row]=await tx<RunRow[]>`
             insert into test_bench_runs(
               id,organization_id,repository_id,definition_id,definition_revision,
@@ -212,6 +217,11 @@ export function createObservedRunStore(sql:Sql){
           invalid("test_bench_run_already_active");
         throw error;
       }
+    },
+    /** Read-only active-workspace UTC admission quota, no credential metadata. */
+    async quota(actor:GitActor){
+      actorAllowed(actor,false);
+      return readDailyAdmissionQuota(sql,actor.organizationId);
     },
     async list(actor:GitActor,skillId:string,definitionId:string):Promise<ObservedRunSummary[]>{
       actorAllowed(actor,false);validateId(definitionId);

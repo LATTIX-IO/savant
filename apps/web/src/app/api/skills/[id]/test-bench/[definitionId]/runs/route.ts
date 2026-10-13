@@ -34,7 +34,7 @@ export async function POST(request:Request,ctx:RouteContext<"/api/skills/[id]/te
     const {id,definitionId}=await ctx.params;
     const input=parseObservedRunAdmission(await readBoundedTestBenchBody(request));
     const provider=readAiServiceConfig();
-    if(!provider.nim||!provider.jev)
+    if(!provider.jev||(input.executionSource==="platform-nim"&&!provider.nim))
       throw new TestBenchError("test_bench_provider_unconfigured",503);
     const result=await createObservedRunStore(getControlPlaneDatabase())
       .start(actor,id,definitionId,input);

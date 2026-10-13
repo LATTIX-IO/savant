@@ -11,6 +11,7 @@ const base={
  id:runId,definitionId,skillId,sourceCommitSha:sha,
  definitionRevision:1,status:"queued",expectedCases:1,completedCases:0,
  samples:[],scorecard:null,totalTokens:0,estimatedCostUsd:0,
+ observedExecutorTokens:0,observedJudgeTokens:0,observedUsageReceipts:0,
  executionModel:null,judgeModel:null,errorCode:null,
  executionSource:"platform-nim",executionModelPinned:null,costAccounting:"platform-estimate",
  createdAt:"2026-10-12T10:00:00Z",updatedAt:"2026-10-12T10:00:00Z",completedAt:null,
@@ -138,4 +139,27 @@ test("PER-1438: client labels the workspace provider explicitly and never carrie
   {...base,executionSource:"malicious-host"},
   {...base,costAccounting:"normalized-qa-proxy"},
  ])assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),ObservedRunClientError);
+});
+
+test("PER-1447: provider usage is acknowledged even when no complete scorecard exists",()=>{
+ const partial={
+  ...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",canceledBy:"owner",
+  observedExecutorTokens:95,observedJudgeTokens:0,observedUsageReceipts:1,
+ };
+ const result=parseObservedRun(partial,skillId,definitionId,sha);
+ assert.equal(result.status,"canceled");
+ assert.equal(result.totalTokens,0,"legacy scored total does not measure partial receipts");
+ assert.equal(result.observedExecutorTokens,95);
+ assert.equal(result.observedJudgeTokens,0);
+ for(const forged of [
+  {...partial,observedExecutorTokens:-1},
+  {...partial,observedJudgeTokens:Infinity},
+  {...partial,observedUsageReceipts:9},
+  {...partial,observedUsageReceipts:0},
+  {...partial,observedExecutorTokens:0,observedUsageReceipts:1},
+  {...partial,observedExecutorTokens:999999999},
+  {...partial,observedExecutorTokens:"95"},
+ ])
+   assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),
+    ObservedRunClientError);
 });

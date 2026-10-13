@@ -16,6 +16,7 @@ type RunRow=PinnedWorkspaceRun&{
   request_id:string;requested_by:string;snapshot_ciphertext:string;
   results_ciphertext:string|null;status:"queued"|"running"|"complete"|"failed"|"canceled";
   expected_cases:number;completed_cases:number;total_tokens:number;estimated_cost_usd:string|number;
+  observed_executor_tokens:number;observed_judge_tokens:number;observed_usage_receipts:number;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
   job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
   cost_accounting:"platform-estimate"|"normalized-qa-proxy";
@@ -26,6 +27,7 @@ export type ObservedRunSummary={
   sourceCommitSha:string;status:RunRow["status"];expectedCases:number;completedCases:number;
   samples:ObservedCase[];scorecard:Record<string,unknown>|null;
   totalTokens:number;estimatedCostUsd:number;executionModel:string|null;judgeModel:string|null;
+  observedExecutorTokens:number;observedJudgeTokens:number;observedUsageReceipts:number;
   errorCode:string|null;canceledBy:string|null;canceledAt:string|null;
   executionSource:RunRow["execution_source"];executionModelPinned:string|null;
   costAccounting:RunRow["cost_accounting"];
@@ -66,6 +68,9 @@ function publicRun(row:RunRow):ObservedRunSummary{
     status:row.status,expectedCases:row.expected_cases,completedCases:row.completed_cases,
     samples:samples(row),scorecard:row.scorecard,totalTokens:row.total_tokens,
     estimatedCostUsd:Number(row.estimated_cost_usd),
+    observedExecutorTokens:row.observed_executor_tokens,
+    observedJudgeTokens:row.observed_judge_tokens,
+    observedUsageReceipts:row.observed_usage_receipts,
     executionModel:row.execution_model,judgeModel:row.judge_model,
     executionSource:row.execution_source,executionModelPinned:row.execution_model_pinned,
     costAccounting:row.cost_accounting,
@@ -371,6 +376,20 @@ export function createObservedRunStore(sql:Sql){
           returning id
         `;
         if(!saved)invalid("test_bench_progress_conflict");
+        // A complete quality score requires BOTH independently acknowledged
+        // provider phases for EVERY observed case. The check and transition
+        // are one transaction: absence/tampering rolls back the score.
+        const [usage]=await tx<{
+          receipts:number;tokens:number;
+        }[]>`
+          select count(*)::int as receipts,
+            coalesce(sum(prompt_tokens+completion_tokens),0)::int as tokens
+          from test_bench_provider_usage_receipts
+          where organization_id=${row.organization_id} and run_id=${row.id}
+        `;
+        if(!usage||usage.receipts!==row.expected_cases*2||
+          usage.tokens!==result.totalTokens)
+          invalid("test_bench_usage_evidence_incomplete");
         await tx`
           insert into audit_events(
             organization_id,actor_type,actor_ref,category,action,target_type,target_ref,payload_redacted

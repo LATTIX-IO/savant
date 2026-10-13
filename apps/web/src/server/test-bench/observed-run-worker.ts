@@ -6,6 +6,7 @@ import type {BackgroundJob,JobQueue} from "../jobs/queue.ts";
 import {TestBenchError} from "./definition-contract.ts";
 import {MAX_SKILL_INSTRUCTIONS_BYTES,ObservedEvaluationError,executeObservedCases} from "./observed-evaluator.ts";
 import {createObservedRunStore} from "./observed-run-store.ts";
+import {createObservedProviderUsageStore} from "./observed-provider-usage.ts";
 import {assertTenantOpenAiCanContinue,createPinnedTenantOpenAiClient,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
@@ -36,6 +37,7 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
     return "released";
   }
   const store=createObservedRunStore(sql);
+  const usageStore=createObservedProviderUsageStore(sql);
   let admitted:Awaited<ReturnType<typeof store.beginJob>>;
   try{
     admitted=await store.beginJob(job.organizationId,job.repositoryId,
@@ -87,6 +89,13 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
       skillName:row.skill_id,instructions,cases,clients:configured,
       beforeCase:ensureNotCanceled,
       beforeJudge:ensureNotCanceled,
+      // Persist each acknowledged provider response before any subsequent
+      // billable network call. A response returned after cancellation remains
+      // factual token evidence, but an unknown provider call is never billed
+      // as zero simply because its receipt is absent.
+      onUsage:async receipt=>{
+        await usageStore.record(row.organization_id,row.id,job.id,receipt);
+      },
       onCase:async(sample,index)=>{
         await store.recordCase(row,sample,index,accepted);
         accepted.push(sample);

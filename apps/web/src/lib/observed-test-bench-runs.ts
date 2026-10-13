@@ -35,6 +35,17 @@ export function parseObservedRun(value:unknown,skillId:string,definitionId:strin
     (x.completedCases as number)>(x.expectedCases as number)||
     !Number.isSafeInteger(x.definitionRevision)||(x.definitionRevision as number)<1||
     !Array.isArray(x.samples)||x.samples.length!==(x.completedCases as number)||
+    !Number.isSafeInteger(x.observedExecutorTokens)||
+    !Number.isSafeInteger(x.observedJudgeTokens)||
+    !Number.isSafeInteger(x.observedUsageReceipts)||
+    (x.observedExecutorTokens as number)<0||
+    (x.observedJudgeTokens as number)<0||
+    (x.observedUsageReceipts as number)<0||
+    (x.observedExecutorTokens as number)>4000000||
+    (x.observedJudgeTokens as number)>4000000||
+    (x.observedUsageReceipts as number)>8||
+    ((x.observedExecutorTokens as number)+(x.observedJudgeTokens as number)===0)
+      !==((x.observedUsageReceipts as number)===0)||
     !Number.isSafeInteger(x.totalTokens)||(x.totalTokens as number)<0||
     typeof x.estimatedCostUsd!=="number"||!Number.isFinite(x.estimatedCostUsd)||
     x.estimatedCostUsd<0||x.estimatedCostUsd>0.05||

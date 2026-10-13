@@ -154,3 +154,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:
           SAVANT_DAILY_QUOTA_TEST: "1"
+      - name: Verify immutable provider-reported token receipts, partial usage and cross-tenant refusal
+        run: pnpm --filter @savant/web exec node ./scripts/verify-observed-provider-usage.mjs
+        env:
+          SAVANT_PROVIDER_USAGE_TEST: "1"

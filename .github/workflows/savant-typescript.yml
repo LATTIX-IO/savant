@@ -116,3 +116,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-test-bench-runs.mjs
         env:
           SAVANT_OBSERVED_TEST_BENCH_TEST: "1"
+      - name: Verify tenant cancellation, queued de-claim, provider stop gates and race safety
+        run: pnpm --filter @savant/web exec node ./scripts/verify-cancel-observed-test-bench-runs.mjs
+        env:
+          SAVANT_OBSERVED_CANCELLATION_TEST: "1"

@@ -19,5 +19,5 @@ export default async function TenantDashboardPage({
   const tenantContext = await resolveTenantMembershipForUser(session?.user, workspaceSlug);
   const overview = await getOverviewResponse(tenantContext);
 
-  return <OverviewScreen auth={auth} authStatus={authStatus} overview={overview.data} />;
+  return <OverviewScreen auth={auth} authStatus={authStatus} overview={overview.data} sourceOfTruth={overview.meta.sourceOfTruth} />;
 }

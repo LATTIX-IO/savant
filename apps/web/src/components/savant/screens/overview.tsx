@@ -8,11 +8,14 @@ import { usePathname } from "next/navigation";
 import type {
   OverviewKpi,
   OverviewPayload,
+  SourceOfTruth,
   PublicAuthProviderSettings,
   ReleaseQueueItem as ReleaseQueueRecord,
 } from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
+import { useUiV2Mode } from "@/components/savant/ui-v2/mode";
+import { OverviewV2 } from "@/components/savant/screens/overview-v2";
 import {
   CommitRef,
   Delta,
@@ -42,7 +45,7 @@ function renderInlineEmptyState(message: string) {
   );
 }
 
-export function OverviewScreen({
+function ClassicOverviewScreen({
   auth,
   authStatus,
   overview,
@@ -617,4 +620,16 @@ function ReleaseQueueCard({ item }: { item: ReleaseQueueRecord }) {
       </div>
     </div>
   );
+}
+
+/** Existing dashboard and signed-in app pages share the same trusted server overview payload. */
+export function OverviewScreen({ auth, authStatus, overview, sourceOfTruth }: {
+  auth: AuthOverview;
+  authStatus: PublicAuthProviderSettings["status"];
+  overview: OverviewPayload;
+  sourceOfTruth?: SourceOfTruth | undefined;
+}) {
+  const useV2 = useUiV2Mode();
+  return useV2 ? <OverviewV2 overview={overview} sourceOfTruth={sourceOfTruth} /> :
+    <ClassicOverviewScreen auth={auth} authStatus={authStatus} overview={overview} />;
 }

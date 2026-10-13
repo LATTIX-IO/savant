@@ -12,7 +12,7 @@ const cases=[{caseId:"a1",kind:"positive" as const,prompt:"PRIVATE_TEST_PROMPT",
  context:null,expectedBehavior:"answer accurately"}];
 function run(id:string,sha:string,quality=0.75):ComparableObservedRun{
  const samples=[{
-  caseId:"a1",kind:"positive" as const,prompt:cases[0].prompt,
+  caseId:"a1",kind:"positive" as const,prompt:cases[0]!.prompt,
   quality,formatCompliance:1,policyCompliance:true,groundingRelevant:true,
   groundingScore:quality,actionability:quality,expectedMet:1,verdict:"pass" as const,
   latencyMs:quality===1?32:52,estimatedCostUsd:0.001,humanRevisionCount:0,
@@ -55,10 +55,10 @@ test("PER-1435: reject same source, same run, cross-tenant/skill and case drift"
  rejected(baseline,{...candidate,sourceCommitSha:"main"});
  rejected(baseline,{...candidate,organizationId:"foreign"});
  rejected(baseline,{...candidate,skillId:"foreign"});
- rejected(baseline,{...candidate,cases:[{...cases[0],prompt:"different"}]});
- rejected(baseline,{...candidate,cases:[{...cases[0],expectedBehavior:"different"}]});
- rejected(baseline,{...candidate,cases:[{...cases[0],context:"different"}]});
- rejected(baseline,{...candidate,cases:[{...cases[0],caseId:"b2"}]});
+ rejected(baseline,{...candidate,cases:[{...cases[0]!,prompt:"different"}]});
+ rejected(baseline,{...candidate,cases:[{...cases[0]!,expectedBehavior:"different"}]});
+ rejected(baseline,{...candidate,cases:[{...cases[0]!,context:"different"}]});
+ rejected(baseline,{...candidate,cases:[{...cases[0]!,caseId:"b2"}]});
 });
 test("PER-1435: reject mismatched model, judge, rubric and historical unfingerprinted scorecards",()=>{
  rejected(baseline,{...candidate,executionModel:"other-executor"});

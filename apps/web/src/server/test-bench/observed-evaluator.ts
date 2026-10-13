@@ -95,13 +95,16 @@ export async function executeObservedCases(
       {role:"system",content:`Evaluate the following chat-only skill instructions. No tools or external actions are available.\n<skill name=${JSON.stringify(skillName)}>\n${instructions}\n</skill>`},
       {role:"user",content:prompt},
     ],{maxTokens:400,temperature:0.2,timeoutMs:15_000});
-    if(!completion.content.trim()||completion.content.length>3_000||
-      !Number.isFinite(completion.latencyMs)||completion.latencyMs<0)
-      reject("test_bench_model_output_invalid");
+    // The provider can report genuine usage even if its model output is
+    // unusable. Acknowledged tokens must precede output/grade validation
+    // rather than being silently discarded with a failed run.
     const executedTokens=tokens(completion.usage);
     await input.onUsage?.({index:index+1,phase:"executor",model:completion.model,
       promptTokens:completion.usage.promptTokens,
       completionTokens:completion.usage.completionTokens});
+    if(!completion.content.trim()||completion.content.length>3_000||
+      !Number.isFinite(completion.latencyMs)||completion.latencyMs<0)
+      reject("test_bench_model_output_invalid");
     totalTokens+=executedTokens;
     estimatedCostUsd=totalTokens*perMillion/1_000_000;
     if(totalTokens>ceiling||estimatedCostUsd>maxUsd)reject("test_bench_budget_exceeded");

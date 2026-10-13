@@ -9,6 +9,7 @@ import { Fragment, type ReactNode, useEffect, useState } from "react";
 import { Ic } from "@/components/savant/icons";
 import { useTweaks } from "@/components/savant/tweaks-context";
 import { UiV2Surface } from "@/components/savant/ui-v2";
+import { UiV2ModeProvider } from "@/components/savant/ui-v2/mode";
 import type { WorkspaceMembershipSummary, WorkspaceSummary } from "@/components/savant/app-shell";
 import type { AuthViewer } from "@/lib/auth0-session";
 import { fetchSkillDetail } from "@/lib/control-plane-client";
@@ -185,7 +186,7 @@ export function SavantShellV2({
         </div>
       </aside>
       <main id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
-        {children}
+        <UiV2ModeProvider workspaceSlug={workspace.slug}>{children}</UiV2ModeProvider>
       </main>
     </UiV2Surface>
   );

@@ -13,6 +13,9 @@ export type ComparableObservedRun={
   samples:readonly ObservedCase[];scorecard:Record<string,unknown>|null;
   executionModel:string|null;judgeModel:string|null;completedAt:string|null;
   estimatedCostUsd:number;totalTokens:number;
+  executionSource:"platform-nim"|"workspace-openai";
+  executionConnectionId:string|null;executionSecretFingerprint:string|null;
+  costAccounting:"platform-estimate"|"normalized-qa-proxy";
 };
 export type ComparableRunMetadata={
   id:string;definitionId:string;sourceCommitSha:string;
@@ -101,6 +104,10 @@ export function compareObservedRuns(
     !baseline.skillId||baseline.skillId!==candidate.skillId||
     baseline.id===candidate.id||baseline.sourceCommitSha===candidate.sourceCommitSha||
     baseline.executionModel!==candidate.executionModel||
+    baseline.executionSource!==candidate.executionSource||
+    baseline.costAccounting!==candidate.costAccounting||
+    baseline.executionConnectionId!==candidate.executionConnectionId||
+    baseline.executionSecretFingerprint!==candidate.executionSecretFingerprint||
     baseline.judgeModel!==candidate.judgeModel||
     baseline.cases.length!==candidate.cases.length||
     JSON.stringify(baseline.cases)!==JSON.stringify(candidate.cases))

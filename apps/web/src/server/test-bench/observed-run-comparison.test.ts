@@ -26,6 +26,8 @@ function run(id:string,sha:string,quality=0.75):ComparableObservedRun{
     scoringContract:OBSERVED_SCORING_FINGERPRINT},
   executionModel:"nim-qa",judgeModel:"jev-qa",completedAt:"2026-10-13T09:00:00Z",
   estimatedCostUsd:0.001,totalTokens:240,
+  executionSource:"platform-nim",executionConnectionId:null,
+  executionSecretFingerprint:null,costAccounting:"platform-estimate",
  };
 }
 const baseline=run("base","a".repeat(40));
@@ -62,6 +64,16 @@ test("PER-1435: reject same source, same run, cross-tenant/skill and case drift"
 });
 test("PER-1435: reject mismatched model, judge, rubric and historical unfingerprinted scorecards",()=>{
  rejected(baseline,{...candidate,executionModel:"other-executor"});
+ rejected(baseline,{...candidate,executionSource:"workspace-openai",
+   costAccounting:"normalized-qa-proxy",executionConnectionId:"tenant-conn"});
+ rejected(baseline,{...candidate,costAccounting:"normalized-qa-proxy"});
+ const byok={...baseline,executionSource:"workspace-openai" as const,
+   executionConnectionId:"22222222-2222-4222-8222-222222222222",
+   executionSecretFingerprint:"a".repeat(64),
+   costAccounting:"normalized-qa-proxy" as const};
+ rejected(byok,{...candidate,...byok,id:candidate.id,
+   sourceCommitSha:candidate.sourceCommitSha,
+   executionSecretFingerprint:"b".repeat(64)});
  rejected(baseline,{...candidate,judgeModel:"other-judge"});
  rejected(baseline,{...candidate,scorecard:{...candidate.scorecard,
     scoringContract:"old-unknown-rubric"}});

@@ -54,3 +54,17 @@ test("PER-1429: cancellation route requires Origin, active tenant, role and boun
  assert.match(worker,/beforeJudge:ensureNotCanceled/);
  assert.doesNotMatch(route,/NVIDIA_NIM_API_KEY|JEV_API_KEY|process\.env/);
 });
+
+test("PER-1438: Test Bench provider choices and normalized-cost disclosure are explicit",async()=>{
+ const panel=await readFile(new URL("./observed-test-bench-run-panel.tsx",import.meta.url),"utf8");
+ const worker=await readFile(new URL("../../../server/test-bench/observed-run-worker.ts",import.meta.url),"utf8");
+ assert.match(panel,/Workspace default OpenAI \(tenant key\)/);
+ assert.match(panel,/Savant NVIDIA NIM \(platform key\)/);
+ assert.match(panel,/executionSource/);
+ assert.match(panel,/actual\s+provider charges are not capped/);
+ assert.match(panel,/normalized QA cost proxy/);
+ assert.match(worker,/createPinnedTenantOpenAiClient/);
+ assert.match(worker,/if\(row.execution_source==="workspace-openai"\)/);
+ assert.match(worker,/assertTenantOpenAiCanContinue/);
+ assert.doesNotMatch(worker,/fallbackToNim|fallbackToPlatform|process\.env\.OPENAI_API_KEY/);
+});

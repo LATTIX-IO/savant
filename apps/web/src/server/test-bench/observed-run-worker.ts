@@ -6,6 +6,7 @@ import type {BackgroundJob,JobQueue} from "../jobs/queue.ts";
 import {TestBenchError} from "./definition-contract.ts";
 import {MAX_SKILL_INSTRUCTIONS_BYTES,ObservedEvaluationError,executeObservedCases} from "./observed-evaluator.ts";
 import {createObservedRunStore} from "./observed-run-store.ts";
+import {assertTenantOpenAiCanContinue,createPinnedTenantOpenAiClient,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
 function safeFailure(error:unknown):string{
@@ -17,7 +18,7 @@ function safeFailure(error:unknown):string{
 type Dependencies={
   sql:Sql;job:BackgroundJob;queue:Pick<JobQueue,"release">;deadline:number;
   readInstructions:(organizationId:string,repositoryId:string,sourcePath:string,commitSha:string)=>Promise<string|null>;
-  clients:()=>{executor:ChatClient;judge:JudgeClient}|null;
+  clients:(row:PinnedWorkspaceRun)=>Promise<{executor:ChatClient;judge:JudgeClient}|null>|{executor:ChatClient;judge:JudgeClient}|null;
 };
 /**
  * A retry after provider I/O may double-bill or give a different answer.
@@ -48,6 +49,8 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
   const ensureNotCanceled=async()=>{
     if(!await store.isRunning(row.organization_id,row.id,job.id))
       throw new ObservedEvaluationError("test_bench_run_cancelled");
+    if(row.execution_source==="workspace-openai")
+      await assertTenantOpenAiCanContinue(sql,row);
   };
   try{
     await ensureNotCanceled();
@@ -73,7 +76,7 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
     `;
     if(!actor?.authorized)
       throw new ObservedEvaluationError("test_bench_actor_revoked");
-    const configured=deps.clients();
+    const configured=await deps.clients(row);
     if(!configured)throw new ObservedEvaluationError("test_bench_provider_unconfigured");
     // Read the *admission-time* pinned commit, never today's default branch.
     const instructions=await deps.readInstructions(row.organization_id,row.repository_id,
@@ -111,9 +114,16 @@ export async function runObservedTestBenchJob(
         throw new ObservedEvaluationError("test_bench_source_mismatch");
       return repository.read(`${sourcePath}/SKILL.md`,MAX_SKILL_INSTRUCTIONS_BYTES);
     },
-    clients:()=>{
+    clients:async(row)=>{
       const config=readAiServiceConfig();
-      if(!config.nim||!config.jev)return null;
+      if(!config.jev)return null;
+      // Explicit workspace mode NEVER falls back to Savant's NIM credential.
+      if(row.execution_source==="workspace-openai")
+        return {
+          executor:await createPinnedTenantOpenAiClient(ctx.sql,row),
+          judge:createJevClient(config.jev),
+        };
+      if(!config.nim)return null;
       return {
         executor:createNimChatClient(config.nim,config.nim.executionModel),
         judge:createJevClient(config.jev),

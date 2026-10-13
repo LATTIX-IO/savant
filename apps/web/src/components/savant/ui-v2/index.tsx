@@ -42,7 +42,7 @@ export function UiV2Button({
   variant?: ButtonVariant; size?: "normal" | "small";
 }) {
   const variants: Record<ButtonVariant, string> = {
-    default: "", primary: styles.primary, tertiary: styles.tertiary, danger: styles.danger,
+    default: "", primary: styles.primary ?? "", tertiary: styles.tertiary ?? "", danger: styles.danger ?? "",
   };
   return (
     <button {...props} type={type} className={`${styles.button} ${variants[variant]} ${size === "small" ? styles.small : ""} ${className}`.trim()}>
@@ -66,8 +66,8 @@ export function UiV2Status({
   state, label,
 }: { state: UiV2StatusKind; label?: string }) {
   const classes: Record<UiV2StatusKind, string> = {
-    ready: styles.ready, running: styles.running, warning: styles.warning,
-    failed: styles.failed, planned: styles.planned, simulated: styles.simulated,
+    ready: styles.ready ?? "", running: styles.running ?? "", warning: styles.warning ?? "",
+    failed: styles.failed ?? "", planned: styles.planned ?? "", simulated: styles.simulated ?? "",
     unavailable: "",
   };
   return <span className={`${styles.status} ${classes[state]}`.trim()}>{uiV2StatusLabel(state, label)}</span>;

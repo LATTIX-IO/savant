@@ -48,7 +48,8 @@ test("v2 primitives are pure presentation components, with no storage, network, 
   assert.doesNotMatch(component, /dangerouslySetInnerHTML|\.innerHTML\s*=|localStorage|sessionStorage|fetch\s*\(|eval\s*\(/);
   assert.doesNotMatch(component, /<a\s+href=|window\.location/);
   assert.match(component, /isSafeUiV2InternalHref/);
-  assert.match(component, /type="button"/);
+  assert.match(component, /type = "button"/);
+  assert.match(component, /<button \\.{3}props} type=\\{type\\}/);
   assert.match(css, /\.surface\s*\{/);
   assert.doesNotMatch(css, /^\s*(?:html|body|:root)\s*\{/m);
 });

@@ -2,6 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import {extractWorkspaceSlugFromPathname} from "@/lib/tenant-paths";
+import {ObservedTestBenchRunPanel} from "./observed-test-bench-run-panel";
 import {
   listPersistedTestBenches,createPersistedTestBench,updatePersistedTestBench,
   archivePersistedTestBench,
@@ -115,8 +116,8 @@ export function PersistedTestBench({
       </div>
       <div className="panel-bd" style={{display:"grid",gap:14}}>
         <p className="subtle" style={{margin:0,fontSize:12}}>
-          This editor saves case specifications. Running these cases and generating evidence
-          requires the next execution increment; saving does not score or publish anything.
+          Saved case specifications are encrypted and versioned. Run the saved revision
+          below through the chat-only provider evaluator; saving alone does not score or publish anything.
         </p>
         <div className="row" style={{gap:8,flexWrap:"wrap"}}>
           <button type="button" className="btn btn-sm btn-ghost" onClick={()=>void refresh()} disabled={loading||busy}>
@@ -196,6 +197,10 @@ export function PersistedTestBench({
         </div>
         {(!slug||error)?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{slug?error:"A workspace is required to load Test Bench cases."}</p>:null}
         {notice?<p role="status" style={{fontSize:12,margin:0}}>{notice}</p>:null}
+        {selected&&slug?(
+          <ObservedTestBenchRunPanel key={selected.id} skillId={skillId}
+            definition={selected} workspaceSlug={slug} readOnly={readOnly}/>
+        ):null}
       </div>
     </section>
   );

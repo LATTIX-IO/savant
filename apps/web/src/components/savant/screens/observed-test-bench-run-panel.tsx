@@ -1,0 +1,140 @@
+"use client";
+
+import {useEffect,useRef,useState} from "react";
+import {
+  listObservedTestBenchRuns,startObservedTestBenchRun,
+} from "@/lib/observed-test-bench-runs";
+import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
+import type {TestBenchDefinition} from "@/server/test-bench/definition-contract";
+
+/** Displays ONLY server-confirmed NIM/Jev chat-only observations, never synthetic scores. */
+export function ObservedTestBenchRunPanel({
+  skillId,definition,workspaceSlug,readOnly,
+}:{
+  skillId:string;definition:TestBenchDefinition;workspaceSlug:string;readOnly:boolean;
+}){
+  const [runs,setRuns]=useState<ObservedRunSummary[]>([]);
+  const [loading,setLoading]=useState(true);
+  const [starting,setStarting]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+  const requestId=useRef<string|null>(null);
+  const latest=runs[0]??null;
+  const active=runs.some(run=>run.status==="queued"||run.status==="running");
+  const canRun=!readOnly&&definition.cases.length<=4&&!active&&!starting;
+
+  useEffect(()=>{
+    const controller=new AbortController();
+    void listObservedTestBenchRuns(skillId,definition.id,definition.sourceCommitSha,{
+      workspaceSlug,signal:controller.signal,
+    }).then(value=>{
+      if(!controller.signal.aborted){setRuns(value);setError(null);}
+    }).catch(()=>{
+      if(!controller.signal.aborted)setError("Unable to load persisted observed runs.");
+    }).finally(()=>{
+      if(!controller.signal.aborted)setLoading(false);
+    });
+    return ()=>controller.abort();
+  },[skillId,definition.id,definition.sourceCommitSha,definition.revision,workspaceSlug]);
+
+  useEffect(()=>{
+    if(!active)return;
+    const controller=new AbortController();
+    let busy=false;
+    const interval=window.setInterval(()=>{
+      if(busy)return;
+      busy=true;
+      void listObservedTestBenchRuns(skillId,definition.id,definition.sourceCommitSha,{
+        workspaceSlug,signal:controller.signal,
+      }).then(value=>{
+        if(!controller.signal.aborted){setRuns(value);setError(null);}
+      }).catch(()=>{
+        if(!controller.signal.aborted)setError("Observed run status refresh failed.");
+      }).finally(()=>{busy=false;});
+    },5_000);
+    return ()=>{window.clearInterval(interval);controller.abort();};
+  },[active,skillId,definition.id,definition.sourceCommitSha,workspaceSlug]);
+
+  async function run(){
+    if(!canRun)return;
+    setStarting(true);setError(null);
+    try{
+      const accepted=await startObservedTestBenchRun(
+        skillId,definition.id,definition.sourceCommitSha,{
+          requestId:requestId.current??(requestId.current=crypto.randomUUID()),
+          expectedRevision:definition.revision,
+        },{workspaceSlug},
+      );
+      requestId.current=null;
+      setRuns(current=>[accepted,...current.filter(x=>x.id!==accepted.id)].slice(0,15));
+    }catch{
+      // Retain the request ID: a retry can safely reconcile an ambiguous 202.
+      setError("Live execution was not accepted or confirmed. Check provider access, the case limit, revision or workspace permissions.");
+    }finally{setStarting(false);}
+  }
+  const overall=latest?.status==="complete"&&latest.scorecard&&
+    typeof latest.scorecard.overallScore==="number"?
+    latest.scorecard.overallScore:null;
+  return (
+    <div style={{display:"grid",gap:10,borderTop:"1px solid var(--rule)",paddingTop:14}}>
+      <div className="row" style={{alignItems:"center",justifyContent:"space-between",gap:8,flexWrap:"wrap"}}>
+        <strong style={{fontSize:12}}>Observed chat-only execution</strong>
+        <span className="chip chip-paper">Provider-backed · not harness/tool verification</span>
+      </div>
+      <p className="subtle" style={{fontSize:12,margin:0,lineHeight:1.5}}>
+        Runs the saved revision against NVIDIA NIM and grades each response with Jev.
+        Up to four cases per run. This does not execute MCP tools, scripts or customer-owned harnesses.
+        Results are provisional and do not constitute an automatic release approval.
+      </p>
+      {definition.cases.length>4?(
+        <p className="subtle" style={{fontSize:12,margin:0}}>
+          This suite contains {definition.cases.length} cases. The current bounded executor supports
+          at most four; split the suite before running it.
+        </p>
+      ):null}
+      <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+        <button type="button" className="btn btn-sm btn-primary" disabled={!canRun||loading}
+          onClick={()=>void run()}>
+          {starting?"Requesting execution…":active?"Run in progress":"Run saved revision (real)"}
+        </button>
+        {loading?<span className="subtle">Reading persisted runs…</span>:null}
+      </div>
+      {error?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{error}</p>:null}
+      {latest?(
+        <div role="status" aria-live="polite" style={{display:"grid",gap:7}}>
+          <div className="row" style={{alignItems:"center",justifyContent:"space-between"}}>
+            <strong style={{fontSize:12}}>Latest observed run</strong>
+            <span className="chip chip-paper">{latest.status}</span>
+          </div>
+          <span className="mono" style={{fontSize:11,overflowWrap:"anywhere"}}>
+            {latest.id} · {latest.completedCases}/{latest.expectedCases} observed cases
+          </span>
+          {latest.status==="failed"?(
+            <p className="subtle" style={{fontSize:12,margin:0}}>
+              The run failed. Only {latest.completedCases} case(s) were observed; there is no aggregate score.
+              {latest.errorCode?` Diagnostic: ${latest.errorCode}`:""}
+            </p>
+          ):null}
+          {overall!==null?(
+            <p style={{fontSize:12,margin:0}}>
+              Provisional complete-case score: {overall.toFixed(1)}/100 · estimated model cost
+              ${latest.estimatedCostUsd.toFixed(6)} USD
+            </p>
+          ):null}
+          {latest.samples.map(sample=>(
+            <div key={sample.caseId}
+              style={{padding:10,border:"1px solid var(--rule)",display:"grid",gap:5}}>
+              <span style={{fontSize:12}}>
+                {sample.caseId} · {sample.verdict} · observed response {sample.latencyMs}ms
+              </span>
+              <div style={{fontSize:11,color:"var(--ink-2)",whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>
+                {sample.output}
+              </div>
+            </div>
+          ))}
+        </div>
+      ):(!loading?<p className="subtle" style={{fontSize:12,margin:0}}>
+        No recorded execution yet. Saving a case suite does not create a test result.
+      </p>:null)}
+    </div>
+  );
+}

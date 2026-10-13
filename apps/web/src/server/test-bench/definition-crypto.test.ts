@@ -56,3 +56,13 @@ test("PER-1422: creation fingerprints are keyed, tenant-separated and do not rev
  assert.notEqual(left,testBenchRequestDigest(JSON.stringify({skillId:"skill-1",prompt:"changed"}),ctx.organizationId,env));
  assert.doesNotMatch(left,/sensitive text/);
 });
+
+test("PER-1425: complete-case receipts have a separate capped encrypted envelope",()=>{
+ const observed=JSON.stringify({samples:[{output:"x".repeat(20000)}]});
+ const blob=encryptTestBenchCases(observed,ctx,env,65536);
+ assert.equal(decryptTestBenchCases(blob,ctx,env,65536),observed);
+ assert.throws(()=>decryptTestBenchCases(blob,ctx,env),TestBenchError);
+ assert.throws(()=>encryptTestBenchCases(observed,ctx,env),TestBenchError);
+ assert.throws(()=>encryptTestBenchCases("y".repeat(65537),ctx,env,65536),TestBenchError);
+ assert.throws(()=>decryptTestBenchCases(blob,{...ctx,organizationId:"other"},env,65536),TestBenchError);
+});

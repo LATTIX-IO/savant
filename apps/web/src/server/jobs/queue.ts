@@ -6,7 +6,7 @@ type Sql = import("postgres").Sql;
  * of time) is claimable again, up to MAX_ATTEMPTS.
  */
 
-export type JobKind = "eval_generation" | "safety_scan" | "hub_sync" | "hub_hydrate" | "hub_safety" | "hub_eval";
+export type JobKind = "eval_generation" | "safety_scan" | "hub_sync" | "hub_hydrate" | "hub_safety" | "hub_eval" | "test_bench_run";
 
 export type BackgroundJob = {
   id: string;
@@ -84,7 +84,7 @@ export function createJobQueue(sql: Sql) {
           where status = 'queued' or (status = 'running' and lease_until < now())
           -- Tenant work first, then cheap catalog steps that unblock others; slow live evals last.
           order by case kind
-              when 'safety_scan' then 0 when 'eval_generation' then 1
+              when 'test_bench_run' then 0 when 'safety_scan' then 1 when 'eval_generation' then 2
               when 'hub_sync' then 2 when 'hub_hydrate' then 3 when 'hub_safety' then 4
               else 5 end,
             created_at asc

@@ -173,6 +173,13 @@ export function ObservedTestBenchRunPanel({
             {latest.id} · {latest.completedCases}/{latest.expectedCases} observed cases ·
             {" "}{latest.executionSource==="workspace-openai"?"Workspace OpenAI":"Savant NIM"}
           </span>
+          <p className="subtle" style={{fontSize:12,margin:0}}>
+            Acknowledged provider usage: {latest.observedExecutorTokens.toLocaleString()} executor tokens
+            {" · "}{latest.observedJudgeTokens.toLocaleString()} judge tokens
+            {" · "}{latest.observedUsageReceipts} provider receipt(s).
+            These are observed provider reports, not an invoice. Missing receipts can
+            still mean a network call incurred charges.
+          </p>
           {latest.status==="canceled"?(
             <p className="subtle" style={{fontSize:12,margin:0}}>
               Run canceled. {latest.completedCases} case(s) were observed before cancellation;

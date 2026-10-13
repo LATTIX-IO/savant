@@ -46,7 +46,7 @@ export function LibraryV2() {
     if (!scope) return;
     const controller = new AbortController();
     let active = true;
-    setSkills({ scope, phase: "loading", data: null, error: null });
+    queueMicrotask(() => { if (active) setSkills({ scope, phase: "loading", data: null, error: null }); });
     void fetchSkillList(undefined, { workspaceSlug: scope, signal: controller.signal })
       .then(response => {
         if (active) setSkills({ scope, phase: "ready", data: response.data, error: null });
@@ -63,7 +63,7 @@ export function LibraryV2() {
     if (!scope) return;
     const controller = new AbortController();
     let active = true;
-    setRepositories({ scope, phase: "loading", data: null, error: null });
+    queueMicrotask(() => { if (active) setRepositories({ scope, phase: "loading", data: null, error: null }); });
     void fetchRepositoryList({ workspaceSlug: scope, signal: controller.signal })
       .then(response => {
         if (active) setRepositories({ scope, phase: "ready", data: response.data, error: null });

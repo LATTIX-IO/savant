@@ -7,7 +7,7 @@ export class ObservedRunClientError extends Error{
 export type ObservedClientOptions={workspaceSlug:string;fetcher?:typeof fetch;signal?:AbortSignal};
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const SHA=/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
-const STATUSES=new Set(["queued","running","complete","failed"]);
+const STATUSES=new Set(["queued","running","complete","failed","canceled"]);
 function record(value:unknown):Record<string,unknown>{
   if(!value||typeof value!=="object"||Array.isArray(value))
     throw new ObservedRunClientError("Invalid observed Test Bench response.");
@@ -45,6 +45,10 @@ export function parseObservedRun(value:unknown,skillId:string,definitionId:strin
     throw new ObservedRunClientError("Incomplete observed case evidence.");
   if(x.status!=="complete"&&x.scorecard!==null)
     throw new ObservedRunClientError("Incomplete runs cannot carry scored release evidence.");
+  if(x.status==="canceled"&&(
+    typeof x.canceledAt!=="string"||!Number.isFinite(Date.parse(x.canceledAt))||
+    typeof x.canceledBy!=="string"||x.canceledBy.length<1))
+    throw new ObservedRunClientError("Canceled run lacks terminal audit provenance.");
   for(const result of x.samples){
     const s=record(result);
     if(typeof s.caseId!=="string"||typeof s.output!=="string"||
@@ -85,4 +89,25 @@ export async function startObservedTestBenchRun(
   if(response.status!==202&&response.status!==200)
     throw new ObservedRunClientError("The observed run was not accepted.");
   return parseObservedRun(response.data,skillId,definitionId,commitSha);
+}
+
+/** Cancellation is an exact-run, exact-revision, same-origin mutation.
+ * It never embeds provider credentials, raw prompts or a client-selected actor.
+ */
+export async function cancelObservedTestBenchRun(
+  skillId:string,definitionId:string,commitSha:string,runId:string,
+  expectedRevision:number,options:ObservedClientOptions,
+):Promise<ObservedRunSummary>{
+  const base=path(skillId,definitionId,options);
+  if(!UUID.test(runId)||!Number.isSafeInteger(expectedRevision)||expectedRevision<1)
+    throw new ObservedRunClientError("Invalid cancellation target.");
+  const endpoint=base.replace("/runs?","/runs/"+encodeURIComponent(runId)+"/cancel?");
+  if(endpoint===base)throw new ObservedRunClientError("Invalid cancellation path.");
+  const response=await fetchJson(endpoint,"POST",options,{expectedRevision});
+  if(response.status!==200&&response.status!==202)
+    throw new ObservedRunClientError("Cancellation was not acknowledged.");
+  const result=parseObservedRun(response.data,skillId,definitionId,commitSha);
+  if(result.id!==runId||result.definitionRevision!==expectedRevision||result.status!=="canceled")
+    throw new ObservedRunClientError("Cancellation did not match the requested run.");
+  return result;
 }

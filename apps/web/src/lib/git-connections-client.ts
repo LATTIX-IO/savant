@@ -114,8 +114,8 @@ export function proposeAssessmentFixes(repositoryId: string, fingerprints: strin
   return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/proposals`, { method: "POST", body: JSON.stringify({ fingerprints }) });
 }
 
-export function proposeFileEdits(repositoryId: string, input: { title: string; body?: string; files: Array<{ path: string; content: string }> }): Promise<ChangeProposalResponse> {
-  return requestJson(`/api/repositories/${encodeURIComponent(repositoryId)}/proposals`, { method: "POST", body: JSON.stringify(input) });
+export function proposeFileEdits(repositoryId: string, input: { title: string; body?: string; files: Array<{ path: string; content: string }> }, options?: { workspaceSlug?: string }): Promise<ChangeProposalResponse> {
+  return requestJson(buildTenantScopedControlPlanePath(`/api/repositories/${encodeURIComponent(repositoryId)}/proposals`, options), { method: "POST", body: JSON.stringify(input) });
 }
 
 export function approveChangeProposal(proposalId: string): Promise<ChangeProposalResponse> {

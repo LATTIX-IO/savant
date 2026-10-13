@@ -16,6 +16,8 @@ import type {
 } from "@savant/types";
 
 import { Ic, ProviderIcon } from "@/components/savant/icons";
+import { useUiV2Mode } from "@/components/savant/ui-v2/mode";
+import { WorkbenchV2 } from "./workbench-v2";
 import {
   CommitRef,
   Delta,
@@ -141,7 +143,7 @@ function queuedRecommendationChipClass(recommendation: QueuedSkillRecommendation
   return "chip chip-moss";
 }
 
-export function SkillScreen({ skillId }: { skillId: string }) {
+function ClassicSkillScreen({ skillId }: { skillId: string }) {
   const [tab, setTab] = useState<TabKey>("builder");
   const pathname = usePathname() || "/";
   const catalogHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
@@ -1703,4 +1705,10 @@ function renderEvaluationStatusChip(status: EvalRunSummary["status"]) {
     default:
       return <span className="chip chip-moss">complete</span>;
   }
+}
+
+/** V2 uses reviewed source proposals; the classic skill detail remains the default. */
+export function SkillScreen({ skillId }: { skillId: string }) {
+  const useV2 = useUiV2Mode();
+  return useV2 ? <WorkbenchV2 skillId={skillId} /> : <ClassicSkillScreen skillId={skillId} />;
 }

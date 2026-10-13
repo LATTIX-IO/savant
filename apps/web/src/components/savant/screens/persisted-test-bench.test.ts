@@ -11,7 +11,7 @@ test("PER-1422: workspace test bench UI uses durable auth APIs, never synthetic 
  assert.match(panel,/updatePersistedTestBench\(skillId,/);
  assert.match(panel,/archivePersistedTestBench\(skillId,/);
  assert.doesNotMatch(panel,/simulateCustomEvaluationTest|setCustomResult|passRate|clientGeneratedScore/);
- assert.match(panel,/saving does not score|saving does not|saving.*nothing/i);
+ assert.match(panel,/saving alone does not score or publish anything/i);
 });
 test("PER-1422: tenant and mutation-origin enforcement on all server CRUD",async()=>{
  const base=await readFile(new URL("../../../app/api/skills/[id]/test-bench/route.ts",import.meta.url),"utf8");

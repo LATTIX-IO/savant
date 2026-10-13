@@ -3,6 +3,7 @@
 import {useEffect,useRef,useState} from "react";
 import {extractWorkspaceSlugFromPathname} from "@/lib/tenant-paths";
 import {ObservedTestBenchRunPanel} from "./observed-test-bench-run-panel";
+import {ObservedRunComparisonPanel} from "./observed-run-comparison-panel";
 import {
   listPersistedTestBenches,createPersistedTestBench,updatePersistedTestBench,
   archivePersistedTestBench,
@@ -201,6 +202,7 @@ export function PersistedTestBench({
           <ObservedTestBenchRunPanel key={selected.id} skillId={skillId}
             definition={selected} workspaceSlug={slug} readOnly={readOnly}/>
         ):null}
+        {slug?<ObservedRunComparisonPanel skillId={skillId} workspaceSlug={slug}/>:null}
       </div>
     </section>
   );

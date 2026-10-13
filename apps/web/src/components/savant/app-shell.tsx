@@ -6,6 +6,7 @@ import type { Route } from "next";
 import { Fragment, type ReactNode, useEffect, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
+import { SavantShellV2 } from "@/components/savant/app-shell-v2";
 import { OnboardingProvider } from "@/components/savant/onboarding-context";
 import { OnboardingModal } from "@/components/savant/onboarding-modal";
 import { SavantLogo } from "@/components/savant/savant-logo";
@@ -26,14 +27,14 @@ import {
 } from "@/lib/tenant-paths";
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
 
-type WorkspaceSummary = {
+export type WorkspaceSummary = {
   name: string;
   short: string;
   env: string;
   slug: string;
 };
 
-type WorkspaceMembershipSummary = WorkspaceSummary & {
+export type WorkspaceMembershipSummary = WorkspaceSummary & {
   isDefault: boolean;
   isLastUsed: boolean;
 };
@@ -44,23 +45,31 @@ export function SavantShell({
   shellData,
   workspace,
   memberships,
+  useV2 = false,
 }: {
   children: ReactNode;
   viewer: AuthViewer;
   shellData?: SavantShellData;
   workspace?: WorkspaceSummary;
   memberships?: WorkspaceMembershipSummary[];
+  useV2?: boolean;
 }) {
   return (
     <TweaksProvider>
       <OnboardingProvider>
+        {useV2 && workspace && memberships ? (
+          <SavantShellV2 viewer={viewer} shellData={shellData} workspace={workspace} memberships={memberships}>
+            {children}
+          </SavantShellV2>
+        ) : (
         <div className="app">
           <Sidebar viewer={viewer} {...(shellData ? { shellData } : {})} />
           <TopBar viewer={viewer} {...(workspace ? { workspace } : {})} {...(memberships ? { memberships } : {})} />
           <div className="page">{children}</div>
-          <OnboardingModal />
-          <TweaksPanel />
         </div>
+        )}
+        <OnboardingModal />
+        <TweaksPanel />
       </OnboardingProvider>
     </TweaksProvider>
   );

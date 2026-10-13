@@ -6,6 +6,7 @@ import { auth0 } from "@/lib/auth0";
 import { buildAuthViewer } from "@/lib/auth0-session";
 import { NOINDEX_METADATA } from "@/lib/seo-metadata";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
+import { isUiV2EnabledForWorkspace } from "@/lib/ui-v2-shell-model";
 import { getSavantShellData } from "@/server/control-plane/shell-data";
 import {
   resolveTenantMembershipForUser,
@@ -66,11 +67,18 @@ export default async function TenantWorkspaceLayout({
   }
 
   const shellData = await getSavantShellData(tenantContext);
+  // Release cohort is selected only *after* the tenant membership/authorization check.
+  // Unscoped application routes retain the original shell as the rollback path.
+  const useV2 = isUiV2EnabledForWorkspace(tenantContext.tenant.workspaceSlug, {
+    enabled: process.env.SAVANT_UI_V2_ENABLED,
+    workspaces: process.env.SAVANT_UI_V2_WORKSPACES,
+  });
 
   return (
     <SavantShell
       viewer={buildAuthViewer(session?.user)}
       shellData={shellData}
+      useV2={useV2}
       workspace={{
         name: tenantContext.tenant.workspaceName,
         short: buildWorkspaceShortLabel(tenantContext.tenant.workspaceName),

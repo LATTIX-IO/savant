@@ -1,0 +1,274 @@
+/* UX-P2: all styles are opt-in and local to the v2 application surface. */
+.shell {
+  --sv2-shell-nav: 216px;
+  display: grid;
+  grid-template-columns: var(--sv2-shell-nav) minmax(0, 1fr);
+  grid-template-rows: 4px 48px minmax(0, 1fr);
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  background: var(--sv2-bg);
+}
+.skipLink {
+  position: fixed;
+  top: -100px;
+  left: 12px;
+  z-index: 150;
+  padding: 8px 12px;
+  border: 2px solid var(--sv2-focus);
+  background: var(--sv2-elevated);
+  color: var(--sv2-fg);
+}
+.skipLink:focus { top: 8px; }
+.topband { grid-column: 1 / -1; background: var(--sv2-accent); }
+.topbar {
+  grid-column: 1 / -1;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--sv2-border);
+  background: var(--sv2-surface);
+  color: var(--sv2-fg);
+  position: relative;
+  z-index: 20;
+}
+.brand { display: flex; align-items: center; gap: 8px; flex: none; color: var(--sv2-fg); text-decoration: none; font-weight: 600; font-size: 15px; }
+.brandMark { width: 24px; height: 24px; display: grid; place-items: center; flex: none; }
+.brandMarkLight, .brandMarkDark { width: 24px; height: 24px; display: block; }
+.brandMarkDark { display: none; }
+:global(html[data-theme="dark"]) .brandMarkLight { display: none; }
+:global(html[data-theme="dark"]) .brandMarkDark { display: block; }
+.icon { display: block; flex: none; width: 16px; height: 16px; }
+.workspaceMenu { position: relative; min-width: 0; flex: 0 1 240px; }
+.switcher { position: relative; }
+.workspaceButton {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 4px 8px;
+  border-radius: var(--sv2-radius-control);
+  color: var(--sv2-fg);
+  background: transparent;
+  text-align: left;
+  cursor: default;
+  font-weight: 500;
+}
+.switcher > summary { list-style: none; cursor: pointer; }
+.switcher > summary::-webkit-details-marker { display: none; }
+.switcher > summary:hover { background: var(--sv2-recess); }
+.workspaceBadge {
+  width: 20px;
+  height: 20px;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  border-radius: 3px;
+  background: var(--sv2-fg);
+  color: var(--sv2-surface);
+  font: 600 10px var(--sv2-font-code);
+}
+.workspaceName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.workspaceOptions {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 0;
+  z-index: 40;
+  min-width: min(300px, calc(100vw - 24px));
+  max-height: min(55vh, 440px);
+  overflow-y: auto;
+  border: 1px solid var(--sv2-border-strong);
+  background: var(--sv2-elevated);
+  box-shadow: 0 12px 32px #0002;
+  border-radius: var(--sv2-radius-panel);
+  padding: 6px;
+}
+.menuLabel { font: 600 11px var(--sv2-font-code); color: var(--sv2-muted); padding: 7px 8px; }
+.workspaceOption {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px;
+  min-width: 0;
+  border-radius: var(--sv2-radius-control);
+  text-decoration: none;
+  color: var(--sv2-fg);
+}
+.workspaceOption:hover, .workspaceOption[aria-current="page"] { background: var(--sv2-selected); }
+.workspaceOptionText { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.workspaceOptionText strong { font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.workspaceOptionText small { font-size: 11px; color: var(--sv2-muted); }
+.breadcrumbs {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  color: var(--sv2-muted);
+}
+.breadcrumbs a {
+  color: var(--sv2-fg-2);
+  text-decoration: none;
+}
+.breadcrumbs a:hover { text-decoration: underline; }
+.breadcrumbs [aria-current="page"] { overflow: hidden; text-overflow: ellipsis; color: var(--sv2-fg); font-weight: 600; }
+.topActions { margin-left: auto; display: flex; align-items: center; gap: 7px; flex: none; }
+.actionLink, .iconButton, .logout {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 4px 9px;
+  border: 1px solid var(--sv2-border);
+  border-radius: var(--sv2-radius-control);
+  background: var(--sv2-surface);
+  color: var(--sv2-fg);
+  font: 500 12px var(--sv2-font-body);
+  text-decoration: none;
+  cursor: pointer;
+}
+.actionLink:hover, .iconButton:hover, .logout:hover { background: var(--sv2-recess); }
+.sidebar {
+  grid-row: 3;
+  grid-column: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--sv2-border);
+  background: var(--sv2-surface);
+}
+.nav { flex: 1; min-height: 0; padding: 12px 8px; overflow-y: auto; }
+.navGroup { display: grid; gap: 2px; margin-bottom: 14px; }
+.navGroupTitle {
+  margin: 0 8px 4px;
+  color: var(--sv2-muted);
+  font: 600 10px var(--sv2-font-code);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+.navItem {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: relative;
+  padding: 6px 10px;
+  border-radius: var(--sv2-radius-control);
+  text-decoration: none;
+  color: var(--sv2-fg-2);
+  font-size: 12px;
+  font-weight: 500;
+}
+.navItem:hover, .navActive { color: var(--sv2-fg); background: var(--sv2-recess); }
+.navActive::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 7px;
+  bottom: 7px;
+  border-left: 3px solid var(--sv2-accent);
+}
+.count { margin-left: auto; color: var(--sv2-muted); font: 500 11px var(--sv2-font-code); }
+.profile {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+  padding: 10px 12px;
+  border-top: 1px solid var(--sv2-border);
+}
+.profileAvatar {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--sv2-border);
+  border-radius: 50%;
+  background: var(--sv2-recess);
+  font: 600 11px var(--sv2-font-code);
+}
+.profileText { display: grid; min-width: 0; }
+.profileText strong, .profileText small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.profileText strong { font-size: 12px; font-weight: 500; }
+.profileText small { color: var(--sv2-muted); font-size: 11px; }
+.shell .main {
+  grid-row: 3;
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--sv2-bg);
+  color: var(--sv2-fg);
+  scrollbar-gutter: stable;
+}
+@media (max-width: 1100px) {
+  .breadcrumbs { display: none; }
+  .workspaceMenu { flex: 1 1 auto; max-width: 310px; }
+}
+@media (max-width: 900px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 4px 48px minmax(0, 1fr) 62px;
+  }
+  .topbar { grid-column: 1; padding: 0 10px; gap: 8px; }
+  .brand { font-size: 12px; }
+  .brandMark { width: 22px; height: 22px; }
+  .searchLabel { display: none; }
+  .workspaceMenu { max-width: none; min-width: 0; }
+  .shell .main { grid-row: 3; grid-column: 1; }
+  .sidebar {
+    grid-row: 4;
+    grid-column: 1;
+    flex-direction: row;
+    border-right: 0;
+    border-top: 1px solid var(--sv2-border);
+    overflow: hidden;
+    max-width: 100%;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 4px 8px;
+    gap: 12px;
+    scrollbar-width: thin;
+  }
+  .navGroup { display: flex; flex: none; align-items: center; gap: 4px; margin: 0; }
+  .navGroupTitle, .profile, .count { display: none; }
+  .navItem {
+    min-width: 58px;
+    height: 50px;
+    padding: 4px 8px;
+    flex-direction: column;
+    gap: 3px;
+    justify-content: center;
+    white-space: nowrap;
+    font-size: 10px;
+  }
+  .navActive::before { left: 8px; right: 8px; top: auto; bottom: -4px; border: 0; border-bottom: 3px solid var(--sv2-accent); }
+  .navItem .icon { width: 18px; height: 18px; }
+  .workspaceOptions { left: -32px; }
+}
+@media (max-width: 480px) {
+  .brand > span:last-child { display: none; }
+  .workspaceButton { padding-inline: 2px; }
+  .logout { padding: 4px 6px; }
+  .topActions { gap: 3px; }
+  .actionLink, .iconButton { padding: 4px 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .main, .nav { scroll-behavior: auto; }
+}

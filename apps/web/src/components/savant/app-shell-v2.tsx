@@ -1,0 +1,192 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import type { Route } from "next";
+import { usePathname } from "next/navigation";
+import { Fragment, type ReactNode, useEffect, useState } from "react";
+
+import { Ic } from "@/components/savant/icons";
+import { useTweaks } from "@/components/savant/tweaks-context";
+import { UiV2Surface } from "@/components/savant/ui-v2";
+import type { WorkspaceMembershipSummary, WorkspaceSummary } from "@/components/savant/app-shell";
+import type { AuthViewer } from "@/lib/auth0-session";
+import { fetchSkillDetail } from "@/lib/control-plane-client";
+import {
+  buildSavantShellBreadcrumbs, EMPTY_SAVANT_SHELL_DATA, type SavantShellData,
+} from "@/lib/shell-state";
+import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
+import { stripTenantPathPrefix } from "@/lib/tenant-paths";
+import {
+  buildUiV2Crumbs, buildUiV2WorkspaceSwitchPath, getUiV2Navigation,
+  UI_V2_NAV_GROUPS, type UiV2NavGroup, type UiV2NavId,
+} from "@/lib/ui-v2-shell-model";
+import { isGovernanceFeatureEnabled } from "@/lib/workspace-features";
+
+import styles from "./app-shell-v2.module.css";
+
+const iconById: Record<UiV2NavId, (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element> = {
+  overview: Ic.Overview,
+  skills: Ic.Skills,
+  repositories: Ic.Repo,
+  catalog: Ic.Skills,
+  evaluations: Ic.Eval,
+  intelligence: Ic.Eval,
+  releases: Ic.Release,
+  router: Ic.Connectors,
+  connectors: Ic.Connectors,
+  policies: Ic.Policy,
+  audit: Ic.Audit,
+  settings: Ic.Settings,
+};
+const groups: UiV2NavGroup[] = ["workspace", "library", "quality", "integrations", "governance", "system"];
+
+export function SavantShellV2({
+  children, viewer, shellData, workspace, memberships,
+}: {
+  children: ReactNode;
+  viewer: AuthViewer;
+  shellData?: SavantShellData | undefined;
+  workspace: WorkspaceSummary;
+  memberships: readonly WorkspaceMembershipSummary[];
+}) {
+  const pathname = usePathname() || "/";
+  const appPath = stripTenantPathPrefix(pathname);
+  const counts = shellData?.counts ?? EMPTY_SAVANT_SHELL_DATA.counts;
+  const navItems = getUiV2Navigation(workspace.slug, appPath, counts, isGovernanceFeatureEnabled());
+  const { resolvedTheme, values, set } = useTweaks();
+  const toggle = buildBinaryThemeToggleState(resolvedTheme);
+  const dashboardHref = buildUiV2WorkspaceSwitchPath(workspace.slug, "/dashboard") as Route;
+  const [resolvedTitle, setResolvedTitle] = useState<{ context: string; title: string | null } | null>(null);
+  const activeSkill = appPath.startsWith("/skills/") ? appPath.split("/")[2] ?? "" : "";
+  const skillContext = `${workspace.slug}/${activeSkill}`;
+
+  useEffect(() => {
+    if (!activeSkill) return;
+    const controller = new AbortController();
+    let mounted = true;
+    async function loadTitle() {
+      try {
+        const response = await fetchSkillDetail(activeSkill, {
+          workspaceSlug: workspace.slug, signal: controller.signal,
+        });
+        if (mounted) setResolvedTitle({ context: skillContext, title: response.data.skill.name });
+      } catch {
+        if (mounted && !controller.signal.aborted) {
+          setResolvedTitle({ context: skillContext, title: null });
+        }
+      }
+    }
+    void loadTitle();
+    return () => { mounted = false; controller.abort(); };
+  }, [activeSkill, skillContext, workspace.slug]);
+
+  const skillTitle = resolvedTitle?.context === skillContext ? resolvedTitle.title : null;
+  const crumbs = buildUiV2Crumbs(workspace.slug, buildSavantShellBreadcrumbs(appPath, { skillTitle }));
+  const density = values.density === "compact" ? "compact" : "comfortable";
+
+  return (
+    <UiV2Surface className={styles.shell} density={density}>
+      <a className={styles.skipLink} href="#sv2-content">Skip to main content</a>
+      <div className={styles.topband} aria-hidden="true" />
+      <header className={styles.topbar}>
+        <Link className={styles.brand} href={dashboardHref} aria-label="Savant Overview">
+          <span className={styles.brandMark} aria-hidden="true">
+            <Image className={styles.brandMarkLight} src="/brand/savant-ui-v2-light.svg" alt="" width={24} height={24} />
+            <Image className={styles.brandMarkDark} src="/brand/savant-ui-v2-dark.svg" alt="" width={24} height={24} />
+          </span><span>SAVANT</span>
+        </Link>
+        <div className={styles.workspaceMenu}>
+          {memberships.length > 1 ? (
+            <details className={styles.switcher}>
+              <summary className={styles.workspaceButton} aria-label={`Workspace: ${workspace.name}. Switch workspace`}>
+                <span className={styles.workspaceBadge} aria-hidden="true">{workspace.short}</span>
+                <span className={styles.workspaceName}>{workspace.name}</span>
+                <Ic.ChevD className={styles.icon} aria-hidden="true" />
+              </summary>
+              <div className={styles.workspaceOptions}>
+                <div className={styles.menuLabel}>Switch workspace</div>
+                {memberships.map(member => (
+                  <Link key={member.slug} className={styles.workspaceOption}
+                    href={buildUiV2WorkspaceSwitchPath(member.slug, appPath) as Route}
+                    aria-current={member.slug === workspace.slug ? "page" : undefined}>
+                    <span className={styles.workspaceBadge} aria-hidden="true">{member.short}</span>
+                    <span className={styles.workspaceOptionText}>
+                      <strong>{member.name}</strong>
+                      <small>{member.isDefault ? "Default workspace" : member.isLastUsed ? "Recently used" : "Workspace"}</small>
+                    </span>
+                    {member.slug === workspace.slug ? <Ic.Check className={styles.icon} aria-label="Current workspace" /> : null}
+                  </Link>
+                ))}
+              </div>
+            </details>
+          ) : (
+            <span className={styles.workspaceButton}>
+              <span className={styles.workspaceBadge} aria-hidden="true">{workspace.short}</span>
+              <span className={styles.workspaceName}>{workspace.name}</span>
+            </span>
+          )}
+        </div>
+        <nav className={styles.breadcrumbs} aria-label="Breadcrumbs">
+          {crumbs.map((crumb, i) => (
+            <Fragment key={`${i}:${crumb.label}`}>
+              {i > 0 ? <span aria-hidden="true">/</span> : null}
+              {crumb.href
+                ? <Link href={crumb.href as Route}>{crumb.label}</Link>
+                : <span aria-current={crumb.current ? "page" : undefined}>{crumb.label}</span>}
+            </Fragment>
+          ))}
+        </nav>
+        <div className={styles.topActions}>
+          <Link href={buildUiV2WorkspaceSwitchPath(workspace.slug, "/skills") as Route}
+            className={styles.actionLink} title="Find a skill" aria-label="Browse and find skills">
+            <Ic.Search className={styles.icon} aria-hidden="true" />
+            <span className={styles.searchLabel}>Find skills</span>
+          </Link>
+          <button type="button" className={styles.iconButton}
+            aria-label={toggle.title} title={toggle.title} aria-pressed={toggle.isDark}
+            onClick={() => set("theme", toggle.nextTheme)}>
+            {toggle.isDark ? <Ic.Sun className={styles.icon} aria-hidden="true" /> :
+              <Ic.Moon className={styles.icon} aria-hidden="true" />}
+          </button>
+          <a href={viewer.isAuthenticated ? "/auth/logout" : "/signin"} className={styles.logout}>
+            {viewer.isAuthenticated ? "Log out" : "Log in"}
+          </a>
+        </div>
+      </header>
+      <aside className={styles.sidebar} aria-label="Application navigation">
+        <nav className={styles.nav} aria-label="Savant sections">
+          {groups.map(group => {
+            const items = navItems.filter(it => it.group === group);
+            if (items.length === 0) return null;
+            return (
+              <div key={group} className={styles.navGroup}>
+                <div className={styles.navGroupTitle}>{UI_V2_NAV_GROUPS[group]}</div>
+                {items.map(it => {
+                  const Icon = iconById[it.id];
+                  return (
+                    <Link key={it.id} href={it.href as Route}
+                      className={`${styles.navItem} ${it.active ? styles.navActive : ""}`}
+                      aria-current={it.active ? "page" : undefined}
+                      title={it.label}>
+                      <Icon className={styles.icon} aria-hidden="true" />
+                      <span>{it.label}</span>
+                      {it.count !== null ? <span className={styles.count}>{it.count}</span> : null}
+                    </Link>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </nav>
+        <div className={styles.profile} title={viewer.displayName}>
+          <span className={styles.profileAvatar} aria-hidden="true">{viewer.initials}</span>
+          <div className={styles.profileText}><strong>{viewer.displayName}</strong><small>{viewer.subtitle}</small></div>
+        </div>
+      </aside>
+      <main id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
+        {children}
+      </main>
+    </UiV2Surface>
+  );
+}

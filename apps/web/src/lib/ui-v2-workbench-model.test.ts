@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { buildTenantScopedControlPlanePath } from "./control-plane-client.ts";
 import type { SkillSourcePayload } from "@savant/types";
 import {
   getWorkbenchGate, matchesWorkbenchSourceSnapshot,
@@ -55,4 +56,24 @@ test("workbench has no direct commit, fake success or unsafe HTML rendering", ()
   assert.match(src,/useUiV2Mode/);
   assert.doesNotMatch(src,/updateSkillSource\s*\(|dangerouslySetInnerHTML|\.innerHTML\s*=|localStorage|sessionStorage|Math\.random/);
   assert.doesNotMatch(src,/approveChangeProposal\s*\(|eval\s*\(/);
+});
+
+test("proposal targets the explicit authorized workspace rather than whichever tenant is last used", () => {
+  const pathA = buildTenantScopedControlPlanePath("/api/repositories/repo-a/proposals", { workspaceSlug:"tenant-a" });
+  const pathB = buildTenantScopedControlPlanePath("/api/repositories/repo-b/proposals", { workspaceSlug:"tenant-b" });
+  assert.equal(pathA, "/api/repositories/repo-a/proposals?workspaceSlug=tenant-a");
+  assert.equal(pathB, "/api/repositories/repo-b/proposals?workspaceSlug=tenant-b");
+  const client = readFileSync(fileURLToPath(new URL("./git-connections-client.ts", import.meta.url)), "utf8");
+  assert.match(client, /proposeFileEdits[\s\S]*?buildTenantScopedControlPlanePath\(/);
+});
+
+test("v2 editor cannot turn a managed proposal into a direct mutation or repeat a saved result", () => {
+  const src = readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.tsx", import.meta.url)), "utf8");
+  assert.match(src, /sourceData\.repositoryId!/);
+  assert.match(src, /getWorkbenchGate\(sourceData, editorText\)/);
+  assert.match(src, /pending \|\| savingRef\.current/);
+  assert.match(src, /reviewed\.text === editorText/);
+  assert.match(src, /submitted\.data\.status/);
+  assert.match(src, /Source was not committed or merged/);
+  assert.match(src, /currentSource\.phase === "ready"/);
 });

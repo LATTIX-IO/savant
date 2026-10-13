@@ -4,7 +4,7 @@ import {assertGitPermission} from "../git/access-control.ts";
 import {requirePinnedEvaluationCommit} from "../jobs/eval-source-revision.ts";
 import {parseTestBenchCases,TestBenchError,type TestBenchCase} from "./definition-contract.ts";
 import {decryptTestBenchCases,encryptTestBenchCases} from "./definition-crypto.ts";
-import {MAX_OBSERVED_CASES,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
+import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
 
 type Sql=import("postgres").Sql;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -312,7 +312,7 @@ export function createObservedRunStore(sql:Sql){
         const [saved]=await tx<{id:string}[]>`
           update test_bench_runs set status='complete',completed_at=now(),updated_at=now(),
             results_ciphertext=${ciphertext},completed_cases=${row.expected_cases},
-            scorecard=${tx.json(result.scorecard as never)}::jsonb,
+            scorecard=${tx.json({...result.scorecard,scoringContract:OBSERVED_SCORING_FINGERPRINT})}::jsonb,
             total_tokens=${result.totalTokens},estimated_cost_usd=${result.estimatedCostUsd},
             execution_model=${result.executionModel},judge_model=${result.judgeModel},
             error_code=null

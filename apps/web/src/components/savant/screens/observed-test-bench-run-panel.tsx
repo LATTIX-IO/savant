@@ -16,6 +16,7 @@ export function ObservedTestBenchRunPanel({
   const [runs,setRuns]=useState<ObservedRunSummary[]>([]);
   const [loading,setLoading]=useState(true);
   const [starting,setStarting]=useState(false);
+  const [executionSource,setExecutionSource]=useState<"platform-nim"|"workspace-openai">("workspace-openai");
   const [canceling,setCanceling]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const requestId=useRef<string|null>(null);
@@ -63,7 +64,7 @@ export function ObservedTestBenchRunPanel({
       const accepted=await startObservedTestBenchRun(
         skillId,definition.id,definition.sourceCommitSha,{
           requestId:requestId.current??(requestId.current=crypto.randomUUID()),
-          expectedRevision:definition.revision,
+          expectedRevision:definition.revision,executionSource,
         },{workspaceSlug},
       );
       requestId.current=null;
@@ -96,9 +97,12 @@ export function ObservedTestBenchRunPanel({
         <span className="chip chip-paper">Provider-backed · not harness/tool verification</span>
       </div>
       <p className="subtle" style={{fontSize:12,margin:0,lineHeight:1.5}}>
-        Runs the saved revision against NVIDIA NIM and grades each response with Jev.
+        Run the saved revision with either an explicitly configured workspace OpenAI key
+        or Savant platform NIM. Both modes use Savant Jev for judging.
         Up to four cases per run. This does not execute MCP tools, scripts or customer-owned harnesses.
         Results are provisional and do not constitute an automatic release approval.
+        Workspace OpenAI uses the tenant-provided key with a token bound, but actual
+        provider charges are not capped by the normalized QA cost proxy.
         Cancellation stops subsequent provider calls once observed; it cannot guarantee
         interruption or reimbursement for an inference request already in flight.
       </p>
@@ -108,10 +112,19 @@ export function ObservedTestBenchRunPanel({
           at most four; split the suite before running it.
         </p>
       ):null}
+      <div className="field">
+        <label className="field-label" htmlFor="observed-provider-source">Execution provider</label>
+        <select id="observed-provider-source" value={executionSource}
+          disabled={starting||active||loading||readOnly}
+          onChange={e=>setExecutionSource(e.target.value as "platform-nim"|"workspace-openai")}>
+          <option value="workspace-openai">Workspace default OpenAI (tenant key)</option>
+          <option value="platform-nim">Savant NVIDIA NIM (platform key)</option>
+        </select>
+      </div>
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button type="button" className="btn btn-sm btn-primary" disabled={!canRun||loading}
           onClick={()=>void run()}>
-          {starting?"Requesting execution…":active?"Run in progress":"Run saved revision (real)"}
+          {starting?"Requesting execution…":active?"Run in progress":executionSource==="workspace-openai"?"Run with workspace OpenAI":"Run with Savant NIM"}
         </button>
         {latest&&(latest.status==="queued"||latest.status==="running")?(
           <button type="button" className="btn btn-sm btn-ghost"
@@ -129,7 +142,8 @@ export function ObservedTestBenchRunPanel({
             <span className="chip chip-paper">{latest.status}</span>
           </div>
           <span className="mono" style={{fontSize:11,overflowWrap:"anywhere"}}>
-            {latest.id} · {latest.completedCases}/{latest.expectedCases} observed cases
+            {latest.id} · {latest.completedCases}/{latest.expectedCases} observed cases ·
+            {" "}{latest.executionSource==="workspace-openai"?"Workspace OpenAI":"Savant NIM"}
           </span>
           {latest.status==="canceled"?(
             <p className="subtle" style={{fontSize:12,margin:0}}>
@@ -145,8 +159,10 @@ export function ObservedTestBenchRunPanel({
           ):null}
           {overall!==null?(
             <p style={{fontSize:12,margin:0}}>
-              Provisional complete-case score: {overall.toFixed(1)}/100 · estimated model cost
-              ${latest.estimatedCostUsd.toFixed(6)} USD
+              Provisional complete-case score: {overall.toFixed(1)}/100 · {" "}
+              {latest.costAccounting==="normalized-qa-proxy"?
+                "normalized QA cost proxy (not actual provider spend):":"platform estimated model cost:"}
+              {" "}${latest.estimatedCostUsd.toFixed(6)} USD-equivalent
             </p>
           ):null}
           {latest.samples.map(sample=>(

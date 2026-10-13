@@ -47,11 +47,13 @@ function verifyRun(run:ComparableObservedRun):void{
     !Number.isSafeInteger(run.totalTokens)||run.totalTokens<1||
     !Number.isFinite(run.estimatedCostUsd)||run.estimatedCostUsd<0)
     invalid();
-  if(!run.scorecard||run.scorecard.scoringContract!==OBSERVED_SCORING_FINGERPRINT)
-    invalid();
+  const recorded=run.scorecard;
+  if(!recorded||recorded.scoringContract!==OBSERVED_SCORING_FINGERPRINT)
+    return invalid();
   for(const [index,item] of run.cases.entries()){
     const sample=run.samples[index];
-    if(!sample||sample.caseId!==item.caseId||sample.kind!==item.kind||
+    if(!sample)return invalid();
+    if(sample.caseId!==item.caseId||sample.kind!==item.kind||
       sample.prompt!==item.prompt||sample.executionModel!==run.executionModel||
       sample.judgeModel!==run.judgeModel||
       !["pass","investigate","fail"].includes(sample.verdict)||
@@ -71,13 +73,13 @@ function verifyRun(run:ComparableObservedRun):void{
     "actionabilityScore","efficiencyScore","passRate","investigateRate","failRate",
     "avgLatencyMs","avgEstimatedCostUsd",
   ] as const){
-    const actual=score(run.scorecard[field],field.endsWith("Rate")?1:field==="avgLatencyMs"?300_000:100);
+    const actual=score(recorded[field],field.endsWith("Rate")?1:field==="avgLatencyMs"?300_000:100);
     if(Math.abs(actual-computed[field])>0.011)invalid();
   }
-  if(run.scorecard.sampleCount!==run.expectedCases||
-    run.scorecard.passCount!==computed.passCount||
-    run.scorecard.failCount!==computed.failCount||
-    run.scorecard.investigateCount!==computed.investigateCount)invalid();
+  if(recorded.sampleCount!==run.expectedCases||
+    recorded.passCount!==computed.passCount||
+    recorded.failCount!==computed.failCount||
+    recorded.investigateCount!==computed.investigateCount)invalid();
 }
 function meta(run:ComparableObservedRun):ComparableRunMetadata{
   return {

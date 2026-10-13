@@ -38,6 +38,12 @@ export function parseObservedRun(value:unknown,skillId:string,definitionId:strin
     !Number.isSafeInteger(x.totalTokens)||(x.totalTokens as number)<0||
     typeof x.estimatedCostUsd!=="number"||!Number.isFinite(x.estimatedCostUsd)||
     x.estimatedCostUsd<0||x.estimatedCostUsd>0.05||
+    !["platform-nim","workspace-openai"].includes(x.executionSource as string)||
+    !["platform-estimate","normalized-qa-proxy"].includes(x.costAccounting as string)||
+    (x.executionSource==="workspace-openai"&&(
+      x.costAccounting!=="normalized-qa-proxy"||
+      typeof x.executionModelPinned!=="string"||!x.executionModelPinned))||
+    (x.executionSource==="platform-nim"&&x.costAccounting!=="platform-estimate")||
     typeof x.createdAt!=="string"||typeof x.updatedAt!=="string")
     throw new ObservedRunClientError("Invalid observed Test Bench identity or provenance.");
   if(x.status==="complete"&&(x.completedCases!==x.expectedCases||
@@ -82,7 +88,7 @@ export async function listObservedTestBenchRuns(
 }
 export async function startObservedTestBenchRun(
   skillId:string,definitionId:string,commitSha:string,
-  input:{requestId:string;expectedRevision:number},
+  input:{requestId:string;expectedRevision:number;executionSource?:"platform-nim"|"workspace-openai"},
   options:ObservedClientOptions,
 ):Promise<ObservedRunSummary>{
   const response=await fetchJson(path(skillId,definitionId,options),"POST",options,input);

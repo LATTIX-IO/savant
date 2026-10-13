@@ -231,7 +231,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                 onChange={event => {
                   setDraft({ scope, text: event.target.value });
                   setReviewed(null);
-                  setNotice(null);
+                  setNotice(previous => previous?.kind === "proposal" ? previous : null);
                 }} />
             </label>
           )}
@@ -239,7 +239,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
           <div className={styles.footer}>
             <p id="sv2-workbench-gate" className={styles.note}>{gate.message}</p>
             <div className={styles.actions}>
-              <UiV2Button size="small" disabled={saveBusy || !sourceData || !comparison?.changed}
+              <UiV2Button size="small" disabled={saveBusy || Boolean(pending) || !sourceData || !comparison?.changed}
                 onClick={() => {
                   if (sourceData) {
                     setDraft({ scope, text: sourceData.content });

@@ -90,7 +90,10 @@ export function SavantShellV2({
       <div className={styles.topband} aria-hidden="true" />
       <header className={styles.topbar}>
         <Link className={styles.brand} href={dashboardHref} aria-label="Savant Overview">
-          <span className={styles.brandMark} aria-hidden="true">S</span><span>SAVANT</span>
+          <span className={styles.brandMark} aria-hidden="true">
+            <img className={styles.brandMarkLight} src="/brand/savant-ui-v2-light.svg" alt="" width={24} height={24} />
+            <img className={styles.brandMarkDark} src="/brand/savant-ui-v2-dark.svg" alt="" width={24} height={24} />
+          </span><span>SAVANT</span>
         </Link>
         <div className={styles.workspaceMenu}>
           {memberships.length > 1 ? (

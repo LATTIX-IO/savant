@@ -1,4 +1,4 @@
-import { buildTenantAppPath } from "./tenant-paths";
+import { buildTenantAppPath } from "./tenant-paths.ts";
 import type { SavantShellCounts, SavantShellCrumb } from "./shell-state";
 
 export type UiV2NavGroup = "workspace" | "library" | "quality" | "integrations" | "governance" | "system";

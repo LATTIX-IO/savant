@@ -180,7 +180,7 @@ export function SavantShellV2({
           <div className={styles.profileText}><strong>{viewer.displayName}</strong><small>{viewer.subtitle}</small></div>
         </div>
       </aside>
-      <main id="sv2-content" className={styles.main} tabIndex={-1}>
+      <main id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
         {children}
       </main>
     </UiV2Surface>

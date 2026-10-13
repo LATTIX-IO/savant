@@ -12,7 +12,8 @@ export const MAX_OBSERVED_COST_USD=0.05;
 export const MAX_SKILL_INSTRUCTIONS_BYTES=12_000;
 const NIM_USD_PER_MILLION_TOKENS=0.5;
 export class ObservedEvaluationError extends Error{
-  constructor(readonly code:string){super(code);this.name="ObservedEvaluationError";}
+  readonly code:string;
+  constructor(code:string){super(code);this.name="ObservedEvaluationError";this.code=code;}
 }
 const reject=(code:string):never=>{throw new ObservedEvaluationError(code);};
 export type ObservedCase=EvalSample&{

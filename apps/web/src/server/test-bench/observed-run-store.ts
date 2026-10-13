@@ -5,10 +5,11 @@ import {requirePinnedEvaluationCommit} from "../jobs/eval-source-revision.ts";
 import {parseTestBenchCases,TestBenchError,type TestBenchCase} from "./definition-contract.ts";
 import {decryptTestBenchCases,encryptTestBenchCases} from "./definition-crypto.ts";
 import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,type ObservedCase,type ObservedEvaluation} from "./observed-evaluator.ts";
+import {assertValidTenantOpenAiConnection,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-type RunRow={
+type RunRow=PinnedWorkspaceRun&{
   id:string;organization_id:string;repository_id:string;definition_id:string;
   definition_revision:number;skill_id:string;source_path:string;source_commit_sha:string;
   request_id:string;requested_by:string;snapshot_ciphertext:string;
@@ -16,6 +17,7 @@ type RunRow={
   expected_cases:number;completed_cases:number;total_tokens:number;estimated_cost_usd:string|number;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
   job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
+  cost_accounting:"platform-estimate"|"normalized-qa-proxy";
   created_at:Date|string;updated_at:Date|string;completed_at:Date|string|null;
 };
 export type ObservedRunSummary={
@@ -23,7 +25,10 @@ export type ObservedRunSummary={
   sourceCommitSha:string;status:RunRow["status"];expectedCases:number;completedCases:number;
   samples:ObservedCase[];scorecard:Record<string,unknown>|null;
   totalTokens:number;estimatedCostUsd:number;executionModel:string|null;judgeModel:string|null;
-  errorCode:string|null;canceledBy:string|null;canceledAt:string|null;createdAt:string;updatedAt:string;completedAt:string|null;
+  errorCode:string|null;canceledBy:string|null;canceledAt:string|null;
+  executionSource:RunRow["execution_source"];executionModelPinned:string|null;
+  costAccounting:RunRow["cost_accounting"];
+  createdAt:string;updatedAt:string;completedAt:string|null;
 };
 const invalid=(code:string,status=409):never=>{throw new TestBenchError(code,status);};
 function actorAllowed(actor:GitActor,write:boolean):void{
@@ -61,6 +66,8 @@ function publicRun(row:RunRow):ObservedRunSummary{
     samples:samples(row),scorecard:row.scorecard,totalTokens:row.total_tokens,
     estimatedCostUsd:Number(row.estimated_cost_usd),
     executionModel:row.execution_model,judgeModel:row.judge_model,
+    executionSource:row.execution_source,executionModelPinned:row.execution_model_pinned,
+    costAccounting:row.cost_accounting,
     errorCode:row.error_code,canceledBy:row.canceled_by,canceledAt:iso(row.canceled_at),
     createdAt:iso(row.created_at)??"",updatedAt:iso(row.updated_at)??"",
     completedAt:iso(row.completed_at),
@@ -74,10 +81,13 @@ function validRequest(requestId:string,expectedRevision:number):void{
 export function createObservedRunStore(sql:Sql){
   return {
     async start(actor:GitActor,skillId:string,definitionId:string,
-      input:{requestId:string;expectedRevision:number}):
+      input:{requestId:string;expectedRevision:number;executionSource?:"platform-nim"|"workspace-openai"}):
       Promise<{run:ObservedRunSummary;replayed:boolean}>{
       actorAllowed(actor,true);validateId(definitionId);validRequest(input.requestId,input.expectedRevision);
       if(!skillId||skillId.length>300)invalid("test_bench_skill_invalid",422);
+      const executionSource=input.executionSource??"platform-nim";
+      if(executionSource!=="platform-nim"&&executionSource!=="workspace-openai")
+        return invalid("test_bench_execution_source_invalid",422);
       try{
         return await sql.begin(async tx=>{
           // Serialize tenant capacity and all idempotency checks across definitions.
@@ -90,7 +100,8 @@ export function createObservedRunStore(sql:Sql){
           if(previous){
             if(previous.definition_id!==definitionId||previous.skill_id!==skillId||
               previous.definition_revision!==input.expectedRevision||
-              previous.requested_by!==actor.subject)
+              previous.requested_by!==actor.subject||
+              previous.execution_source!==executionSource)
               invalid("test_bench_run_request_conflict");
             return {run:publicRun(previous),replayed:true};
           }
@@ -124,6 +135,23 @@ export function createObservedRunStore(sql:Sql){
           })) as unknown);
           if(cases.length>MAX_OBSERVED_CASES)
             invalid("test_bench_execution_case_limit",422);
+          const [candidate]=executionSource==="workspace-openai"?
+            await tx<{
+              id:string;organization_id:string;provider_type:string;default_model:string;
+              supports_execution:boolean;is_default_execution:boolean;status:string;
+              allowed_models:unknown;secret_fingerprint:string|null;
+            }[]>`
+              select c.id,c.organization_id,c.provider_type,c.default_model,
+                c.supports_execution,c.is_default_execution,c.status,c.allowed_models,
+                s.secret_fingerprint
+              from ai_connections c
+                join ai_connection_secrets s on s.ai_connection_id=c.id
+              where c.organization_id=${actor.organizationId} and c.is_default_execution=true
+                and c.status='active' and c.provider_type='openai'
+              limit 1
+            `: [];
+          const selected=executionSource==="workspace-openai"?
+            assertValidTenantOpenAiConnection(candidate,actor.organizationId):null;
           const id=randomUUID();
           const snapshot=encryptTestBenchCases(JSON.stringify(cases),{
             organizationId:actor.organizationId,definitionId:id,
@@ -133,11 +161,16 @@ export function createObservedRunStore(sql:Sql){
             insert into test_bench_runs(
               id,organization_id,repository_id,definition_id,definition_revision,
               skill_id,source_path,source_commit_sha,request_id,requested_by,
-              snapshot_ciphertext,expected_cases
+              snapshot_ciphertext,expected_cases,execution_source,
+              execution_connection_id,execution_secret_fingerprint,
+              execution_model_pinned,cost_accounting
             ) values(
               ${id},${actor.organizationId},${def.repository_id},${definitionId},
               ${def.revision},${skillId},${def.source_path},${commitSha},
-              ${input.requestId},${actor.subject},${snapshot},${cases.length}
+              ${input.requestId},${actor.subject},${snapshot},${cases.length},
+              ${executionSource},${selected?.connectionId??null},
+              ${selected?.fingerprint??null},${selected?.model??null},
+              ${selected?"normalized-qa-proxy":"platform-estimate"}
             ) returning *
           `;
           if(!row)return invalid("test_bench_run_unavailable",503);
@@ -161,7 +194,7 @@ export function createObservedRunStore(sql:Sql){
             ) values(
               ${actor.organizationId},'user',${actor.subject},'evaluation',
               'test_bench_run_queued','test_bench_run',${id},${input.requestId},
-              ${tx.json({cases:cases.length,revision:def.revision,commitPrefix:commitSha.slice(0,12)})}::jsonb
+              ${tx.json({cases:cases.length,revision:def.revision,commitPrefix:commitSha.slice(0,12),executionSource})}::jsonb
             )
           `;
           return {run:publicRun({...row,job_id:job.id}),replayed:false};

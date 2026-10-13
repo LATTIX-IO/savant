@@ -3,6 +3,7 @@ import type {ChatClient,JudgeClient,JevAnswer} from "../ai/clients.ts";
 import {DEFAULT_RUBRIC,scoringQuestions,verdictFor} from "../evaluation/eval-generation.ts";
 import {computeScorecard,type EvalSample,type Scorecard} from "../evaluation/scorecard.ts";
 import type {TestBenchCase} from "./definition-contract.ts";
+import type {ObservedProviderUsage} from "./observed-provider-usage.ts";
 
 /** Deliberately bounded FIRST execution adapter: real NIM chat + Jev only.
  * External harness tools and MCP require their own authenticated executor.
@@ -67,6 +68,7 @@ export async function executeObservedCases(
     skillName:string;instructions:string;cases:readonly TestBenchCase[];
     clients:{executor:ChatClient;judge:JudgeClient};
     onCase?:(sample:ObservedCase,index:number,total:number)=>Promise<void>;
+    onUsage?:(receipt:ObservedProviderUsage)=>Promise<void>;
     beforeCase?:(index:number)=>Promise<void>;
     beforeJudge?:(index:number)=>Promise<void>;
     maxTokens?:number;maxUsd?:number;costPerMillionTokens?:number;
@@ -97,6 +99,9 @@ export async function executeObservedCases(
       !Number.isFinite(completion.latencyMs)||completion.latencyMs<0)
       reject("test_bench_model_output_invalid");
     const executedTokens=tokens(completion.usage);
+    await input.onUsage?.({index:index+1,phase:"executor",model:completion.model,
+      promptTokens:completion.usage.promptTokens,
+      completionTokens:completion.usage.completionTokens});
     totalTokens+=executedTokens;
     estimatedCostUsd=totalTokens*perMillion/1_000_000;
     if(totalTokens>ceiling||estimatedCostUsd>maxUsd)reject("test_bench_budget_exceeded");
@@ -106,7 +111,11 @@ export async function executeObservedCases(
       case:{kind:item.kind,prompt:item.prompt,context:item.context,expected_behavior:item.expectedBehavior},
       output:completion.content,
     },scoringQuestions(),{timeoutMs:10_000});
-    totalTokens+=tokens(judged.usage);
+    const judgedTokens=tokens(judged.usage);
+    await input.onUsage?.({index:index+1,phase:"judge",model:judged.model,
+      promptTokens:judged.usage.inputTokens,
+      completionTokens:judged.usage.outputTokens});
+    totalTokens+=judgedTokens;
     estimatedCostUsd=totalTokens*perMillion/1_000_000;
     if(totalTokens>ceiling||estimatedCostUsd>maxUsd)reject("test_bench_budget_exceeded");
     const a=judged.answers;
@@ -118,7 +127,7 @@ export async function executeObservedCases(
       policyCompliance:binary(a.policy_compliance)>=0.5,
       groundingRelevant:binary(a.grounding_relevant)>=0.5,
       groundingScore:score(a.grounding_score),actionability:score(a.actionability),
-      latencyMs:completion.latencyMs,estimatedCostUsd:round((executedTokens+tokens(judged.usage))*perMillion/1_000_000),
+      latencyMs:completion.latencyMs,estimatedCostUsd:round((executedTokens+judgedTokens)*perMillion/1_000_000),
       humanRevisionCount:rev,
     };
     const sample:ObservedCase={

@@ -17,6 +17,9 @@ type DbRow={
   scorecard:Record<string,unknown>|null;execution_model:string|null;
   judge_model:string|null;total_tokens:number;estimated_cost_usd:string|number;
   completed_at:Date|string|null;
+  execution_source:"platform-nim"|"workspace-openai";
+  execution_connection_id:string|null;
+  cost_accounting:"platform-estimate"|"normalized-qa-proxy";
 };
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function notFound():never{
@@ -63,6 +66,9 @@ function decode(row:DbRow):ComparableObservedRun{
     executionModel:row.execution_model,judgeModel:row.judge_model,
     completedAt:toIso(row.completed_at),estimatedCostUsd:Number(row.estimated_cost_usd),
     totalTokens:row.total_tokens,
+    executionSource:row.execution_source,
+    executionConnectionId:row.execution_connection_id,
+    costAccounting:row.cost_accounting,
   };
 }
 export function createObservedComparisonStore(sql:Sql){

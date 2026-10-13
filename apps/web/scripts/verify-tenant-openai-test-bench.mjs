@@ -105,6 +105,19 @@ try{
  assert.equal(raw.execution_model_pinned,model);
  assert.equal(raw.execution_source,"workspace-openai");
  assert.equal(raw.cost_accounting,"normalized-qa-proxy");
+
+ // A valid connection ID owned by a different organization cannot be
+ // attached to this run even by direct SQL metadata substitution.
+ const foreignConnectionId=randomUUID();
+ await sql`insert into ai_connections(
+   id,organization_id,provider_type,display_name,default_model,purpose,
+   usage_scope,secret_ref,status)
+   values(${foreignConnectionId},${foreignId},'openai','Other organization',
+     ${model},'QA','comparison',${"ai-connection:"+foreignConnectionId},'active')`;
+ await assert.rejects(()=>sql`
+   update test_bench_runs set execution_connection_id=${foreignConnectionId}
+   where id=${run.id}
+ `,error=>error?.code==="23503","composite tenant FK must refuse foreign credential");
  assert.match(raw.snapshot_ciphertext,/^v1:/);
  assert.ok(!JSON.stringify(raw).includes(apiKey));
  const [job]=await sql`select * from background_jobs where id=${raw.job_id}`;
@@ -152,6 +165,30 @@ try{
  assert.match(rawResult.results_ciphertext,/^v1:/);
  assert.ok(!rawResult.results_ciphertext.includes("PRIVATE_TENANT_CASE"));
  assert.ok(!rawResult.results_ciphertext.includes(apiKey));
+
+ // Missing managed encryption key must refuse decryption before network I/O.
+ const keyForRestore=process.env.AI_CONNECTION_ENCRYPTION_KEY;
+ delete process.env.AI_CONNECTION_ENCRYPTION_KEY;
+ let absentKeyCalls=0;
+ try{
+   await assert.rejects(()=>createPinnedTenantOpenAiClient(sql,{
+     organization_id:orgId,execution_source:"workspace-openai",
+     execution_connection_id:connectionId,
+     execution_model_pinned:model,
+     execution_secret_fingerprint:credential.secretFingerprint,
+   },async()=>{absentKeyCalls++;throw Error("NO NETWORK ON MISSING KEY");}),
+    hasCode("test_bench_workspace_openai_credential_unavailable"));
+ }finally{process.env.AI_CONNECTION_ENCRYPTION_KEY=keyForRestore;}
+ assert.equal(absentKeyCalls,0);
+
+ // Model allow-list mismatch must fail at admission and not reserve provider work.
+ await sql`update ai_connections set allowed_models=${sql.json(["unauthorized"])}::jsonb
+   where id=${connectionId}`;
+ await assert.rejects(()=>runs.start(admin,skillId,suite.id,{
+   requestId:randomUUID(),expectedRevision:1,executionSource:"workspace-openai",
+ }),error=>hasCode("test_bench_workspace_openai_unavailable")(error)&&error.status===503);
+ await sql`update ai_connections set allowed_models=${sql.json([model])}::jsonb
+   where id=${connectionId}`;
 
  // Rotation between admission and execution must reject BEFORE a paid call.
  const rotated=(await runs.start(admin,skillId,suite.id,{
@@ -220,6 +257,8 @@ try{
   "fixed-origin one-call observed OpenAI plus Jev",
   "no secret in queue, DB run or audit",
   "rotation and revoke deny before source read/provider egress",
+  "composite foreign-tenant FK prevents credential substitution",
+  "missing vault key and model allow-list mismatch fail before I/O",
   "normalized QA cost proxy explicit, no platform NIM fallback",
  ]}));
 }finally{

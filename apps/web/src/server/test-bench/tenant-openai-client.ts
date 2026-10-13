@@ -180,15 +180,18 @@ export function createTenantOpenAiChatClient(input:{
           (choice as Record<string,unknown>).message:null;
         const content=reply&&typeof reply==="object"?
           (reply as Record<string,unknown>).content:null;
-        if(body.model!==model||typeof content!=="string"||
+        const finishReason=choice&&typeof choice==="object"?
+          (choice as Record<string,unknown>).finish_reason:null;
+        // A truncated, filtered, or tool-routed response is not complete
+        // observable evidence, even if the provider emits partial text.
+        if(body.model!==model||finishReason!=="stop"||typeof content!=="string"||
           !content.trim()||content.length>3_000||!validUsage(body.usage))
           return err("test_bench_workspace_openai_response_invalid");
         return {
           content:content.trim(),model,latencyMs:Date.now()-started,
           usage:{promptTokens:body.usage.prompt_tokens,
             completionTokens:body.usage.completion_tokens},
-          finishReason:choice&&typeof choice==="object"?
-            String((choice as Record<string,unknown>).finish_reason??"unknown"):null,
+          finishReason:"stop",
           reasoningChars:0,
         };
       }catch(error){

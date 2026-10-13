@@ -44,4 +44,15 @@ These 25 checks cover:
 - Workspace isolation
 - Safe rendering
 
-To run the journey across Library, Workbench, Evaluations, Runs, Insights and Workflows at 1280px and 390px, serve the folder over HTTP and open `tests/journey.html`.
+To run the journey manually across Library, Workbench, Evaluations, Runs, Insights and Workflows at 1280px and 390px, serve the folder over HTTP and open `tests/journey.html`.
+
+CI (`.github/workflows/ux-prototype.yml`) runs on pull requests that touch this folder. It:
+
+1. runs the acceptance tests;
+2. runs `tests/browser.cjs` with Playwright at 390, 768, 1280 and 1440px in the light theme, plus 1280px in the dark theme;
+3. uploads the screenshots as the `ux-prototype-screenshots` artifact.
+
+## Related documents
+
+- [CAPABILITIES.md](CAPABILITIES.md): which features are operational, partial, in review or planned in production
+- [MIGRATION.md](MIGRATION.md): the incremental plan for bringing this design into `apps/web`

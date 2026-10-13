@@ -71,7 +71,7 @@ test("breadcrumb links stay in the current tenant, names remain plain text", () 
 test("rollout remains server-owned and the new client shell cannot grant entitlements", () => {
   const layout=readFileSync(fileURLToPath(new URL("../app/o/[workspaceSlug]/layout.tsx",import.meta.url)),"utf8");
   const shell=readFileSync(fileURLToPath(new URL("../components/savant/app-shell-v2.tsx",import.meta.url)),"utf8");
-  assert.ok(layout.indexOf("resolveTenantMembershipForUser") < layout.indexOf("isUiV2EnabledForWorkspace"), "membership must be checked before rollout");
+  assert.ok(layout.indexOf("await resolveTenantMembershipForUser(") < layout.indexOf("const useV2 = isUiV2EnabledForWorkspace("), "membership must be checked before rollout");
   assert.doesNotMatch(shell,/process\.env|localStorage|sessionStorage|dangerouslySetInnerHTML|\.innerHTML\s*=/);
   assert.match(shell,/isGovernanceFeatureEnabled/);
   assert.doesNotMatch(shell, /href=\{[^}]*(?:user|input)/i);

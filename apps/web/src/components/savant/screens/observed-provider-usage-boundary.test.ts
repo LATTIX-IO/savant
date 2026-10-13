@@ -19,7 +19,7 @@ test("PER-1447: source uses real provider token usage and commits ACK before fut
  const evaluator=await readFile(new URL("../../../server/test-bench/observed-evaluator.ts",import.meta.url),"utf8");
  const worker=await readFile(new URL("../../../server/test-bench/observed-run-worker.ts",import.meta.url),"utf8");
  const receipt=await readFile(new URL("../../../server/test-bench/observed-provider-usage.ts",import.meta.url),"utf8");
- const schema=await readFile(new URL("../../../../../db/schema/0029_test_bench_provider_usage_receipts.sql",import.meta.url),"utf8");
+ const schema=await readFile(new URL("../../../../../../db/schema/0029_test_bench_provider_usage_receipts.sql",import.meta.url),"utf8");
  assert.match(evaluator,/await input\.onUsage\?\.\(\{index:index\+1,phase:"executor"/);
  assert.match(evaluator,/await input\.onUsage\?\.\(\{index:index\+1,phase:"judge"/);
  assert.match(worker,/await usageStore\.record\(row\.organization_id,row\.id,job\.id,receipt\)/);

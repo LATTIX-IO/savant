@@ -52,13 +52,18 @@ test("a connected but never-indexed repository cannot be shown as ready", () => 
 });
 
 test("missing KPI is not made up as success or zero", () => {
-  const overview = { kpis: [{
+  const overview = { counts: {skillsUnderGovernance: 8}, kpis: [{
     key: "eval-coverage", value: 82, unit: "%", label: "Coverage",
     deltaLabel: "Based on live evaluations", trend: "flat",
   }] } as OverviewPayload;
   assert.equal(getUiV2Kpi(overview, "skills-in-production"), null);
   assert.equal(getUiV2Kpi(overview, "eval-coverage")?.value, 82);
-  assert.equal(getUiV2Kpi({ kpis: [{ ...overview.kpis[0], value: NaN }] } as OverviewPayload, "eval-coverage"), null);
+  assert.equal(getUiV2Kpi({ ...overview, kpis: [{ ...overview.kpis[0], value: NaN }] } as OverviewPayload, "eval-coverage"), null);
+  assert.equal(getUiV2Kpi({ ...overview, counts: {skillsUnderGovernance: 0} } as OverviewPayload, "eval-coverage"), null);
+  const noReviews = { ...overview, kpis: [{ key: "first-pass-acceptance", value: 0, deltaLabel: "0 completed reviews" }] } as OverviewPayload;
+  assert.equal(getUiV2Kpi(noReviews, "first-pass-acceptance"), null);
+  const noReleases = { ...overview, kpis: [{ key: "release-turnaround", value: 0, deltaLabel: "0 completed releases" }] } as OverviewPayload;
+  assert.equal(getUiV2Kpi(noReleases, "release-turnaround"), null);
 });
 
 test("unknown counts never become zero, negative or infinite metrics", () => {

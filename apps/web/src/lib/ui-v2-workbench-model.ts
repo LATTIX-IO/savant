@@ -49,3 +49,43 @@ export function sourceRevisionLabel(source: SkillSourcePayload | null): string {
   if (!source || source.mode !== "repository") return "Source not verified";
   return source.sourceCommitSha || "Commit not reported";
 }
+
+export type WorkbenchSubmission =
+  | { kind: "created"; proposalId: string; status: string }
+  | { kind: "blocked"; reason: "read-only" | "stale" | "context-changed"; message: string };
+
+/**
+ * Checks the exact server-backed source before dispatch. Provider-side
+ * approval/merge still owns final concurrency and write authorization.
+ */
+export async function submitReviewedWorkbenchProposal(options: {
+  source: SkillSourcePayload;
+  draft: string;
+  isCurrent: () => boolean;
+  readCurrentSource: () => Promise<SkillSourcePayload>;
+  createProposal: (input: { repositoryId: string; name: string; path: string; content: string }) =>
+    Promise<{ id: string; status: string }>;
+}): Promise<WorkbenchSubmission> {
+  const gate = getWorkbenchGate(options.source, options.draft);
+  if (gate.kind !== "ready" || !options.source.repositoryId) {
+    return { kind: "blocked", reason: "read-only", message: gate.message };
+  }
+  if (!options.isCurrent()) {
+    return { kind: "blocked", reason: "context-changed", message: "Workbench context changed. No proposal was submitted." };
+  }
+  const latest = await options.readCurrentSource();
+  if (!options.isCurrent()) {
+    return { kind: "blocked", reason: "context-changed", message: "Workbench context changed. No proposal was submitted." };
+  }
+  if (!matchesWorkbenchSourceSnapshot(options.source, latest)) {
+    return { kind: "blocked", reason: "stale",
+      message: "Repository source changed. No proposal was submitted. Reload and reconcile your draft." };
+  }
+  const created = await options.createProposal({
+    repositoryId: options.source.repositoryId,
+    name: options.source.name,
+    path: options.source.sourcePath,
+    content: options.draft,
+  });
+  return { kind: "created", proposalId: created.id, status: created.status };
+}

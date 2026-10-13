@@ -64,7 +64,7 @@ const OWN_SCROLL = new Set(['workbench', 'workflows']);
           .map(el => ({ tag: el.tagName.toLowerCase(), id: el.id, cls: String(el.className).slice(0, 50), right: Math.round(el.getBoundingClientRect().right) }));
         return { delta, offenders, main: document.querySelector('.main')?.scrollWidth };
       });
-      results.push([label, 'No horizontal page overflow', overflow.delta <= 1 || OWN_SCROLL.has(step.name),
+      results.push([label, 'No horizontal page overflow', overflow.delta <= 1,
         overflow.delta > 1 ? JSON.stringify(overflow) : '']);
       results.push([label, 'No script errors', errors.length === 0, errors.join(' | ')]);
       await page.screenshot({ path: path.join(dir, `${step.name}.png`), fullPage: !OWN_SCROLL.has(step.name) });

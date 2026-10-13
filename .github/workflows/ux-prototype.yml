@@ -1,0 +1,83 @@
+name: UX prototype
+
+on:
+  pull_request:
+    paths:
+      - docs/product/ux-prototype/**
+      - .github/workflows/ux-prototype.yml
+  push:
+    branches:
+      - main
+    paths:
+      - docs/product/ux-prototype/**
+      - .github/workflows/ux-prototype.yml
+  workflow_dispatch:
+
+concurrency:
+  group: ux-prototype-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: docs/product/ux-prototype
+
+jobs:
+  acceptance:
+    name: Prototype acceptance (state and evaluation integrity)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      - name: Run acceptance tests
+        run: node tests/acceptance.js
+
+  browser:
+    name: Prototype journeys and screenshots
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: acceptance
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+
+      # Playwright is installed outside the workspace so the prototype adds no dependency to the monorepo.
+      - name: Install Playwright
+        run: |
+          npm install --no-audit --no-fund --prefix "$RUNNER_TEMP/pw" playwright@1.49.1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Serve the prototype
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 >/dev/null 2>&1 &
+          for i in $(seq 1 20); do curl -sf http://127.0.0.1:4173/index.html >/dev/null && exit 0; sleep 0.5; done
+          echo "Static server did not start" && exit 1
+
+      - name: Run browser journeys
+        env:
+          PLAYWRIGHT_MODULE: ${{ runner.temp }}/pw/node_modules/playwright
+          PROTOTYPE_URL: http://127.0.0.1:4173
+        run: node tests/browser.cjs
+
+      - name: Upload screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: ux-prototype-screenshots
+          path: docs/product/ux-prototype/tests/screenshots
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field reports · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .subnav { display: flex; gap: 2px; margin-bottom: 12px; }
+  .themes { list-style: none; margin: 0; padding: 0; }
+  .themes li button { display: grid; grid-template-columns: minmax(0, 1fr) 90px 36px; gap: 2px 12px; align-items: center; width: 100%; padding: 10px 16px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+  .themes li:last-child button { border-bottom: 0; }
+  .themes li button:hover { background: color-mix(in oklch, var(--recess) 60%, var(--surface)); }
+  .themes li button[aria-pressed="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
+  .themes .tt { font-weight: 500; }
+  .themes .ts { grid-column: 1; font-size: 12px; color: var(--muted); }
+  .themes .bar { grid-row: 1 / 3; grid-column: 2; }
+  .themes .num { grid-row: 1 / 3; grid-column: 3; text-align: right; }
+  .chan { display: grid; gap: 10px; }
+  .chan .row > span:first-child { width: 150px; font-size: 12px; color: var(--fg-2); }
+  .chan .bar { flex: 1; }
+  .rating { display: inline-flex; gap: 2px; }
+  .rating i { width: 6px; height: 12px; border-radius: 1px; background: var(--recess); }
+  .rating i.on { background: var(--fg-2); }
+  .rating.low i.on { background: var(--crit); }
+  .quote { margin: 0; padding: 10px 12px; background: var(--recess); border-radius: var(--r-ctl); color: var(--fg); line-height: 1.55; }
+  .mine { list-style: none; margin: 0; padding: 0; }
+  .mine > li { border-bottom: 1px solid var(--border); }
+  .mine > li:last-child { border-bottom: 0; }
+  .mine .hd { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1.2fr) 24px; gap: 16px; align-items: center; width: 100%; padding: 12px 16px; border: 0; background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+  .mine .hd:hover { background: color-mix(in oklch, var(--recess) 60%, var(--surface)); }
+  .mine .hd .q { font-size: 12px; color: var(--fg-2); margin-top: 2px; }
+  .stepper { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+  .stepper span { display: grid; gap: 4px; font-size: 11px; color: var(--muted); }
+  .stepper span::before { content: ""; height: 4px; border-radius: 2px; background: var(--recess); }
+  .stepper span.done { color: var(--fg-2); }
+  .stepper span.done::before { background: var(--fg-2); }
+  .stepper span.cur { color: var(--fg); font-weight: 500; }
+  .stepper span.cur::before { background: var(--fg); }
+  .mine .tl { list-style: none; margin: 0; padding: 0 16px 14px 16px; display: grid; gap: 8px; }
+  .mine .tl li { display: grid; grid-template-columns: 70px 12px 1fr; gap: 8px; font-size: 12px; align-items: start; }
+  .mine .tl .t { font: 11px var(--font-mono); color: var(--muted); }
+  .mine .tl .mk { margin-top: 4px; }
+  .mine .tl .sent { color: var(--muted); }
+  .chips { display: flex; gap: 6px; }
+  .chips label { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); font-size: 12px; cursor: pointer; }
+  .chips label:has(input:checked) { background: var(--selected); border-color: var(--accent); }
+  .chips input { accent-color: var(--accent); margin: 0; }
+  @media (max-width: 760px) { .mine .hd { grid-template-columns: minmax(0, 1fr); } }
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+  .filters .search { width: 240px; }
+</style>
+</head>
+<body data-page="runs">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="runs.html">Runs</a><span>/</span><span>Field reports</span></div>
+  <div class="subnav"><div class="seg" role="group" aria-label="Runs views"><button aria-pressed="false" onclick="location.href='runs.html'">Evaluation runs</button><button aria-pressed="false" onclick="location.href='runs.html#prod'">Production</button><button aria-pressed="true">Field reports</button></div></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><div class="row wrap"><h1>Field reports</h1><span class="cap plan">Planned</span></div></div>
+    <div class="acts"><button class="btn" id="setup" data-ic="code">Set up reporting</button></div>
+  </div>
+
+  <div class="tabs" role="tablist" id="rtabs">
+    <button role="tab" aria-selected="true" aria-controls="v-inbox" data-tab="inbox">Inbox</button>
+    <button role="tab" aria-selected="false" aria-controls="v-mine" data-tab="mine" id="tab-mine">My reports <span class="count" id="mine-n"></span></button>
+  </div>
+  <div id="v-mine" hidden data-od-id="my-reports">
+    <div class="panel"><div class="panel-h"><h2>My reports</h2><div class="r"><span class="small muted">Notify me in</span><div class="chips" id="chan"></div></div></div><ul class="mine" id="mine"></ul></div>
+  </div>
+  <div id="v-inbox">
+  <section class="measures" data-od-id="report-measures" aria-label="Report measures">
+    <div class="measure"><span class="l">Reports, 7 days</span><span class="v">46</span><span class="d">31 people · 5 skills</span><span id="sp-r"></span></div>
+    <div class="measure"><span class="l">Negative</span><span class="v">18</span><span class="d bad">8 on Incident triage</span></div>
+    <div class="measure"><span class="l">Untriaged</span><span class="v" id="m-new">9</span><span class="d">median wait 3.4h</span></div>
+    <div class="measure"><span class="l">Became evaluation cases</span><span class="v" id="m-conv">9</span><span class="d">in sev-2-corpus-v3 proposal</span></div>
+    <div class="measure"><span class="l">Evidence for proposals</span><span class="v">11</span><span class="d">R1, R2, E1, E3</span></div>
+  </section>
+
+  <div class="grid g-21" style="margin-top:16px">
+    <section class="panel" data-od-id="report-themes"><div class="panel-h"><h2>Themes</h2></div><ul class="themes" id="themes"></ul></section>
+    <section class="panel" data-od-id="report-channels"><div class="panel-h"><h2>How reports arrive</h2></div>
+      <div class="panel-b chan">
+        <div class="row"><span>In-agent report command</span><div class="bar"><i style="width:61%"></i></div><span class="num small">61%</span></div>
+        <div class="row"><span>Thumbs rating in client</span><div class="bar"><i style="width:22%"></i></div><span class="num small">22%</span></div>
+        <div class="row"><span>Slack</span><div class="bar"><i style="width:11%"></i></div><span class="num small">11%</span></div>
+        <div class="row"><span>Reporting API</span><div class="bar"><i style="width:6%"></i></div><span class="num small">6%</span></div>
+        
+      </div></section>
+  </div>
+
+  <section class="panel" style="margin-top:16px" data-od-id="report-inbox">
+    <div class="panel-h"><h2>Inbox</h2><span class="meta" id="count"></span></div>
+    <div class="filters">
+      <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input class="input" id="q" placeholder="Search report text or reporter" aria-label="Search reports"></label>
+      <select class="select" id="f-skill" aria-label="Skill"><option value="">All skills</option></select>
+      <div class="seg" role="group" aria-label="Sentiment" id="f-sent"><button aria-pressed="true" data-v="">All</button><button aria-pressed="false" data-v="neg">Negative</button><button aria-pressed="false" data-v="pos">Positive</button></div>
+      <select class="select" id="f-st" aria-label="Status"><option value="">Any status</option><option value="new">New</option><option value="triaged">Triaged</option><option value="case">Became eval case</option><option value="evidence">Evidence</option><option value="dismissed">Dismissed</option></select>
+      <button class="btn sm tertiary" id="clear" hidden>Clear filters</button>
+    </div>
+    <div class="tbl-wrap"><table class="tbl" id="inbox"><thead><tr><th>Report</th><th>Skill</th><th>Rating</th><th>What they said</th><th>Theme</th><th>Status</th><th class="r">Received</th></tr></thead><tbody></tbody></table></div>
+    <div class="empty" id="empty" hidden><h3>No reports match</h3><p>Try a different skill or status.</p></div>
+  </section>
+  </div>
+</div>
+</main>
+</div>
+
+<aside class="drawer" id="rd" aria-hidden="true" aria-labelledby="rd-t" data-od-id="report-drawer">
+  <div class="drawer-h"><div class="row"><span class="mono small muted" id="rd-id"></span><span class="spacer"></span><button class="icon-btn" id="rd-x" aria-label="Close report"></button></div><h2 id="rd-t"></h2><div class="row wrap" id="rd-tags"></div></div>
+  <div class="drawer-b stack" id="rd-b" style="padding-top:12px"></div>
+  <div class="drawer-f" id="rd-f"></div>
+</aside>
+
+<dialog class="dialog wide" id="setupd" aria-labelledby="su-t">
+  <div class="dh"><h2 id="su-t">Set up field reporting</h2></div>
+  <div class="db stack">
+    <div class="field"><span class="lbl">In-agent command</span><p class="small fg2">Agent clients connected through the skill router get a report command automatically. It calls <span class="mono">report_skill_outcome</span> with the current run.</p><pre class="code">/savant report "Severity should have been SEV-1, two regions were down"</pre></div>
+    <div class="field"><span class="lbl">Reporting API</span><pre class="code">POST /v1/skills/incident-triage/reports
+{ "run_id": "run_8f21", "rating": 2,
+  "outcome": "failed",
+  "text": "Severity should have been SEV-1" }</pre></div>
+    <div class="field"><span class="lbl">Slack</span><div class="row"><span class="st"><i class="mk ok"></i>Connected to #skill-feedback</span><a class="btn sm" href="integrations.html#dist" style="margin-left:auto">Manage</a></div></div>
+  </div>
+  <div class="df"><button class="btn primary" onclick="this.closest('dialog').close()">Done</button></div>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  $('#rd-x').innerHTML = S.icon('x');
+  $('#sp-r').outerHTML = S.bars(S.walk(31, 14, 40, 0.9, 30, 5, 100), 72, 22);
+  const TH = {
+    sev: ['incident-triage', 'Severity too low on partial-region outages', ['R2', 'E1']],
+    pd: ['incident-triage', 'Triage stalled waiting on PagerDuty', ['R1']],
+    tone: ['customer-email-tone-pass', 'Tone too casual for legal escalations', ['E3']],
+    sec: ['engineering-rfc-reviewer', 'Misses the security considerations section', []],
+    good: ['pr-summarizer', 'Summaries save review time', []],
+    clause: ['contract-clause-reviewer', 'Indemnity clauses flagged correctly', []]
+  };
+  const R0 = [
+    ['FR-322', 'sev', 'incident-triage', 'v3.0', 'min.park', 'Claude Code', 2, 'Called it SEV&#8209;2 but checkout was down in two regions. That is SEV&#8209;1 for us.', 'new', '10:14', 'run_8f21', 'full'],
+    ['FR-321', 'sev', 'incident-triage', 'v3.0', 'oncall-ledger', 'Codex', 2, 'Treated an eu-west only outage as SEV&#8209;3. Customers in that region could not pay.', 'new', '10:02', 'run_8f1c', 'full'],
+    ['FR-320', 'pd', 'incident-triage', 'v3.0', 'sre-bot', 'API', 1, 'Triage took 40 seconds and returned without incident history. PagerDuty was slow.', 'new', '09:47', 'run_8f1a', 'full'],
+    ['FR-318', 'sev', 'incident-triage', 'v3.0', 'ari.chen', 'Claude Code', 2, 'Partial outage in one region classified as SEV&#8209;3. Should be SEV&#8209;2 per our matrix.', 'evidence', '09:12', 'run_8ef4', 'full'],
+    ['FR-317', 'tone', 'customer-email-tone-pass', 'v3.2', 'kalia.b', 'Cursor', 2, 'Draft to outside counsel opened with “Hey there”. Too casual for a legal escalation.', 'evidence', '08:55', 'run_8ee0', 'io'],
+    ['FR-316', 'good', 'pr-summarizer', 'v2.3', 'jdv', 'GitHub Copilot (VS Code)', 5, 'Summary caught the migration risk I would have missed. Saved a review cycle.', 'triaged', '08:31', 'run_8ed2', 'outcome'],
+    ['FR-315', 'sec', 'engineering-rfc-reviewer', 'v2.0', 'renata.m', 'Claude Code', 2, 'Review skipped the security considerations section entirely on RFC-88.', 'new', '08:10', 'run_8ec9', 'full'],
+    ['FR-314', 'pd', 'incident-triage', 'v3.0', 'min.park', 'Claude Code', 2, 'Got a report with no recent incidents listed. PagerDuty call had timed out.', 'evidence', 'Yest.', 'run_8e77', 'full'],
+    ['FR-313', 'clause', 'contract-clause-reviewer', 'v4.1', 'renata.m', 'Claude Code', 5, 'Flagged the uncapped indemnity correctly and linked the playbook section.', 'triaged', 'Yest.', 'run_8e60', 'full'],
+    ['FR-312', 'tone', 'customer-email-tone-pass', 'v3.2', 'support-lead', 'Slack', 3, 'Mostly fine but too chatty for regulator correspondence.', 'new', 'Yest.', '—', 'none'],
+    ['FR-311', 'sev', 'incident-triage', 'v3.0', 'oncall-payments', 'Codex', 1, 'Missed that APAC and EU were both degraded. Classified SEV&#8209;3.', 'case', 'Yest.', 'run_8e41', 'full'],
+    ['FR-310', 'sec', 'engineering-rfc-reviewer', 'v2.0', 'priya.a', 'Claude Code', 3, 'Good structure feedback, but nothing on threat model.', 'new', '10 Oct', 'run_8e02', 'full'],
+    ['FR-309', 'good', 'pr-summarizer', 'v2.3', 'ari.chen', 'Cursor', 4, 'Accurate. Slightly long for small PRs.', 'triaged', '10 Oct', 'run_8df1', 'io'],
+    ['FR-308', 'sev', 'incident-triage', 'v3.0', 'sre-bot', 'API', 2, 'Two-region DNS issue rated SEV&#8209;2. Postmortem rated it SEV&#8209;1.', 'dismissed', '9 Oct', 'run_8dd3', 'full']
+  ];
+  const saved = S.store.get('reports', {});
+  const reps = R0.map(r => ({ id: r[0], th: r[1], skill: r[2], v: r[3], who: r[4], client: r[5], rating: r[6], text: r[7], st: saved[r[0]]?.st || r[8], when: r[9], run: r[10], tele: r[11], link: saved[r[0]]?.link || null }));
+  const persist = () => { const o = {}; reps.forEach(r => o[r.id] = { st: r.st, link: r.link }); S.store.set('reports', o); };
+  const nm = id => S.skills.find(k => k.id === id).name;
+  const STS = { new: ['unk', 'New'], triaged: ['idle', 'Triaged'], case: ['ok', 'Became eval case'], evidence: ['sim', 'Evidence'], dismissed: ['idle', 'Dismissed'] };
+  const f = { q: '', skill: new URLSearchParams(location.search).get('skill') || '', sent: '', st: '', th: '' };
+  $('#f-skill').innerHTML += [...new Set(reps.map(r => r.skill))].map(k => `<option value="${k}">${nm(k)}</option>`).join('');
+  $('#f-skill').value = f.skill;
+  const rating = n => `<span class="rating ${n <= 2 ? 'low' : ''}" title="${n} of 5" aria-label="${n} of 5">${[1, 2, 3, 4, 5].map(i => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
+  const stCell = r => { const [mk, l] = STS[r.st]; return `<span class="st ${mk === 'sim' ? 'sim' : mk === 'unk' ? 'unk' : ''}"><i class="mk ${mk}"></i>${l}${r.link ? ' · ' + r.link : ''}</span>`; };
+
+  function themes() {
+    const counts = Object.keys(TH).map(k => [k, reps.filter(r => r.th === k).length]).sort((a, b) => b[1] - a[1]), mx = Math.max(...counts.map(c => c[1]));
+    $('#themes').innerHTML = counts.map(([k, n]) => { const neg = reps.filter(r => r.th === k && r.rating <= 2).length; return `<li><button data-th="${k}" aria-pressed="${f.th === k}"><span class="tt">${TH[k][1]}</span><span class="ts">${nm(TH[k][0])}${TH[k][2].length ? ' · evidence for ' + TH[k][2].join(', ') : neg ? ' · <span class="st p2" style="font-size:12px">no proposal yet</span>' : ''}</span><span class="bar ${neg >= 3 ? 'p1' : ''}"><i style="width:${n / mx * 100}%"></i></span><span class="num">${n}</span></button></li>`; }).join('');
+    $$('#themes [data-th]').forEach(b => b.onclick = () => { f.th = f.th === b.dataset.th ? '' : b.dataset.th; render(); });
+  }
+  function render() {
+    const q = f.q.toLowerCase();
+    const rows = reps.filter(r => (!q || (r.text + r.who + r.id).toLowerCase().includes(q)) && (!f.skill || r.skill === f.skill) && (!f.sent || (f.sent === 'neg' ? r.rating <= 2 : r.rating >= 4)) && (!f.st || r.st === f.st) && (!f.th || r.th === f.th));
+    $('#count').textContent = `${rows.length} shown · latest ${reps.length} of 46 this week`;
+    $('#empty').hidden = !!rows.length; $('#inbox').hidden = !rows.length;
+    $('#clear').hidden = !(f.q || f.skill || f.sent || f.st || f.th);
+    $('#m-new').textContent = reps.filter(r => r.st === 'new').length;
+    $('#m-conv').textContent = 8 + reps.filter(r => r.st === 'case').length;
+    $('#inbox tbody').innerHTML = rows.map(r => `<tr class="click ${r.rating <= 1 && r.st === 'new' ? 'p1row' : ''}" data-id="${r.id}"><td class="mono small nowrap">${r.id}</td><td class="nowrap">${nm(r.skill)} <span class="mono small muted">${r.v}</span></td><td>${rating(r.rating)}</td>
+      <td class="small" style="max-width:420px">${r.text}<div class="sub">${r.who} · ${r.client}</div></td><td class="small fg2">${TH[r.th][1]}</td><td class="nowrap">${stCell(r)}</td><td class="r num muted nowrap">${r.when}</td></tr>`).join('');
+    themes();
+  }
+  render();
+  $('#q').oninput = e => { f.q = e.target.value; render(); };
+  $('#f-skill').onchange = e => { f.skill = e.target.value; render(); };
+  $('#f-st').onchange = e => { f.st = e.target.value; render(); };
+  $$('#f-sent button').forEach(b => b.onclick = () => { f.sent = b.dataset.v; $$('#f-sent button').forEach(x => x.setAttribute('aria-pressed', x === b)); render(); });
+  $('#clear').onclick = () => { Object.assign(f, { q: '', skill: '', sent: '', st: '', th: '' }); $('#q').value = ''; $('#f-skill').value = ''; $('#f-st').value = ''; $$('#f-sent button').forEach((x, i) => x.setAttribute('aria-pressed', i === 0)); render(); };
+  $('#inbox').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr) open(tr.dataset.id); });
+  $('#setup').onclick = () => $('#setupd').showModal();
+
+  /* drawer */
+  const dr = $('#rd');
+  $('#rd-x').onclick = () => S.closeDrawer(dr);
+  function open(id) {
+    const r = reps.find(x => x.id === id), sk = S.skills.find(k => k.id === r.skill), th = TH[r.th];
+    if (r.st === 'new') { r.st = 'triaged'; persist(); render(); }
+    $$('#inbox tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.id === id));
+    $('#rd-id').textContent = `${r.id} · ${r.when}`; $('#rd-t').textContent = `${sk.name} ${r.v}`;
+    $('#rd-tags').innerHTML = `${rating(r.rating)}<span class="small fg2">${r.rating} of 5</span><span class="tag">${sk.tier}</span>${stCell(r)}`;
+    const cases = { 'incident-triage': 'sev-2-corpus-v3', 'customer-email-tone-pass': 'email-tone-v2', 'engineering-rfc-reviewer': 'rfc-corpus-v4', 'pr-summarizer': 'pr-corpus-v6', 'contract-clause-reviewer': 'contract-corpus-v9' }[r.skill];
+    $('#rd-b').innerHTML = `<blockquote class="quote">${r.text}</blockquote>
+      <dl class="kv"><dt>Reported by</dt><dd>${r.who}</dd><dt>Client</dt><dd>${r.client}</dd><dt>Run</dt><dd class="mono">${r.run}${r.tele === 'full' ? ' · <a href="runs.html">view trace</a>' : r.tele === 'none' ? ' · <span class="muted">not linked</span>' : ` · <span class="muted">${r.tele === 'io' ? 'inputs and outputs only' : 'outcome only'}</span>`}</dd><dt>Theme</dt><dd>${th[1]} · ${reps.filter(x => x.th === r.th).length} reports</dd></dl>
+      ${th[2].length ? `<div class="banner sim"><i class="mk sim"></i><span>Supports Auto-Improve ${th[2].length > 1 ? 'proposals' : 'proposal'} ${th[2].join(' and ')}.</span><span class="acts">${th[2].map(p => `<a class="btn sm" href="${p.startsWith('E') ? 'evaluations.html#auto-improve' : 'workbench.html?layer=improve'}">${p}</a>`).join('')}</span></div>` : r.rating <= 2 ? '<div class="banner p2"><i class="mk p2"></i><span>No proposal covers this theme yet.</span></div>' : ''}
+      ${r.rating <= 3 && r.st !== 'case' && r.st !== 'dismissed' ? `<div class="field"><span class="lbl">Turn into an evaluation case</span><div class="grid g-2"><div class="field"><label for="rd-ds">Dataset</label><select class="select mono" id="rd-ds"><option>${cases}</option></select></div><div class="field"><label for="rd-exp">Expected result</label><input class="input" id="rd-exp" value="${r.skill === 'incident-triage' ? (r.th === 'pd' ? 'Report includes incident history' : 'SEV-1') : r.skill === 'customer-email-tone-pass' ? 'Formal register for legal recipients' : 'Covers the security considerations section'}"></div></div><span class="hint">The input is taken from the linked run${r.tele === 'full' ? '' : ' and needs review because telemetry is partial'}.</span></div>` : ''}`;
+    $('#rd-b').insertAdjacentHTML('beforeend', `<div class="field"><span class="lbl">${r.who} sees</span><div class="row small"><span class="st ${r.st === 'case' ? '' : 'unk'}"><i class="mk ${r.st === 'case' ? 'ok' : r.st === 'evidence' ? 'sim' : 'unk'}"></i>${{ new: 'Received', triaged: 'Triaged', case: 'Eval case', evidence: 'Fix proposed', dismissed: 'Closed · not actioned' }[r.st]}</span><span class="muted" style="margin-left:auto">via ${r.client === 'Slack' ? 'Slack' : r.client === 'API' ? 'API callback' : r.client}</span></div></div>`);
+    const actionable = !['case', 'dismissed'].includes(r.st);
+    $('#rd-f').innerHTML = actionable ? `<button class="btn tertiary" id="rd-dis">Dismiss</button><span class="spacer"></span><button class="btn" id="rd-ai">Send to Auto-Improve</button>${r.rating <= 3 ? '<button class="btn primary" id="rd-case">Add as evaluation case</button>' : ''}` : `<button class="btn" id="rd-undo">Reopen</button>`;
+    $('#rd-case') && ($('#rd-case').onclick = () => { const exp = $('#rd-exp').value.trim(); if (!exp) { $('#rd-exp').setAttribute('aria-invalid', 'true'); return; } r.st = 'case'; r.link = cases; persist(); render(); S.simToast(`${r.id} added to ${cases} · ${r.who} notified`, 'Open evaluations', () => location.href = 'evaluations.html'); open(id); });
+    $('#rd-ai') && ($('#rd-ai').onclick = () => { r.st = 'evidence'; r.link = th[2][0] || 'new theme'; persist(); render(); S.simToast(th[2].length ? `${r.id} attached to ${th[2].join(' and ')} · ${r.who} notified` : `${r.id} queued for Auto-Improve · ${r.who} notified`); open(id); });
+    $('#rd-dis') && ($('#rd-dis').onclick = async () => { if (!await S.confirm({ title: `Dismiss ${r.id}?`, body: 'The report stays in the record but is excluded from themes, proposals and evaluation cases.', confirm: 'Dismiss report', danger: true })) return; r.st = 'dismissed'; persist(); render(); open(id); });
+    $('#rd-undo') && ($('#rd-undo').onclick = () => { r.st = 'triaged'; r.link = null; persist(); render(); open(id); });
+    if (!dr.classList.contains('open')) S.openDrawer(dr);
+  }
+  /* reporter view: status of my reports and what I was told */
+  const STEPS = ['Received', 'Triaged', 'Eval case', 'Fix proposed', 'Fix released'];
+  const ME = 'priya.a';
+  const mine = [
+    { id: 'FR-310', skill: 'engineering-rfc-reviewer', v: 'v2.0', text: 'Good structure feedback, but nothing on threat model.', stage: 2, ev: [['10 Oct 16:02', 'idle', 'Report received'], ['11 Oct 09:10', 'idle', 'Triaged by jdv · theme “Misses the security considerations section”'], ['12 Oct 09:30', 'ok', 'Added as a case to rfc-corpus-v4 · the next version is tested against it']] },
+    { id: 'FR-305', skill: 'incident-triage', v: 'v3.0', text: 'One-region checkout outage came back SEV-3. Our matrix says SEV-2.', stage: 3, ev: [['6 Oct 11:41', 'idle', 'Report received'], ['6 Oct 14:02', 'idle', 'Triaged by min.park'], ['8 Oct 10:15', 'ok', 'Added to sev-2-corpus-v3 proposal E1'], ['12 Oct 09:10', 'sim', 'Fix proposed: R2 · partial-region examples in the severity matrix · being evaluated']] },
+    { id: 'FR-299', skill: 'pr-summarizer', v: 'v2.2', text: 'Summaries are too long for one-line PRs.', stage: 4, ev: [['1 Oct 09:05', 'idle', 'Report received'], ['1 Oct 13:30', 'idle', 'Triaged by ari.chen'], ['2 Oct 10:00', 'ok', 'Added as a case to pr-corpus-v6'], ['4 Oct 16:20', 'sim', 'Fix proposed in v2.3'], ['12 Oct 08:55', 'ok', 'Fix released in PR summarizer v2.3 · your case passes']] }
+  ];
+  const chan = S.store.get('report-notify', { agent: true, slack: true, email: false });
+  const chanTxt = () => [chan.agent && 'Claude Code', chan.slack && 'Slack', chan.email && 'email'].filter(Boolean).join(' and ') || 'nowhere';
+  let openMine = S.store.get('mine-open', 'FR-305');
+  function drawMine() {
+    $('#mine-n').textContent = mine.length;
+    $('#chan').innerHTML = [['agent', 'Agent'], ['slack', 'Slack'], ['email', 'Email']].map(([k, l]) => `<label><input type="checkbox" data-c="${k}" ${chan[k] ? 'checked' : ''}>${l}</label>`).join('');
+    $$('#chan input').forEach(c => c.onchange = () => { chan[c.dataset.c] = c.checked; S.store.set('report-notify', chan); S.simToast(`Report updates go to ${chanTxt()}`); drawMine(); });
+    $('#mine').innerHTML = mine.map(m => `<li><button class="hd" data-m="${m.id}" aria-expanded="${openMine === m.id}">
+        <span><span class="mono small muted">${m.id}</span> · <strong>${nm(m.skill)}</strong> <span class="mono small muted">${m.v}</span><div class="q">${m.text}</div></span>
+        <span class="stepper" aria-label="Status: ${STEPS[m.stage]}">${STEPS.map((x, i) => `<span class="${i < m.stage ? 'done' : i === m.stage ? 'cur' : ''}">${x}</span>`).join('')}</span>
+        <span>${S.icon(openMine === m.id ? 'chevd' : 'chev')}</span></button>
+      ${openMine === m.id ? `<ul class="tl">${m.ev.map((e, i) => `<li><span class="t">${e[0]}</span><i class="mk ${e[1]}"></i><span>${e[2]}${i > 0 ? `<div class="sent">Sent to you in ${chanTxt()}</div>` : ''}</span></li>`).join('')}</ul>` : ''}</li>`).join('');
+    $$('#mine [data-m]').forEach(b => b.onclick = () => { openMine = openMine === b.dataset.m ? null : b.dataset.m; S.store.set('mine-open', openMine); drawMine(); });
+  }
+  S.tabs($('#rtabs'), t => { history.replaceState(null, '', location.search + (t === 'mine' ? '#mine' : '')); if (t === 'mine') drawMine(); });
+  $('#mine-n').textContent = mine.length;
+  if (location.hash === '#mine') $('#tab-mine').click();
+
+  const h = location.hash.slice(1); if (h && reps.some(r => r.id === h)) open(h);
+});
+</script>
+</body>
+</html>

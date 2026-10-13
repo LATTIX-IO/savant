@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evaluations · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .flow { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); }
+  .flow > div { padding: 12px 16px; display: grid; gap: 2px; border-left: 1px solid var(--border); position: relative; }
+  .flow > div:first-child { border-left: 0; }
+  .flow .n { font: 500 22px var(--font-mono); }
+  .flow .l { font-size: 12px; color: var(--muted); }
+  .flow .h { font-weight: 600; }
+  .stack-bar { display: flex; height: 8px; border-radius: 2px; overflow: hidden; width: 120px; background: var(--recess); }
+  .stack-bar i { display: block; height: 100%; }
+  .stack-bar .p { background: var(--fg-2); }
+  .stack-bar .f { background: var(--crit); }
+  .cov { display: grid; gap: 12px; }
+  .cov .row > span:first-child { width: 56px; }
+  .steps { display: flex; gap: 4px; margin: 10px 0 0; }
+  .steps button { flex: 1; display: grid; gap: 6px; padding: 0 0 8px; border: 0; background: none; text-align: left; font: 500 12px var(--font-body); color: var(--muted); cursor: pointer; }
+  .steps button::before { content: ""; height: 3px; border-radius: 2px; background: var(--recess); }
+  .steps button.done { color: var(--fg-2); }
+  .steps button.done::before { background: var(--fg-2); }
+  .steps button[aria-current="step"] { color: var(--fg); }
+  .steps button[aria-current="step"]::before { background: var(--accent); }
+  .opt { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); cursor: pointer; }
+  .opt:hover { background: var(--recess); }
+  .opt:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--selected); }
+  .opt input { accent-color: var(--accent); margin-top: 3px; }
+  .opt .d { color: var(--muted); font-size: 12px; }
+  .crit { display: grid; grid-template-columns: minmax(0, 1.6fr) 64px 80px minmax(0, 1.2fr) 30px; gap: 6px; align-items: center; }
+  .crit .select, .crit .input { width: 100%; }
+  .review dt { width: 120px; }
+  .tiers { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); }
+  .tiers > div { padding: 12px 16px; border-left: 1px solid var(--border); display: grid; gap: 6px; align-content: start; }
+  .tiers > div:first-child { border-left: 0; }
+  .ai-list { list-style: none; margin: 0; padding: 4px; }
+  .ai-list button { display: grid; gap: 3px; width: 100%; padding: 10px 12px; border: 0; border-radius: var(--r-ctl); background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; }
+  .ai-list button:hover { background: var(--recess); }
+  .ai-list button[aria-current="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
+  .ai-list .pt { font-weight: 500; }
+  .ai-diff { margin: 0; font: 12px/1.6 var(--font-mono); background: var(--recess); border-radius: var(--r-ctl); padding: 8px 0; overflow-x: auto; }
+  .ai-diff div { padding: 0 10px; white-space: pre; }
+  .ai-diff .add { box-shadow: inset 2px 0 0 var(--fg); background: color-mix(in oklch, var(--fg) 6%, transparent); }
+  .ai-diff .del { color: var(--muted); text-decoration: line-through; }
+  @media (max-width: 760px) { .tiers { grid-template-columns: minmax(0, 1fr); } .tiers > div { border-left: 0; border-top: 1px solid var(--border); } }
+  .done-state { text-align: center; padding: 40px 12px; display: grid; gap: 10px; justify-items: center; }
+</style>
+</head>
+<body data-page="evaluations">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><span>Evaluations</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Evaluations</h1></div>
+    <div class="acts"><button class="btn" id="gen" data-ic="plus">Generate dataset</button><button class="btn primary" id="new" data-ic="plus" data-od-id="cta-new-evaluation">New evaluation</button></div>
+  </div>
+
+  <div class="flow" data-od-id="eval-lifecycle" aria-label="Evaluation lifecycle">
+    <div><span class="h">1 · Definition</span><span class="n">8</span><span class="l">suites across 8 skills · 1 skill uncovered</span></div>
+    <div><span class="h">2 · Execution</span><span class="n">2</span><span class="l">running · 1 queued · median duration 11m</span></div>
+    <div><span class="h">3 · Results</span><span class="n">14</span><span class="l">runs in 30 days · 1 with regressions</span></div>
+  </div>
+
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" aria-selected="true" aria-controls="t-suites">Suites <span class="count">8</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-data">Datasets <span class="count">7</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-ai" id="tab-ai">Auto-Improve <span class="tag sim" style="height:16px;padding:0 5px">Alpha</span> <span class="count" id="ai-n"></span></button>
+  </div>
+
+  <section id="t-suites" class="grid g-21" data-od-id="suites">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="suites"><thead><tr><th>Suite</th><th>Objective</th><th>Acceptance</th><th>Last result</th><th>Last 8 runs</th><th>Trigger</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    <div class="stack">
+      <section class="panel" data-od-id="coverage"><div class="panel-h"><h2>Coverage by tier</h2></div>
+        <div class="panel-b cov">
+          <div class="row"><span class="tag">T1</span><div class="bar" style="flex:1"><i style="width:100%"></i></div><span class="num">3 / 3</span></div>
+          <div class="row"><span class="tag">T2</span><div class="bar" style="flex:1"><i style="width:100%"></i></div><span class="num">4 / 4</span></div>
+          <div class="row"><span class="tag">T3</span><div class="bar" style="flex:1"><i style="width:50%"></i></div><span class="num">1 / 2</span></div>
+          <div class="banner"><i class="mk unk"></i><span>Vendor onboarding memo has no suite</span><span class="acts"><button class="btn sm" data-new="vendor-onboarding-memo">Create suite</button></span></div>
+        </div></section>
+      <section class="panel" data-od-id="recent-results"><div class="panel-h"><h2>Recent results</h2><div class="r"><a class="btn sm tertiary" href="runs.html">All runs</a></div></div>
+        <div class="tbl-wrap"><table class="tbl compact"><tbody id="recent"></tbody></table></div></section>
+    </div>
+  </section>
+
+  <section id="t-data" hidden data-od-id="datasets">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Dataset</th><th>Used by</th><th class="r">Cases</th><th>Source</th><th>State</th><th class="r">Updated</th><th></th></tr></thead><tbody>
+      <tr><td class="mono">sev-2-corpus-v3</td><td>Incident triage</td><td class="r num">180</td><td>Redacted incidents</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">14 Aug</td><td></td></tr>
+      <tr><td class="mono">contract-corpus-v9</td><td>Contract clause reviewer</td><td class="r num">180</td><td>Executed contracts</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">02 Sep</td><td></td></tr>
+      <tr><td class="mono">pr-corpus-v6</td><td>PR summarizer · RFC reviewer</td><td class="r num">240</td><td>Merged PRs</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">21 Aug</td><td></td></tr>
+      <tr><td class="mono">email-tone-v2</td><td>Customer email tone pass</td><td class="r num">150</td><td>Support tickets</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">30 Jul</td><td></td></tr>
+      <tr><td class="mono">earnings-v1</td><td>Quarterly earnings summary</td><td class="r num">60</td><td>Generated from manifest</td><td><span class="st sim"><i class="mk sim"></i>Needs review</span></td><td class="r num muted">today</td><td class="r"><button class="btn sm" id="review-gen">Review cases</button></td></tr>
+      <tr><td class="mono">soc2-evidence-v1</td><td>SOC 2 evidence drafter</td><td class="r num">72</td><td>Audit evidence</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">12 Jun</td><td></td></tr>
+      <tr><td class="mono">rfp-corpus-v2</td><td>RFP response drafter</td><td class="r num">120</td><td>Past RFP responses</td><td><span class="st"><i class="mk ok"></i>Active</span></td><td class="r num muted">18 Aug</td><td></td></tr>
+    </tbody></table></div></div>
+  </section>
+
+  <section id="t-ai" hidden data-od-id="eval-auto-improve">
+    <div class="tiers" id="ai-tiers" aria-label="Auto-Improve for evaluations by tier"></div>
+    <section class="panel" style="margin-top:16px" data-od-id="eval-drift">
+      <div class="panel-h"><h2>Eval drift by dataset version</h2><div class="r"><select class="select" id="dr-suite" aria-label="Suite"></select></div></div>
+      <div class="panel-b"><div id="drift"></div>
+        <div class="legend small" style="margin-top:6px"><span><i style="height:8px;width:10px;border-radius:2px;background:var(--fg-2)"></i>Manual version</span><span><i style="height:8px;width:10px;border-radius:2px;background:var(--sim)"></i>Auto-Improve version</span><span><i style="height:8px;width:10px;border-radius:2px;background:transparent;outline:1px dashed var(--sim)"></i>Proposed</span><span><i style="height:2px;width:12px;background:var(--warn)"></i>Tier drift limit</span></div></div>
+      <div class="tbl-wrap"><table class="tbl compact" id="dr-tbl"><thead><tr><th>Dataset version</th><th>Change</th><th>By</th><th class="r">Reference score</th><th class="r">Drift</th><th>Ranking</th></tr></thead><tbody></tbody></table></div>
+    </section>
+    <div class="grid g-12" style="margin-top:16px">
+      <section class="panel"><div class="panel-h"><h2>Evaluation proposals</h2></div><ul class="ai-list" id="ai-list"></ul></section>
+      <section class="panel" id="ai-detail" aria-live="polite"></section>
+    </div>
+  </section>
+</div>
+</main>
+</div>
+
+<aside class="drawer" id="wiz" aria-hidden="true" aria-labelledby="wiz-t" data-od-id="evaluation-builder" style="width:min(600px,100vw)">
+  <div class="drawer-h">
+    <div class="row"><h2 id="wiz-t">New evaluation</h2><span class="spacer"></span><button class="icon-btn" id="wiz-x" aria-label="Close"></button></div>
+    <nav class="steps" id="steps" aria-label="Steps"></nav>
+  </div>
+  <div class="drawer-b" id="wiz-b"></div>
+  <div class="drawer-f" id="wiz-f"><span class="small muted" id="est" style="margin-right:auto;align-self:center"></span><button class="btn" id="back">Back</button><button class="btn primary" id="next">Continue</button></div>
+</aside>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  const drawRecent = () => { $('#recent').innerHTML = S.db.runs().slice(0, 5).map(r => `<tr class="click ${r.st === 'regressed' || r.st === 'gate-failed' ? 'p1row' : ''}" onclick="location.href='runs.html#${r.id}'"><td class="mono small">${r.id}</td><td>${S.esc(S.skills.find(k => k.id === r.skill)?.name || r.skill)} <span class="mono small muted">${r.v}</span>${r.sim ? ' <span class="tag sim">Simulated</span>' : ''}</td><td>${r.st === 'running' ? `<span class="st"><i class="mk idle"></i>${r.done}/${r.n}</span>` : r.st === 'regressed' ? '<span class="st p1"><i class="mk p1"></i>Regressed</span>' : r.st === 'gate-failed' ? '<span class="st p1"><i class="mk p1"></i>Gate failed</span>' : r.st === 'failed' ? '<span class="st p1"><i class="mk p1"></i>Failed</span>' : `<span class="st"><i class="mk ok"></i>${r.st === 'baseline' ? 'Baseline' : 'Passed'}</span>`}</td></tr>`).join(''); };
+  drawRecent(); setInterval(drawRecent, 2000);
+  S.tabs($('#tabs'), t => { history.replaceState(null, '', location.search + (t === 't-ai' ? '#auto-improve' : '')); if (t === 't-ai') drawAi(); });
+
+  /* Auto-Improve for evaluations (alpha) */
+  const AIP = S.ai.EVAL_P, AIO = Object.keys(AIP);
+  let aiSel = 'E1';
+  const ST = { generated: ['sim', 'Generated · not backtested'], backtesting: ['sim', 'Backtesting'], 'ready-for-review': ['sim', 'Ready for review'], approved: ['ok', 'Approved'], rejected: ['idle', 'Rejected'] };
+  function checks(id) {
+    const p = AIP[id], c = S.ai.policy()[S.skills.find(k => k.id === p.skill).tier].evals;
+    return [[Math.abs(p.drift) <= c.maxDrift, `Score drift ${p.drift > 0 ? '+' : ''}${p.drift} on the previous version (max ${c.maxDrift})`], [p.reports >= c.minReports, `${p.reports} supporting field reports (minimum ${c.minReports})`], [!c.stableRanking || p.ranking, c.stableRanking ? `Version ranking ${p.ranking ? 'unchanged' : 'changed'} (must stay stable)` : 'Ranking stability not required']];
+  }
+  /* drift: a frozen reference version is re-scored on every dataset version */
+  const DRIFT = {
+    'incident-triage': { ds: 'sev-2-corpus', ref: 'Incident triage v2.6', vs: [['v1', 'Initial 120 cases', 'min.park', 84.0], ['v2', '+40 cases from postmortems', 'min.park', 83.1], ['v3', '+20 cases, relabelled 6', 'renata.m', 83.5], ['v3.1', '+9 partial-region cases from field reports', 'E1', 82.1]] },
+    'pr-summarizer': { ds: 'pr-corpus', ref: 'PR summarizer v2.0', vs: [['v4', 'Initial 200 cases', 'ari.chen', 80.9], ['v5', '+30 monorepo PRs', 'ari.chen', 81.5], ['v6', '+24 cases, rubric v3', 'jdv', 82.0], ['v6.1', 'Retire 14 saturated cases', 'E2', 82.9]] },
+    'customer-email-tone-pass': { ds: 'email-tone', ref: 'Customer email tone pass v3.0', vs: [['v1', 'Initial 120 cases', 'kalia.b', 90.1], ['v2', '+30 legal recipients', 'kalia.b', 90.4], ['v2 · gate 92', 'Raise gate from 90 to 92', 'E3', 90.4]] }
+  };
+  $('#dr-suite').innerHTML = Object.keys(DRIFT).map(k => `<option value="${k}">${S.skills.find(x => x.id === k).name}</option>`).join('');
+  $('#dr-suite').onchange = drawDrift;
+  function drawDrift() {
+    const k = $('#dr-suite').value, d = DRIFT[k], tier = S.skills.find(x => x.id === k).tier, lim = S.ai.policy()[tier].evals.maxDrift, es = S.ai.evalState();
+    const rows = d.vs.map((v, i) => { const ai = v[2].startsWith('E'), st = ai ? es.props[v[2]].status : 'manual', drift = i ? +(v[3] - d.vs[i - 1][3]).toFixed(1) : 0; return { v: v[0], ch: v[1], by: v[2], score: v[3], drift, ai, st, auto: ai && es.props[v[2]].decidedBy === 'auto' }; });
+    const el = $('#drift'), W = el.clientWidth || 700, H = 190, pl = 40, pr = 12, pt = 12, pb = 26, mx = Math.max(2, lim + 0.5, ...rows.map(r => Math.abs(r.drift))) ;
+    const y = v => pt + (1 - (v + mx) / (2 * mx)) * (H - pt - pb), bw = Math.min(56, (W - pl - pr) / rows.length * 0.5), cx = i => pl + (i + 0.5) * (W - pl - pr) / rows.length;
+    let g = '';
+    [-mx, -lim, 0, lim, mx].forEach(v => { g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" stroke="${Math.abs(v) === lim && v !== 0 ? 'var(--warn)' : 'var(--border)'}" ${Math.abs(v) === lim && v !== 0 ? 'stroke-dasharray="4 3"' : ''}/><text x="${pl - 6}" y="${y(v) + 3}" text-anchor="end">${v > 0 ? '+' : ''}${(+v.toFixed(1))}</text>`; });
+    rows.forEach((r, i) => {
+      const x = cx(i) - bw / 2, top = y(Math.max(0, r.drift)), h = Math.max(2, Math.abs(y(r.drift) - y(0))), over = Math.abs(r.drift) > lim;
+      const prop = r.ai && r.st !== 'approved', fill = prop ? 'transparent' : r.ai ? 'var(--sim)' : over ? 'var(--warn)' : 'var(--fg-2)';
+      g += `<rect x="${x}" y="${r.drift >= 0 ? top : y(0)}" width="${bw}" height="${h}" rx="2" fill="${fill}" ${prop ? 'stroke="var(--sim)" stroke-dasharray="3 2"' : ''} ${r.ai && r.st === 'rejected' ? 'opacity=".35"' : ''}><title>${d.ds}-${r.v}: drift ${r.drift > 0 ? '+' : ''}${r.drift}</title></rect>`;
+      g += `<text x="${cx(i)}" y="${H - 8}" text-anchor="middle">${r.v}</text>`;
+      if (i) g += `<text x="${cx(i)}" y="${(r.drift >= 0 ? top : y(0) + h) + (r.drift >= 0 ? -4 : 11)}" text-anchor="middle" style="fill:${over ? 'var(--warn-fg)' : 'var(--fg-2)'}">${r.drift > 0 ? '+' : ''}${r.drift}</text>`;
+    });
+    el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Score drift of ${d.ref} across ${d.ds} versions">${g}</svg>`;
+    $('#dr-tbl tbody').innerHTML = rows.map((r, i) => `<tr><td class="mono">${d.ds}-${r.v}</td><td class="small">${r.ch}</td><td class="small">${r.ai ? `<span class="st sim"><i class="mk sim"></i>Auto-Improve ${r.by}${r.st === 'approved' ? (r.auto ? ' · auto' : ' · approved') : r.st === 'rejected' ? ' · rejected' : ' · proposed'}</span>` : `<span class="mono">${r.by}</span>`}</td>
+      <td class="r num">${r.score.toFixed(1)}</td><td class="r num ${Math.abs(r.drift) > lim ? 'st p2' : ''}">${i ? (Math.abs(r.drift) > lim ? '<i class="mk p2"></i>' : '') + (r.drift > 0 ? '+' : '') + r.drift : '—'}</td><td class="small">${i ? (r.ai ? (S.ai.EVAL_P[r.by].ranking ? 'Stable' : 'Changed') : 'Stable') : '—'}</td></tr>`).join('');
+  }
+  function drawAi() {
+    const pol = S.ai.policy(), es = S.ai.evalState();
+    drawDrift();
+    $('#ai-n').textContent = AIO.filter(id => ['generated', 'ready-for-review'].includes(es.props[id].status)).length || '';
+    $('#ai-tiers').innerHTML = ['T1', 'T2', 'T3'].map(t => `<div><div class="row"><span class="tag">${t}</span><span class="st ${pol[t].evals.on ? '' : 'unk'}" style="margin-left:auto"><i class="mk ${pol[t].evals.on ? 'ok' : 'unk'}"></i>${pol[t].evals.on ? 'Auto-approve on' : 'Review required'}</span></div>
+      <span class="small muted">Drift ≤ ${pol[t].evals.maxDrift} · ≥ ${pol[t].evals.minReports} field reports${pol[t].evals.stableRanking ? ' · stable ranking' : ''}</span>
+      <div class="row">${pol[t].evals.on ? `<button class="btn sm" data-off="${t}">Turn off</button>` : `<button class="btn sm" data-on="${t}">Turn on</button>`}<a class="btn sm tertiary" href="settings.html#auto-improve">Edit criteria</a></div></div>`).join('');
+    $('#ai-list').innerHTML = AIO.map(id => { const p = AIP[id], st = es.props[id], [mk, l] = ST[st.status] || ST.generated;
+      return `<li><button data-e="${id}" aria-current="${id === aiSel}"><span class="row"><span class="tag">${S.skills.find(k => k.id === p.skill).tier}</span><span class="small muted">${p.kind}</span></span><span class="pt">${p.t}</span><span class="st small ${mk === 'sim' ? 'sim' : ''}"><i class="mk ${mk}"></i>${l}${st.decidedBy === 'auto' ? ' by Auto-Improve' : ''}</span></button></li>`; }).join('');
+    $$('#ai-list [data-e]').forEach(b => b.onclick = () => { aiSel = b.dataset.e; $('#dr-suite').value = AIP[aiSel].skill; drawAi(); });
+    $$('#ai-tiers [data-on]').forEach(b => b.onclick = async () => { const t = b.dataset.on; if (!await S.ai.evalsWarning(`${t.replace('T', 'Tier ')} evaluations`)) return; const p = S.ai.policy(); p[t].evals.on = true; S.ai.setPolicy(p); S.toast(`Auto-Improve on for ${t.replace('T', 'Tier ')} evaluations`); autoRun(t); drawAi(); });
+    $$('#ai-tiers [data-off]').forEach(b => b.onclick = () => { const t = b.dataset.off, p = S.ai.policy(); p[t].evals.on = false; S.ai.setPolicy(p); S.toast(`${t.replace('T', 'Tier ')} evaluation proposals need review again`); drawAi(); });
+    detail();
+  }
+  function detail() {
+    const id = aiSel, p = AIP[id], es = S.ai.evalState(), st = es.props[id], [mk, l] = ST[st.status] || ST.generated, open = ['generated', 'ready-for-review'].includes(st.status);
+    $('#ai-detail').innerHTML = `<div class="panel-h"><div><div class="small muted">${p.suite} suite · proposal ${id}</div><h2>${p.t}</h2></div></div><div class="panel-b stack">
+      <span class="st ${mk === 'sim' ? 'sim' : ''}"><i class="mk ${mk}"></i>${l}${st.at ? ' · ' + st.at : ''}</span>
+      <div><span class="lbl">Why</span><p class="fg2">${p.why}</p></div>
+      <div><span class="lbl">Change</span><pre class="ai-diff">${p.diff.map(x => `<div class="${x.startsWith('+') ? 'add' : x.startsWith('-') ? 'del' : ''}">${x}</div>`).join('')}</pre></div>
+      <div><span class="lbl">Backtest against the last 10 versions</span>${st.evaluated ? `<table class="tbl compact"><tbody><tr><td class="muted">Score drift on the previous version</td><td class="r num ${Math.abs(p.drift) > 1 ? 'st p2' : ''}">${p.drift > 0 ? '+' : ''}${p.drift}</td></tr><tr><td class="muted">Version ranking</td><td class="r">${p.ranking ? 'Unchanged' : 'Changed'}</td></tr><tr><td class="muted">Supporting field reports</td><td class="r num"><a href="reports.html?skill=${p.skill}">${p.reports}</a></td></tr>${p.backtest ? `<tr><td class="muted">Release impact</td><td class="r small">${p.backtest}</td></tr>` : ''}</tbody></table>`
+        : st.status === 'backtesting' ? `<div class="bar"><i style="width:${st.prog || 0}%"></i></div>` : '<p class="small muted">Not backtested</p>'}</div>
+      ${st.evaluated && open ? `<div><span class="lbl">Auto-Improve criteria for ${S.skills.find(k => k.id === p.skill).tier}</span>${checks(id).map(c => `<div class="row small"><i class="mk ${c[0] ? 'ok' : 'p2'}"></i><span class="${c[0] ? 'fg2' : 'st p2'}">${c[1]}</span></div>`).join('')}</div>` : ''}
+      ${p.drift && st.evaluated && open ? `<div class="banner p2"><i class="mk p2"></i><span>Approving creates a new dataset version. Scores before and after are not directly comparable.</span></div>` : ''}
+      <div class="row">${open ? (st.evaluated ? `<button class="btn primary" id="ai-ap">Approve</button>` : `<button class="btn primary" id="ai-bt">${S.icon('play')}Backtest</button>`) + `<button class="btn tertiary" id="ai-rj" style="color:var(--crit-fg)">Reject</button>` : st.status === 'approved' ? '<span class="small fg2">Applied as a new dataset version</span>' : ''}</div></div>`;
+    $('#ai-ap') && ($('#ai-ap').onclick = async () => { if (await S.ai.decide('eval', id, 'approve')) drawAi(); });
+    $('#ai-rj') && ($('#ai-rj').onclick = async () => { if (await S.ai.decide('eval', id, 'reject')) drawAi(); });
+    $('#ai-bt') && ($('#ai-bt').onclick = () => backtest(id).then(drawAi));
+  }
+  function backtest(id) {
+    return new Promise(res => { const es = S.ai.evalState(); es.props[id].status = 'backtesting'; es.props[id].prog = 0; S.ai.saveEval(es); detail();
+      const t = setInterval(() => { const e2 = S.ai.evalState(); e2.props[id].prog += 20; if (e2.props[id].prog >= 100) { clearInterval(t); e2.props[id].status = 'ready-for-review'; e2.props[id].evaluated = true; delete e2.props[id].prog; S.ai.saveEval(e2); res(); } else { S.ai.saveEval(e2); if (aiSel === id) detail(); } }, 300); });
+  }
+  async function autoRun(t) {
+    for (const id of AIO) {
+      const p = AIP[id]; if (S.skills.find(k => k.id === p.skill).tier !== t) continue;
+      let st = S.ai.evalState().props[id]; if (!['generated', 'ready-for-review'].includes(st.status)) continue;
+      if (!st.evaluated) await backtest(id);
+      if (checks(id).every(c => c[0])) { await S.ai.decide('eval', id, 'approve', { auto: true }); S.toast(`Auto-Improve approved ${id}`); }
+      else S.toast(`${id} held for review · ${checks(id).filter(c => !c[0]).map(c => c[1].toLowerCase()).join('; ')}`);
+      drawAi();
+    }
+  }
+  document.addEventListener('ai-change', () => { if (!$('#t-ai').hidden) drawAi(); });
+  addEventListener('resize', () => { if (!$('#t-ai').hidden) drawDrift(); });
+  $('#wiz-x').innerHTML = S.icon('x');
+
+  // suites table
+  const suites = [
+    ['incident-triage', 'Regression gate', 'Quality ≥ 85 · drop ≤ 2.0', 161, 19, 82.4, 'On candidate', 'p1'],
+    ['contract-clause-reviewer', 'Regression gate', 'Quality ≥ 88 · drop ≤ 1.0', 180, 0, 92.6, 'On candidate', 'ok'],
+    ['pr-summarizer', 'Baseline', 'Quality ≥ 85', 231, 9, 89.7, 'Manual', 'ok'],
+    ['rfp-response-drafter', 'Comparison', 'Beats v1.3 on quality', 109, 11, 84.2, 'Manual', 'ok'],
+    ['soc2-evidence-drafter', 'Regression gate', 'Quality ≥ 85 · every 14 days', 66, 6, 86.0, 'Manual', 'p3'],
+    ['engineering-rfc-reviewer', 'Regression gate', 'Edit rate ≤ 35%', 220, 20, 87.1, 'Manual', 'p2'],
+    ['customer-email-tone-pass', 'Baseline', 'Quality ≥ 90', 147, 3, 93.0, 'Manual', 'ok'],
+    ['quarterly-earnings-summary', 'Baseline', 'Quality ≥ 80', 46, 14, 78.3, 'Manual', 'ok']
+  ];
+  const nm = id => S.skills.find(s => s.id === id).name;
+  $('#suites tbody').innerHTML = suites.map((r, i) => { const s = S.skills.find(x => x.id === r[0]);
+    return `<tr class="${r[7] === 'p1' ? 'p1row' : ''}"><td><strong>${nm(r[0])}</strong><div class="sub mono">${s.dataset} · ${s.ver}${s.cand ? ' → ' + s.cand : ''}</div></td><td>${r[1]}</td><td class="small fg2">${r[2]}</td>
+    <td><div class="row"><span class="stack-bar" title="${r[3]} passed · ${r[4]} failed"><i class="p" style="width:${r[3] / (r[3] + r[4]) * 100}%"></i><i class="f" style="width:${r[4] / (r[3] + r[4]) * 100}%"></i></span><span class="num">${r[5]}</span>${r[7] === 'p1' ? '<span class="st p1"><i class="mk p1"></i>Gate failed</span>' : r[7] === 'p3' ? '<span class="st"><i class="mk p3"></i>Stale</span>' : r[7] === 'p2' ? '<span class="st p2"><i class="mk p2"></i>Near limit</span>' : ''}</div></td>
+    <td>${S.spark(s.trend.slice(-8), 72, 20)}</td>
+    <td class="small">${r[6] === 'On candidate' ? 'On candidate <span class="cap plan">Planned</span>' : 'Manual'}</td>
+    <td class="r nowrap"><a class="btn sm tertiary" href="runs.html">Results</a> <button class="btn sm" data-run="${i}" data-ic="play">Run</button></td></tr>`; }).join('');
+  $$('#suites [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+  $('#suites').addEventListener('click', e => { const b = e.target.closest('[data-run]'); if (!b) return; b.disabled = true; b.lastChild.textContent = 'Queued'; const sk0 = S.skills.find(k => k.id === suites[+b.dataset.run][0]), id = S.db.addRun({ skill: sk0.id, v: sk0.cand || sk0.ver, b: sk0.cand ? sk0.ver : '—', n: suites[+b.dataset.run][3] + suites[+b.dataset.run][4] }); b.lastChild.textContent = id; S.simToast(`${id} started · ${sk0.name}`, 'Watch', () => location.href = 'runs.html#' + id); });
+  $('#gen').onclick = () => S.toast('Dataset generation starts from a skill manifest · choose a skill in the builder', 'Open builder', () => open());
+  $('#review-gen').onclick = () => S.toast('60 generated cases ready for review · approve before first run');
+
+  // wizard
+  const steps = ['Asset', 'Objective', 'Test cases', 'Acceptance', 'Environment', 'Review'];
+  const st = { trig: { cand: false, sched: false }, cadence: 'Nightly', time: '02:00', harness: 'Claude Code', step: 0, skill: 'incident-triage', version: 'v3.1', base: 'v3.0', obj: 'regression', sample: 'all', crit: [['Quality score', '≥', '85', 'Blocks promotion'], ['Drop vs baseline', '≤', '2.0', 'Blocks promotion'], ['Latency P95 (ms)', '≤', '6000', 'Warns'], ['Estimated cost (USD) per case', '≤', '0.05', 'Warns']], conn: 'anthropic', runtime: 'api', replay: true, par: 8, done: false };
+  const sk = () => S.skills.find(s => s.id === st.skill);
+  const cases = () => ({ all: 180, strat: 60, failed: 19 })[st.sample];
+  const views = [
+    () => `<div class="stack" style="padding-top:12px"><div class="field"><label for="w-skill">Skill</label><select class="select" id="w-skill">${S.skills.map(s => `<option value="${s.id}" ${s.id === st.skill ? 'selected' : ''}>${s.name} · ${s.tier}</option>`).join('')}</select></div>
+      <div class="grid g-2"><div class="field"><label for="w-ver">Version under test</label><select class="select mono" id="w-ver">${[sk().cand, sk().ver].filter(Boolean).map(v => `<option ${v === st.version ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="field"><label for="w-base">Baseline</label><select class="select mono" id="w-base"><option>${sk().ver}</option><option>none</option></select></div></div>
+      <dl class="kv"><dt>Repository</dt><dd class="mono">${sk().repo}</dd><dt>Environment</dt><dd>${sk().env}</dd><dt>Last evaluated</dt><dd>${sk().lastEval} ago</dd></dl></div>`,
+    () => `<div class="stack" style="padding-top:12px">${[['regression', 'Regression gate', 'Prove the new version is no worse than the baseline. Can block promotion.'], ['baseline', 'Establish a baseline', 'Score one version to create a reference for later comparisons.'], ['comparison', 'Compare configurations', 'Score two versions or model connections on the same cases.']].map(([v, t, d]) => `<label class="opt"><input type="radio" name="obj" value="${v}" ${st.obj === v ? 'checked' : ''}><span><strong>${t}</strong><br><span class="d">${d}</span></span></label>`).join('')}</div>`,
+    () => `<div class="stack" style="padding-top:12px"><div class="field"><label>Dataset</label><select class="select mono"><option>${sk().dataset === '—' ? 'Generate from manifest' : sk().dataset}</option><option>Generate additional cases</option></select></div>
+      <div class="field"><span class="lbl">Cases to run</span><div class="seg" role="group" id="w-sample">${[['all', 'All 180'], ['strat', 'Stratified 60'], ['failed', 'Failed last run · 19']].map(([v, l]) => `<button aria-pressed="${st.sample === v}" data-v="${v}">${l}</button>`).join('')}</div></div>
+      <div class="panel"><div class="panel-h"><h3>Preview</h3><span class="meta">5 of ${cases()}</span></div><table class="tbl compact"><thead><tr><th>Case</th><th>Input</th><th>Expected</th></tr></thead><tbody>
+      ${[['001', 'checkout-api 5xx > 4% for 6m', 'SEV-2 · payments'], ['014', 'queue lag 40m on ledger-sync', 'SEV-2 · ledger'], ['027', 'TLS cert expires in 6d', 'SEV-3 · platform'], ['044', 'auth latency p99 9s', 'SEV-1 · identity'], ['058', 'disk 91% on search-03', 'SEV-3 · search']].map(c => `<tr><td class="mono">${c[0]}</td><td class="small">${c[1]}</td><td class="mono small">${c[2]}</td></tr>`).join('')}</tbody></table></div></div>`,
+    () => `<div class="stack" style="padding-top:12px">
+      <div class="crit lbl"><span>Metric</span><span></span><span>Threshold</span><span>When missed</span><span></span></div>
+      <div id="crit" class="stack" style="gap:6px">${st.crit.map((c, i) => `<div class="crit" data-i="${i}"><select class="select" data-f="0">${['Quality score', 'Drop vs baseline', 'Evidence grounding score', 'Latency P95 (ms)', 'Estimated cost (USD) per case', 'Human edits needed'].map(m => `<option ${m === c[0] ? 'selected' : ''}>${m}</option>`).join('')}</select>
+        <select class="select mono" data-f="1"><option ${c[1] === '≥' ? 'selected' : ''}>≥</option><option ${c[1] === '≤' ? 'selected' : ''}>≤</option></select><input class="input mono" data-f="2" value="${c[2]}" aria-label="Threshold"><select class="select" data-f="3"><option ${c[3] === 'Blocks promotion' ? 'selected' : ''}>Blocks promotion</option><option ${c[3] === 'Warns' ? 'selected' : ''}>Warns</option></select>
+        <button class="icon-btn" data-del="${i}" aria-label="Remove criterion">${S.icon('x')}</button></div>`).join('')}</div>
+      <button class="btn sm" id="add-crit" style="justify-self:start">${S.icon('plus')}Add criterion</button><span class="err small" id="crit-err"></span></div>`,
+    () => `<div class="stack" style="padding-top:12px"><div class="field"><label>Model connection</label><select class="select" id="w-conn"><option value="anthropic" ${st.conn === 'anthropic' ? 'selected' : ''}>Anthropic · active</option><option value="openai" ${st.conn === 'openai' ? 'selected' : ''}>OpenAI · active</option><option value="azure" disabled>Azure OpenAI · revoked</option></select><span class="hint">Anthropic key is due for rotation. Runs continue until it is revoked.</span></div>
+      <div class="field"><span class="lbl">Execution</span><div class="seg" role="group" id="w-rt"><button aria-pressed="${st.runtime === 'api'}" data-v="api">Direct API</button><button aria-pressed="${st.runtime === 'harness'}" data-v="harness">Customer harness</button></div><span class="hint" id="rt-hint">${st.runtime === 'api' ? 'Savant calls the model connection directly in an isolated sandbox.' : 'Runs inside your harness through the skill router. <span class="cap plan">Planned</span>'}</span>
+        ${st.runtime === 'harness' ? `<div class="row" style="margin-top:6px"><select class="select" id="w-h" aria-label="Harness">${['Claude Code', 'Codex', 'Cursor', 'GitHub Copilot (VS Code)'].map(h => `<option ${h === st.harness ? 'selected' : ''}>${h}</option>`).join('')}</select><span class="small muted">via router token</span></div>` : ''}</div>
+      <div class="field"><span class="lbl">Judge</span><div class="fg2">Savant rubric judge · severity-rubric-v2</div></div>
+      <label class="row"><button class="toggle" role="switch" aria-checked="${st.replay}" id="w-replay" aria-label="Replay tool responses"></button>Replay recorded tool responses for determinism</label>
+      <div class="field"><label for="w-par">Parallel cases · <span class="num" id="par-v">${st.par}</span></label><input type="range" id="w-par" min="1" max="16" value="${st.par}"></div>
+      <div class="field"><span class="lbl">Triggers</span>
+        <label class="row small"><input type="checkbox" class="chk" checked disabled>Run manually<span class="cap live" style="margin-left:auto">Available</span></label>
+        <label class="row small"><input type="checkbox" class="chk" id="t-cand" ${st.trig.cand ? 'checked' : ''}>On every new candidate version<span class="cap plan" style="margin-left:auto">Planned</span></label>
+        <label class="row small"><input type="checkbox" class="chk" id="t-sched" ${st.trig.sched ? 'checked' : ''}>On a schedule<span class="cap plan" style="margin-left:auto">Planned</span></label>
+        ${st.trig.sched ? `<div class="row" style="padding-left:24px"><div class="seg" role="group" id="w-cad">${['Nightly', 'Weekdays', 'Weekly'].map(c => `<button aria-pressed="${st.cadence === c}" data-v="${c}">${c}</button>`).join('')}</div><input class="input mono" type="time" id="w-time" value="${st.time}" style="width:110px" aria-label="Time"></div><span class="hint" style="padding-left:24px">Next run ${st.cadence === 'Weekly' ? 'Monday' : 'tomorrow'} ${st.time} · ~$${(cases() * 0.021).toFixed(2)} per run · ${st.cadence === 'Nightly' ? 30 : st.cadence === 'Weekdays' ? 22 : 4} runs a month</span>` : ''}
+      </div></div>`,
+    () => `<dl class="kv review" style="padding-top:12px;font-size:13px;gap:10px 16px"><dt>Skill</dt><dd>${sk().name} <span class="mono">${st.version}</span> vs <span class="mono">${st.base}</span></dd><dt>Objective</dt><dd>${{ regression: 'Regression gate', baseline: 'Baseline', comparison: 'Comparison' }[st.obj]}</dd>
+      <dt>Cases</dt><dd><span class="num">${cases()}</span> from <span class="mono">${sk().dataset}</span></dd><dt>Criteria</dt><dd>${st.crit.map(c => `${c[0]} ${c[1]} <span class="num">${c[2]}</span> · <span class="muted">${c[3].toLowerCase()}</span>`).join('<br>')}</dd>
+      <dt>Environment</dt><dd>${st.conn === 'anthropic' ? 'Anthropic' : 'OpenAI'} · ${st.runtime === 'api' ? 'direct API' : 'customer harness'} · ${st.par} parallel</dd><dt>Triggers</dt><dd>Manual${st.trig.cand ? ' · on candidate' : ''}${st.trig.sched ? ` · ${st.cadence.toLowerCase()} at ${st.time}` : ''}</dd><dt>Estimated cost</dt><dd><span class="num">$${(cases() * 0.021 * (st.obj === 'regression' ? 2 : 1)).toFixed(2)}</span> <span class="muted">estimate from 30-day mean</span></dd></dl>
+      ${planned() ? `<div class="banner sim" style="margin-top:16px"><i class="mk sim"></i><span>${st.runtime === 'harness' ? `Harness execution is planned. This saves a proposed configuration and does not run.` : 'The run starts now. Automatic triggers are saved as a proposal and do not fire yet.'}</span></div>` : ''}`
+  ];
+  const planned = () => st.runtime === 'harness' || st.trig.cand || st.trig.sched;
+  function render() {
+    if (st.done) return;
+    $('#steps').innerHTML = steps.map((s, i) => `<button class="${i < st.step ? 'done' : ''}" ${i === st.step ? 'aria-current="step"' : ''} data-s="${i}" ${i > st.step ? 'disabled' : ''}>${s}</button>`).join('');
+    $('#wiz-b').innerHTML = views[st.step]();
+    $('#back').hidden = st.step === 0;
+    $('#next').innerHTML = st.step === steps.length - 1 ? (st.runtime === 'harness' ? 'Save proposed configuration' : S.icon('play') + 'Run evaluation') : 'Continue';
+    $('#est').textContent = `${cases()} cases · ~$${(cases() * 0.021 * (st.obj === 'regression' ? 2 : 1)).toFixed(2)}`;
+    bind();
+  }
+  function bind() {
+    const b = $('#wiz-b');
+    $('#w-skill') && ($('#w-skill').onchange = e => { st.skill = e.target.value; st.version = sk().cand || sk().ver; st.base = sk().ver; render(); });
+    $('#w-ver') && ($('#w-ver').onchange = e => st.version = e.target.value);
+    $('#w-base') && ($('#w-base').onchange = e => st.base = e.target.value);
+    $$('[name="obj"]', b).forEach(r => r.onchange = () => { st.obj = r.value; render(); });
+    $$('#w-sample button').forEach(x => x.onclick = () => { st.sample = x.dataset.v; render(); });
+    $$('#crit [data-f]').forEach(el => el.oninput = el.onchange = () => { st.crit[+el.closest('.crit').dataset.i][+el.dataset.f] = el.value; });
+    $$('#crit [data-del]').forEach(x => x.onclick = () => { st.crit.splice(+x.dataset.del, 1); render(); });
+    $('#add-crit') && ($('#add-crit').onclick = () => { st.crit.push(['Evidence grounding score', '≥', '80', 'Warns']); render(); });
+    $('#w-conn') && ($('#w-conn').onchange = e => st.conn = e.target.value);
+    $$('#w-rt button').forEach(x => x.onclick = () => { st.runtime = x.dataset.v; render(); });
+    $('#w-h') && ($('#w-h').onchange = e => st.harness = e.target.value);
+    $('#t-cand') && ($('#t-cand').onchange = e => { st.trig.cand = e.target.checked; });
+    $('#t-sched') && ($('#t-sched').onchange = e => { st.trig.sched = e.target.checked; render(); });
+    $$('#w-cad button').forEach(x => x.onclick = () => { st.cadence = x.dataset.v; render(); });
+    $('#w-time') && ($('#w-time').onchange = e => { st.time = e.target.value; render(); });
+    $('#w-replay') && ($('#w-replay').onclick = e => { st.replay = !st.replay; e.currentTarget.setAttribute('aria-checked', st.replay); });
+    $('#w-par') && ($('#w-par').oninput = e => { st.par = +e.target.value; $('#par-v').textContent = st.par; });
+  }
+  $('#steps').addEventListener('click', e => { const x = e.target.closest('[data-s]'); if (x && !x.disabled) { st.step = +x.dataset.s; render(); } });
+  $('#back').onclick = () => { st.step = Math.max(0, st.step - 1); render(); };
+  $('#next').onclick = () => {
+    if (st.step === 3) {
+      const bad = st.crit.findIndex(c => c[2].trim() === '' || isNaN(+c[2]));
+      if (!st.crit.some(c => c[3] === 'Blocks promotion') && st.obj === 'regression') { $('#crit-err').textContent = 'A regression gate needs at least one criterion that blocks promotion.'; return; }
+      if (bad > -1) { $('#crit-err').textContent = `Criterion ${bad + 1}: threshold must be a number.`; $$('#crit .input')[bad].setAttribute('aria-invalid', 'true'); return; }
+    }
+    if (st.step < steps.length - 1) { st.step++; render(); return; }
+    st.done = true; $('#wiz').dataset.guard = '';
+    const trigTxt = [st.trig.cand && 'on candidate', st.trig.sched && `${st.cadence.toLowerCase()} ${st.time}`].filter(Boolean).join(' · ');
+    if (planned()) $('#suites tbody').insertAdjacentHTML('afterbegin', `<tr><td><strong>${sk().name}</strong><div class="sub mono">${sk().dataset} · ${st.version}</div></td><td>${{ regression: 'Regression gate', baseline: 'Baseline', comparison: 'Comparison' }[st.obj]}</td><td class="small fg2">${st.crit.filter(c => c[3] === 'Blocks promotion').map(c => `${c[0]} ${c[1]} ${c[2]}`).join(' · ') || 'Warn only'}</td><td colspan="2"><span class="st sim"><i class="mk sim"></i>Proposed configuration</span></td><td class="small">${st.runtime === 'harness' ? st.harness + ' harness' : 'Manual'}${trigTxt ? ' · ' + trigTxt : ''} <span class="cap plan">Planned</span></td><td></td></tr>`);
+    if (st.runtime === 'harness') {
+      $('#wiz-b').innerHTML = `<div class="done-state"><span class="st sim"><i class="mk sim"></i>Proposed</span><h2>Configuration saved, not run</h2><p class="muted">${sk().name} <span class="mono">${st.version}</span> in ${st.harness}${trigTxt ? ' · ' + trigTxt : ''}. It runs once harness execution ships, or you can run it now with Direct API.</p><div class="row"><button class="btn" id="run-api">Run now with Direct API</button></div></div>`;
+      $('#steps').innerHTML = ''; $('#wiz-f').hidden = true;
+      $('#run-api').onclick = () => { st.runtime = 'api'; st.done = false; st.step = 5; $('#wiz-f').hidden = false; render(); };
+      S.toast('Proposed configuration saved to suites'); return;
+    }
+    const runId = S.db.addRun({ skill: st.skill, v: st.version, b: st.base === 'none' ? '—' : st.base, n: cases(), criteria: st.crit });
+    $('#wiz-b').innerHTML = `<div class="done-state"><span class="st"><i class="mk ok"></i>Started</span><span class="tag sim">Simulated</span><h2>${runId} is running</h2><p class="muted">${sk().name} <span class="mono">${st.version}</span> · ${cases()} cases. Results stream into Runs as cases complete.</p><div class="row"><a class="btn primary" href="runs.html#${runId}">Watch ${runId} in Runs</a></div></div>`;
+    $('#steps').innerHTML = ''; $('#wiz-f').hidden = true;
+    S.simToast(trigTxt ? `${runId} started · triggers (${trigTxt}) saved as a proposal` : `${runId} started · definition saved as a suite`);
+  };
+  function open(skill) {
+    Object.assign(st, { step: 0, done: false, runtime: 'api', trig: { cand: false, sched: false } }); if (skill && S.skills.some(s => s.id === skill)) { st.skill = skill; st.version = sk().cand || sk().ver; st.base = sk().ver; }
+    $('#wiz-f').hidden = false; $('#wiz').dataset.guard = 'Discard this evaluation definition?'; render(); S.openDrawer($('#wiz'));
+  }
+  $('#new').onclick = () => open();
+  $$('[data-new]').forEach(b => b.onclick = () => open(b.dataset.new));
+  $('#wiz-x').onclick = () => { if (st.done || st.step === 0) $('#wiz').dataset.guard = ''; S.closeDrawer($('#wiz')); };
+  if (location.hash === '#auto-improve') $('#tab-ai').click();
+  else { const es0 = S.ai.evalState(); $('#ai-n').textContent = AIO.filter(id => ['generated', 'ready-for-review'].includes(es0.props[id].status)).length || ''; }
+  if (location.hash === '#new') open(new URLSearchParams(location.search).get('skill'));
+});
+</script>
+</body>
+</html>

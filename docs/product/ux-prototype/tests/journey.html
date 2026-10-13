@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Journey regression tests · Savant prototype</title>
+<link rel="stylesheet" href="../assets/savant.css">
+<style>
+  body { overflow: auto; }
+  .doc { max-width: 1100px; margin: 0 auto; padding: 24px; }
+  .frames { position: absolute; left: -10000px; top: 0; }
+  .frames iframe { border: 0; display: block; }
+  td.r { text-align: right; }
+</style>
+</head>
+<body>
+<div class="doc">
+  <div class="row"><h1>Journey regression tests</h1><span class="spacer"></span><span class="st" id="sum"><i class="mk unk"></i>Running…</span><button class="btn" id="again">Run again</button></div>
+  <p class="muted" style="margin:6px 0 16px">Library → Workbench → Evaluations → Runs → Insights → Workflows, at 1280px and 390px. Your prototype data is backed up before the run and restored after it.</p>
+  <div class="panel"><table class="tbl" id="res"><thead><tr><th>Width</th><th>Screen</th><th>Check</th><th>Result</th></tr></thead><tbody></tbody></table></div>
+</div>
+<div class="frames" id="frames" aria-hidden="true"></div>
+<script>
+(function () {
+  const STEPS = [
+    ['library.html', 'Library lists skills', d => d.querySelectorAll('#skills tbody tr').length >= 9],
+    ['library.html', 'Skills tab count matches inventory', d => d.querySelector('#n-skills')?.textContent === String(d.querySelectorAll('#skills tbody tr').length)],
+    ['workbench.html?skill=pr-summarizer', 'Workbench opens the linked skill', d => d.querySelector('.wb-head h1')?.textContent === 'PR summarizer'],
+    ['workbench.html?skill=pr-summarizer', 'Canvas shows that skill’s tools', d => (d.querySelector('#n-t1')?.textContent || '').includes('get_pr_diff')],
+    ['evaluations.html', 'Suites and recent results render', d => d.querySelectorAll('#suites tbody tr').length > 0 && d.querySelectorAll('#recent tr').length > 0],
+    ['runs.html#EV-2418', 'Deep link opens EV-2418', d => d.querySelector('#insp h1')?.textContent === 'EV-2418'],
+    ['runs.html#EV-2418', 'Quality gate reports Failed', d => [...d.querySelectorAll('.gate')].some(g => /Quality score/.test(g.textContent) && /Failed/.test(g.textContent))],
+    ['runs.html#EV-2418', 'Run selector reachable at this width', (d, w) => w > 1000 ? !!d.querySelector('.rlist') && d.querySelector('.rlist').offsetParent !== null : d.querySelector('#rsel') && d.querySelector('#rsel').offsetParent !== null],
+    ['insights.html', 'Comparison verdict renders', d => (d.querySelector('#verdict')?.textContent || '').length > 10],
+    ['workflows.html', 'Workflow graph renders and validates', d => d.querySelectorAll('.gn').length >= 4 && !/validation issue/.test(d.querySelector('#ver-st')?.textContent || '')]
+  ];
+  const PAGES = [...new Set(STEPS.map(s => s[0]))];
+  const backup = () => { const o = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sv-')) o[k] = localStorage.getItem(k); } return o; };
+  const restore = o => { Object.keys(localStorage).filter(k => k.startsWith('sv-')).forEach(k => localStorage.removeItem(k)); Object.entries(o).forEach(([k, v]) => localStorage.setItem(k, v)); };
+  const load = (src, w) => new Promise(res => {
+    const f = document.createElement('iframe'); f.style.width = w + 'px'; f.style.height = '900px'; const errs = [];
+    f.onload = () => { try { f.contentWindow.addEventListener('error', e => errs.push(e.message)); } catch (e) { errs.push('cross-origin: ' + e.message); } setTimeout(() => res({ f, errs }), 1400); };
+    f.src = '../' + src; document.getElementById('frames').appendChild(f);
+  });
+  async function run() {
+    const tb = document.querySelector('#res tbody'); tb.innerHTML = ''; let pass = 0, total = 0;
+    const saved = backup();
+    try {
+      Object.keys(localStorage).filter(k => k.startsWith('sv-wh:') || k === 'sv-ws').forEach(k => localStorage.removeItem(k));
+      localStorage.setItem('sv-ws', '"wh"');
+      for (const w of [1280, 390]) {
+        for (const page of PAGES) {
+          const { f, errs } = await load(page, w); let d = null;
+          try { d = f.contentDocument; } catch (e) { /* blocked */ }
+          const rows = STEPS.filter(s => s[0] === page).map(s => [s[1], (() => { try { return d ? !!s[2](d, w) : false; } catch (e) { return false; } })()]);
+          if (d) {
+            const sw = d.documentElement.scrollWidth, main = d.querySelector('.main');
+            rows.push(['No horizontal page overflow', sw <= w + 1 && (!main || main.scrollWidth <= main.clientWidth + 1 || page.startsWith('workflows') || page.startsWith('workbench'))]);
+          } else rows.push(['Page accessible to the test runner', false]);
+          rows.push(['No script errors after load', errs.length === 0]);
+          rows.forEach(([name, ok]) => { total++; if (ok) pass++; tb.insertAdjacentHTML('beforeend', `<tr><td class="num">${w}px</td><td class="mono small">${page}</td><td>${name}</td><td>${ok ? '<span class="st"><i class="mk ok"></i>Pass</span>' : '<span class="st p1"><i class="mk p1"></i>Fail</span>'}</td></tr>`); });
+          f.remove();
+        }
+      }
+    } finally { restore(saved); }
+    document.getElementById('sum').innerHTML = pass === total ? `<i class="mk ok"></i>${pass} of ${total} passed` : `<span class="st p1"><i class="mk p1"></i>${total - pass} failed · ${pass} of ${total} passed</span>`;
+  }
+  document.getElementById('again').onclick = run;
+  run();
+})();
+</script>
+</body>
+</html>

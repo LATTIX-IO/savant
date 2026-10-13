@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Library · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .filters { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .filters .search { width: 260px; }
+  .pipe { display: inline-flex; align-items: center; gap: 3px; }
+  .pipe i { width: 18px; height: 4px; border-radius: 2px; background: var(--recess); }
+  .pipe i.on { background: var(--fg-2); }
+  .pipe span { margin-left: 6px; font-size: 12px; color: var(--fg-2); }
+  .bulk { display: none; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; margin-bottom: 8px; background: var(--selected); border-radius: var(--r-ctl); }
+  .bulk.show { display: flex; }
+  .tbl td.cb, .tbl th.cb { width: 36px; padding-right: 0; }
+  .detail .tbl td { height: 64px; }
+  .detail .desc { display: block; }
+  .desc { display: none; color: var(--muted); font-size: 12px; max-width: 46ch; }
+  .col-trend { display: none; }
+  .detail .col-trend { display: table-cell; }
+  .sync-dots { display: inline-flex; gap: 2px; }
+  .sync-dots i { width: 5px; height: 14px; border-radius: 1px; background: var(--border-strong); }
+  .sync-dots i.f { background: var(--crit); }
+  .sync-dots i.w { background: var(--warn); }
+  tr.errrow td { background: var(--bg); height: auto; padding: 12px; }
+  .dims { display: grid; gap: 8px; }
+  .dims .row span:first-child { width: 120px; color: var(--fg-2); font-size: 12px; }
+  .dims .bar { flex: 1; }
+  .vt { list-style: none; margin: 0; padding: 0; }
+  .vt li { display: grid; grid-template-columns: 64px 1fr auto; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); align-items: center; }
+  .rec-imp { display: grid; gap: 8px; margin-top: 16px; padding: 12px; border: 1px dashed var(--sim); border-radius: var(--r-ctl); background: var(--sim-bg); }
+  .rec-imp .tbl th, .rec-imp .tbl td { background: transparent; }
+  .prov-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .prov { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); cursor: pointer; background: var(--surface); }
+  .prov:hover { background: var(--recess); }
+  .prov:has(input:checked) { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--selected); }
+  .prov input { accent-color: var(--accent); }
+</style>
+</head>
+<body data-page="library">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><span>Library</span><span>/</span><span id="crumb-tab">Skills</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Library</h1><p id="ctx-desc" hidden></p></div>
+    <div class="acts" id="ctx-acts"></div>
+  </div>
+
+  <div class="tabs" role="tablist" data-od-id="library-tabs">
+    <button role="tab" aria-selected="true" aria-controls="t-skills" data-tab="skills">Skills <span class="count" id="n-skills"></span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-repos" data-tab="repositories">Repositories <span class="count" id="n-repos"></span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-hub" data-tab="discover">Marketplace <span class="count">7</span></button>
+    <button type="button" onclick="location.href='discovery.html'" data-od-id="tab-discovered">Opportunities <span class="tag sim" style="height:16px;padding:0 5px">Planned</span></button>
+  </div>
+
+  <!-- skills -->
+  <section id="t-skills" data-od-id="skills-inventory">
+    <div class="filters">
+      <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input class="input" id="q" placeholder="Filter by name, owner or repository" aria-label="Filter skills"></label>
+      <div class="seg" role="group" aria-label="Tier" id="tier"><button aria-pressed="true" data-v="">All tiers</button><button aria-pressed="false" data-v="T1">T1</button><button aria-pressed="false" data-v="T2">T2</button><button aria-pressed="false" data-v="T3">T3</button></div>
+      <select class="select" id="env" aria-label="Environment"><option value="">All environments</option><option>production</option><option>staging</option><option>draft</option></select>
+      <select class="select" id="repo" aria-label="Repository"><option value="">All repositories</option></select>
+      <label class="row small fg2"><button class="toggle" role="switch" aria-checked="false" id="abn" aria-label="Abnormal only"></button>Abnormal only</label>
+      <span class="spacer"></span>
+      <span class="muted small" id="count"></span>
+      <div class="seg" role="group" aria-label="Density"><button aria-pressed="true" data-view="list" title="Compact list" data-ic="list"><span class="sr">Compact</span></button><button aria-pressed="false" data-view="detail" title="Detailed" data-ic="rows"><span class="sr">Detailed</span></button></div>
+    </div>
+    <div class="bulk" id="bulk" data-od-id="bulk-actions"><strong id="bulk-n">0 selected</strong><span class="spacer"></span>
+      <button class="btn sm" id="bulk-eval" data-ic="play">Run evaluation</button><button class="btn sm" id="bulk-cmp" data-ic="compare">Compare</button><button class="btn sm" data-ic="download" id="bulk-exp">Export manifest</button><button class="btn sm tertiary" id="bulk-clear">Clear</button></div>
+    <div class="panel" id="skills-wrap"><div class="tbl-wrap"><table class="tbl" id="skills">
+      <thead><tr><th class="cb"><input type="checkbox" class="chk" id="all" aria-label="Select all"></th>
+        <th class="sortable" data-k="name">Skill</th><th>Tier</th><th>Version</th><th>Environment</th><th class="sortable" data-k="score">Quality ↓</th><th class="col-trend">30-day quality</th><th>Status</th><th>Runs, 14d</th><th class="r">Last eval</th><th>Owner</th></tr></thead>
+      <tbody></tbody></table></div>
+      <div class="empty" id="empty" hidden><h3>No skills match these filters</h3><p>Try a different tier or environment.</p><button class="btn" id="clear">Clear filters</button></div>
+    </div>
+  </section>
+
+  <!-- repositories -->
+  <section id="t-repos" hidden data-od-id="repositories">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="repos">
+      <thead><tr><th>Repository</th><th>Provider</th><th>Authorization</th><th>Sync</th><th>Last 10 syncs</th><th class="r">Skills</th><th class="r">Last sync</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <!-- hub -->
+  <section id="t-hub" hidden data-od-id="discover-hub">
+    
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="hub">
+      <thead><tr><th>Skill</th><th>Source</th><th>Trust</th><th>Safety verdict</th><th>Findings</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+</div>
+</main>
+</div>
+
+<!-- inspector -->
+<aside class="drawer" id="insp" aria-hidden="true" aria-labelledby="insp-t" data-od-id="skill-inspector">
+  <div class="drawer-h">
+    <div class="row"><span class="mono small muted" id="insp-path"></span><span class="spacer"></span><button class="icon-btn" aria-label="Close inspector" id="insp-x"></button></div>
+    <h2 id="insp-t"></h2>
+    <div class="row wrap" id="insp-tags"></div>
+    <div class="tabs" role="tablist" style="margin:8px 0 0">
+      <button role="tab" aria-selected="true" aria-controls="i-sum">Summary</button>
+      <button role="tab" aria-selected="false" aria-controls="i-ver">Versions</button>
+      <button role="tab" aria-selected="false" aria-controls="i-runs">Usage</button>
+      <button role="tab" aria-selected="false" aria-controls="i-dep">Dependencies</button>
+    </div>
+  </div>
+  <div class="drawer-b">
+    <div id="i-sum"></div>
+    <div id="i-ver" hidden></div>
+    <div id="i-runs" hidden></div>
+    <div id="i-dep" hidden></div>
+  </div>
+  <div class="drawer-f"><a class="btn" id="insp-wb" href="workbench.html">Open in workbench</a><a class="btn primary" id="insp-eval" href="evaluations.html#new">Evaluate candidate</a></div>
+</aside>
+
+<dialog class="dialog wide" id="connect" aria-labelledby="cn-t" data-od-id="connect-repo-dialog">
+  <form method="dialog">
+    <div class="dh"><h2 id="cn-t">Connect a repository</h2></div>
+    <div class="db stack">
+      <div class="lbl">Provider</div>
+      <div class="prov-grid">
+        <label class="prov"><input type="radio" name="pv" value="GitHub" checked>GitHub<span class="muted small" style="margin-left:auto">App installation</span></label>
+        <label class="prov"><input type="radio" name="pv" value="GitLab">GitLab<span class="muted small" style="margin-left:auto">OAuth</span></label>
+        <label class="prov"><input type="radio" name="pv" value="Bitbucket">Bitbucket<span class="muted small" style="margin-left:auto">OAuth</span></label>
+        <label class="prov"><input type="radio" name="pv" value="Azure Repos">Azure Repos<span class="muted small" style="margin-left:auto">PAT</span></label>
+      </div>
+      <div class="field"><label for="cn-repo">Repository</label><input class="input" id="cn-repo" placeholder="owner/name" autocomplete="off"><span class="hint" id="cn-hint">Format: owner/name, for example wh/finance-skills</span></div>
+      <div class="field"><label for="cn-path">Skills path</label><input class="input mono" id="cn-path" value="skills/"></div>
+    </div>
+    <div class="df"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" id="cn-go" value="ok">Authorize and index</button></div>
+  </form>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  $('#insp-x').innerHTML = S.icon('x');
+  const state = { q: '', tier: '', env: '', repo: '', abn: false, sel: new Set(), sort: 'score' };
+  const deps = { 'incident-triage': ['pr-summarizer'], 'engineering-rfc-reviewer': ['pr-summarizer'], 'rfp-response-drafter': ['customer-email-tone-pass'], 'contract-clause-reviewer': [] };
+  const repos = [...new Set(S.skills.map(s => s.repo))];
+  $('#repo').innerHTML += repos.map(r => `<option>${r}</option>`).join('');
+
+  /* context actions per tab */
+  const ctx = {
+    skills: ['Governed skills indexed from connected repositories', `<button class="btn" data-ic="download" id="exp">Export catalog</button><a class="btn primary" href="workbench.html?new=1" data-ic="plus">New skill</a>`],
+    repositories: ['Source repositories, authorization and indexing state', `<button class="btn" id="syncall" data-ic="refresh">Sync all</button><button class="btn primary" id="open-connect" data-ic="plus">Connect repository</button>`],
+    discover: ['Public skills from external hubs, scanned before import', `<button class="btn" id="hubsync" data-ic="refresh">Refresh sources</button>`]
+  };
+  const setTab = t => {
+    $('#crumb-tab').textContent = { skills: 'Skills', repositories: 'Repositories', discover: 'Marketplace' }[t] || t;
+     $('#ctx-acts').innerHTML = ctx[t][1];
+    $$('#ctx-acts [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#open-connect') && ($('#open-connect').onclick = () => $('#connect').showModal());
+    $('#exp') && ($('#exp').onclick = () => S.toast('Catalog exported · 9 skills · savant-catalog.json'));
+    $('#syncall') && ($('#syncall').onclick = () => repoRows.filter(r => r.auth === 'active').forEach(r => sync(r)));
+    $('#hubsync') && ($('#hubsync').onclick = () => S.toast('5 hub sources refreshed · 0 new skills'));
+    history.replaceState(null, '', t === 'skills' ? location.pathname : '#' + t);
+  };
+  S.tabs($('[data-od-id="library-tabs"]'), setTab);
+
+  /* skills table */
+  const pipe = env => { const i = ['draft', 'staging', 'production'].indexOf(env); return `<span class="pipe" title="${env}">${[0, 1, 2].map(k => `<i class="${k <= i ? 'on' : ''}"></i>`).join('')}<span>${env}</span></span>`; };
+  const stat = s => s.status === 'ok' ? S.status('ok') : s.status === 'p1' ? S.status('p1') : s.status === 'p2' ? S.status('p2') : s.status === 'p3' ? '<span class="st"><i class="mk p3"></i>Stale</span>' : S.status('unk', 'Not evaluated');
+  function render() {
+    const q = state.q.toLowerCase();
+    let rows = S.skills.filter(s => (!q || (s.name + s.owner + s.repo + s.team).toLowerCase().includes(q)) && (!state.tier || s.tier === state.tier) && (!state.env || s.env === state.env) && (!state.repo || s.repo === state.repo) && (!state.abn || s.status !== 'ok'));
+    rows.sort((a, b) => state.sort === 'name' ? a.name.localeCompare(b.name) : (b.score ?? -1) - (a.score ?? -1));
+    $('#count').textContent = `${rows.length} of ${S.skills.length}`; $('#n-skills').textContent = S.skills.length; $('#n-repos').textContent = repoRows.length;
+    $('#empty').hidden = rows.length > 0; $('#skills').hidden = !rows.length;
+    $('#skills tbody').innerHTML = rows.map(s => `<tr class="click ${state.sel.has(s.id) ? 'sel' : ''} ${s.status === 'p1' && !state.sel.has(s.id) ? 'p1row' : ''}" data-id="${s.id}">
+      <td class="cb"><input type="checkbox" class="chk" ${state.sel.has(s.id) ? 'checked' : ''} aria-label="Select ${s.name}"></td>
+      <td><a class="name" href="#${s.id}">${S.esc(s.name)}</a>${s.sim ? ' <span class="tag sim">Simulated</span>' : ''}<span class="desc">${s.team} · ${s.repo} · dataset ${s.dataset}</span></td>
+      <td><span class="tag">${s.tier}</span></td>
+      <td class="nowrap"><span class="mono">${s.ver}</span>${s.cand ? ` <span class="tag sim" title="Candidate">${s.cand} candidate</span>` : ''}</td>
+      <td>${pipe(s.env)}</td><td>${S.score(s.score, s.delta ?? 0)}</td>
+      <td class="col-trend">${S.spark(s.trend, 140, 28)}</td>
+      <td>${stat(s)}</td><td>${S.bars(s.runTrend, 72, 18)}</td>
+      <td class="r num muted">${s.lastEval}</td><td class="mono small fg2">${s.owner}</td></tr>`).join('');
+    const n = state.sel.size; $('#bulk').classList.toggle('show', n > 0); $('#bulk-n').textContent = `${n} selected`;
+    $('#bulk-cmp').disabled = n !== 2; $('#bulk-cmp').title = n !== 2 ? 'Select exactly two skills to compare' : '';
+  }
+  S.loading($('#skills tbody'), 11, 6, render);
+  $('#q').oninput = e => { state.q = e.target.value; render(); };
+  $$('#tier button').forEach(b => b.onclick = () => { $$('#tier button').forEach(x => x.setAttribute('aria-pressed', x === b)); state.tier = b.dataset.v; render(); });
+  $('#env').onchange = e => { state.env = e.target.value; render(); };
+  $('#repo').onchange = e => { state.repo = e.target.value; render(); };
+  $('#abn').onclick = e => { state.abn = !state.abn; e.currentTarget.setAttribute('aria-checked', state.abn); render(); };
+  $('#clear').onclick = () => { Object.assign(state, { q: '', tier: '', env: '', repo: '', abn: false }); $('#q').value = ''; $('#env').value = ''; $('#repo').value = ''; $('#abn').setAttribute('aria-checked', false); $$('#tier button').forEach((x, i) => x.setAttribute('aria-pressed', i === 0)); render(); };
+  $$('[data-view]').forEach(b => b.onclick = () => { $$('[data-view]').forEach(x => x.setAttribute('aria-pressed', x === b)); $('#skills-wrap').classList.toggle('detail', b.dataset.view === 'detail'); S.store.set('lib-view', b.dataset.view); });
+  if (S.store.get('lib-view') === 'detail') $('[data-view="detail"]').click();
+  $$('#skills th.sortable').forEach(th => th.onclick = () => { state.sort = th.dataset.k; $$('#skills th.sortable').forEach(x => x.textContent = x.textContent.replace(' ↓', '')); th.textContent += ' ↓'; render(); });
+  $('#skills').addEventListener('click', e => {
+    const tr = e.target.closest('tr[data-id]'); if (!tr) return;
+    if (e.target.closest('.cb')) { const id = tr.dataset.id; state.sel.has(id) ? state.sel.delete(id) : state.sel.add(id); render(); return; }
+    e.preventDefault(); inspect(tr.dataset.id);
+  });
+  $('#all').onchange = e => { S.skills.forEach(s => e.target.checked ? state.sel.add(s.id) : state.sel.delete(s.id)); render(); };
+  $('#bulk-clear').onclick = () => { state.sel.clear(); $('#all').checked = false; render(); };
+  $('#bulk-eval').onclick = () => { const ids = [...state.sel].map(id => { const k = S.skills.find(x => x.id === id); return S.db.addRun({ skill: id, v: k.cand || k.ver, b: k.cand ? k.ver : '—', n: k.score == null ? 30 : 120 }); }); S.simToast(`${ids.join(', ')} started`, 'View runs', () => location.href = 'runs.html#' + ids[0]); state.sel.clear(); render(); };
+  $('#bulk-cmp').onclick = () => { const [a, b] = [...state.sel]; location.href = `insights.html?a=${a}&b=${b}`; };
+  $('#bulk-exp').onclick = () => S.toast(`Manifest exported for ${state.sel.size} skills`);
+
+  /* inspector */
+  const drawer = $('#insp');
+  function inspect(id) {
+    const s = S.skills.find(x => x.id === id); if (!s) return;
+    $$('#skills tr').forEach(tr => tr.classList.toggle('sel', tr.dataset.id === id));
+    $('#insp-path').textContent = `${s.repo} · skills/${s.id}/SKILL.md`;
+    $('#insp-t').textContent = s.name;
+    $('#insp-tags').innerHTML = `<span class="tag">${s.tier}</span><span class="tag">${s.ver}</span>${s.cand ? `<span class="tag sim">${s.cand} candidate</span>` : ''}${pipe(s.env)}<span class="spacer"></span>${stat(s)}`;
+    $('#insp-wb').href = 'workbench.html?skill=' + s.id;
+    $('#insp-eval').textContent = s.cand ? `Evaluate ${s.cand}` : 'Run evaluation';
+    $('#insp-eval').href = 'evaluations.html?skill=' + s.id + '#new';
+    const note = s.note ? `<div class="banner ${s.status === 'p1' ? 'p1' : s.status === 'p2' ? 'p2' : ''}" style="margin:12px 0">${s.note}${s.status === 'p1' ? '<span class="acts"><a class="btn sm" href="runs.html">Inspect run</a></span>' : ''}</div>` : '';
+    $('#i-sum').innerHTML = note + (s.score == null ? `<div class="empty"><h3>Not evaluated yet</h3><p>Generate a dataset from the manifest, then run a baseline.</p></div>` : `
+      <h3 style="margin:12px 0 4px">Quality, 30 days</h3><div id="insp-chart"></div>
+      <h3 style="margin:16px 0 8px">Dimensions, latest run</h3>
+      <div class="dims">${[['Quality', s.score], ['Grounding', s.score - 2.1], ['Actionability', s.score + (s.status === 'p1' ? -9 : 1.3)], ['Policy compliance', 98.0]].map(([k, v]) => `<div class="row"><span>${k}</span><div class="bar ${v < 80 ? 'p1' : ''}"><i style="width:${v}%"></i></div><span class="num" style="width:40px;text-align:right">${v.toFixed(1)}</span></div>`).join('')}</div>`) + `
+      <h3 style="margin:16px 0 8px">Source</h3>
+      <dl class="kv"><dt>Repository</dt><dd class="mono">${s.repo}</dd><dt>Commit</dt><dd class="mono">a41c9e2</dd><dt>Owner</dt><dd>${s.owner} · ${s.team}</dd><dt>Default dataset</dt><dd class="mono">${s.dataset}</dd><dt>Policies</dt><dd>${s.tier === 'T1' ? 'Tier 1 read access requires SSO group · Production releases require 2 approvers' : 'Staging burn-in of 24h before production'}</dd></dl>`;
+    if (s.score != null) requestAnimationFrame(() => S.line($('#insp-chart'), [{ name: s.name, values: s.trend, kind: 'fg' }], S.days(30), { h: 150, threshold: 85, thresholdLabel: 'Gate 85', area: true }));
+    const vers = s.cand ? [[s.cand, 'Candidate', s.status === 'p1' ? 82.4 : s.score + 1.2, 'today', 'sim'], [s.ver, 'Production', s.score - (s.status === 'p1' ? -6.1 : 0), '12 Sep', 'ok']] : [[s.ver, s.env[0].toUpperCase() + s.env.slice(1), s.score, '12 Sep', 'ok']];
+    vers.push(['v' + (parseFloat(s.ver.slice(1)) - 0.1).toFixed(1), 'Retired', s.score ? s.score - 1.4 : null, '28 Aug', 'idle']);
+    $('#i-ver').innerHTML = `<ul class="vt">${vers.map(v => `<li><span class="mono">${v[0]}</span><span><span class="st ${v[4] === 'sim' ? 'sim' : ''}"><i class="mk ${v[4]}"></i>${v[1]}</span><span class="muted small"> · ${v[3]}</span></span><span class="num">${v[2] == null ? '—' : v[2].toFixed(1)}</span></li>`).join('')}</ul>
+      ${s.cand ? `<a class="btn" style="margin-top:12px" href="insights.html?a=${s.id}" data-ic="compare">Compare ${s.cand} with ${s.ver}</a>` : ''}`;
+    const rt = [['Claude Code', 41], ['Codex', 22], ['Cursor', 17], ['GitHub Copilot', 12], ['API', 8]];
+    $('#i-runs').innerHTML = s.runs ? `<p class="muted" style="margin:12px 0"><span class="num">${s.runs.toLocaleString()}</span> runs, 30 days</p>
+      <div class="dims">${rt.map(([k, v]) => `<div class="row"><span>${k}</span><div class="bar"><i style="width:${v * 2}%"></i></div><span class="num" style="width:40px;text-align:right">${v}%</span></div>`).join('')}</div>
+      <h3 style="margin:16px 0 8px">Outcomes</h3><div class="row small"><span class="st"><i class="mk ok"></i>Succeeded 88%</span><span class="st p1"><i class="mk p1"></i>Failed 4%</span><span class="st unk"><i class="mk unk"></i>Unknown 8%</span></div>
+      <a class="btn" style="margin-top:16px" href="runs.html">Open runs</a>` : '<div class="empty"><h3>No runs reported</h3><p>Connect an agent client through the skill router to collect telemetry.</p><a class="btn" href="integrations.html#router">Set up router</a></div>';
+    const d = deps[s.id] || [], users = Object.entries(deps).filter(([, v]) => v.includes(s.id)).map(([k]) => k);
+    const nm = id => S.skills.find(x => x.id === id)?.name || id;
+    $('#i-dep').innerHTML = (d.length || users.length) ? `<svg viewBox="0 0 460 ${Math.max(2, d.length + users.length) * 56 + 20}" class="chart" style="margin-top:12px" role="img" aria-label="Dependency graph">
+      ${users.map((u, i) => `<g><rect x="8" y="${16 + i * 56}" width="150" height="36" rx="6" fill="var(--surface)" stroke="var(--border-strong)"/><text x="18" y="${38 + i * 56}" style="font:12px var(--font-body);fill:var(--fg)">${nm(u)}</text><path d="M158 ${34 + i * 56} C 200 ${34 + i * 56}, 190 60, 230 60" stroke="var(--border-strong)" fill="none"/></g>`).join('')}
+      <rect x="230" y="42" width="150" height="36" rx="6" fill="var(--fg)"/><text x="240" y="64" style="font:500 12px var(--font-body);fill:var(--surface)">${s.name}</text>
+      ${d.map((u, i) => `<g><path d="M380 60 C 410 60, 400 ${100 + i * 56}, 420 ${100 + i * 56}" stroke="var(--border-strong)" fill="none"/><text x="424" y="${104 + i * 56}" text-anchor="end" style="font:12px var(--font-body);fill:var(--fg)">${nm(u)}</text></g>`).join('')}
+    </svg><p class="muted small">Left: skills that load this one. Right: skills this one loads.</p>
+    ${users.length ? `<div class="rec-imp" id="impact"><div class="row"><h3>Impact of changing ${s.name}</h3><span class="cap plan" style="margin-left:auto">Planned</span></div>
+      
+      <table class="tbl compact"><thead><tr><th>Dependent suite</th><th class="r">Cases</th><th class="r">Est. cost</th></tr></thead><tbody>${users.map(u => { const k = S.skills.find(x => x.id === u); const n = { 'incident-triage': 180, 'engineering-rfc-reviewer': 240, 'rfp-response-drafter': 120 }[u] || 60; return `<tr><td>${k.name} <span class="mono small muted">${k.dataset}</span></td><td class="r num">${n}</td><td class="r num">$${(n * 0.021).toFixed(2)}</td></tr>`; }).join('')}</tbody></table>
+      <div class="row"><button class="btn sm" id="imp-prev">Preview impact run</button><span class="small muted" id="imp-out"></span></div></div>` : ''}` : '<div class="empty"><h3>No dependencies</h3><p>The manifest declares no skill dependencies.</p></div>';
+    $('#imp-prev') && ($('#imp-prev').onclick = e => { e.currentTarget.disabled = true; $('#imp-out').innerHTML = `<span class="st sim"><i class="mk sim"></i>Simulated plan: ${users.length} suites would run before ${s.cand || 'the next version'} can be promoted</span>`; });
+    $$('#i-ver [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    S.tabs(drawer); drawer.querySelector('[role="tab"]').click();
+    S.openDrawer(drawer); history.replaceState(null, '', '#' + id);
+  }
+  $('#insp-x').onclick = () => { S.closeDrawer(drawer); $$('#skills tr.sel').forEach(tr => state.sel.has(tr.dataset.id) || tr.classList.remove('sel')); };
+
+  /* repositories */
+  const repoRows = S.db.repos();
+  const syncCell = r => ({ ok: '<span class="st"><i class="mk ok"></i>Indexed</span>', auth_required: '<span class="st p2"><i class="mk p2"></i>Auth required</span>', stale: '<span class="st"><i class="mk p3"></i>Stale</span>', error: '<span class="st p1"><i class="mk p1"></i>Indexing failed</span>', indexing: '<span class="st"><i class="mk idle"></i>Indexing…</span>' })[r.sync];
+  const authCell = r => r.auth === 'active' ? '<span class="st"><i class="mk ok"></i>Active</span>' : '<span class="st p2"><i class="mk p2"></i>Needs reauthorization</span>';
+  const renderRepos = () => {
+    $('#repos tbody').innerHTML = repoRows.map((r, i) => `<tr class="${r.sync === 'error' ? 'p1row' : ''}"><td><strong>${S.esc(r.n)}</strong>${r.sim ? ' <span class="tag sim">Simulated</span>' : ''}<div class="sub mono">main · skills/</div></td><td>${r.pv}</td><td>${authCell(r)}</td><td>${syncCell(r)}</td>
+      <td><span class="sync-dots" aria-label="Recent sync outcomes">${r.hist.slice(0, 10).split('').map(c => `<i class="${c === 'f' ? 'f' : c === 'w' ? 'w' : ''}" style="${c === '-' ? 'opacity:.3' : ''}"></i>`).join('')}</span></td>
+      <td class="r num">${r.skills}</td><td class="r num muted">${r.last}</td>
+      <td class="r nowrap">${r.sync === 'error' ? `<button class="btn sm" data-err="${i}">${r.open ? 'Hide errors' : 'View errors'}</button> ` : ''}${r.auth !== 'active' ? `<button class="btn sm" data-auth="${i}">Reauthorize</button>` : `<button class="btn sm tertiary" data-sync="${i}" ${r.sync === 'indexing' ? 'disabled' : ''}>Sync now</button>`}</td></tr>
+      ${r.open ? `<tr class="errrow"><td colspan="8"><div class="row" style="margin-bottom:8px"><strong>2 manifests failed validation</strong><span class="muted small">4 skills in this repository were not imported</span></div><pre class="code">${r.errs.join('\n')}</pre><div class="row" style="margin-top:8px"><button class="btn sm" data-sync="${i}">Retry sync</button><button class="btn sm tertiary" onclick="Savant.toast('Fix proposal opened as PR #214 against ops/runbooks')">Propose fix as pull request</button></div></td></tr>` : ''}`).join('');
+  };
+  renderRepos();
+  function sync(r) { r.sync = 'indexing'; renderRepos(); setTimeout(() => { if (r.n === 'ops/runbooks') { r.sync = 'error'; r.hist = 'oooooooff'.slice(-9) + 'f'; S.simToast('ops/runbooks still failing · 2 manifests invalid'); } else if (r.sim) { const res = S.db.indexRepo(r.n); render(); S.simToast(`${r.n} synced · ${res.added.length} added, ${res.updated.length} unchanged`); } else { r.sync = 'ok'; r.last = 'now'; S.simToast(`${r.n} synced`); } S.db.save(); renderRepos(); }, 1800); }
+  $('#repos').addEventListener('click', async e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.err) { const r = repoRows[+b.dataset.err]; r.open = !r.open; renderRepos(); }
+    if (b.dataset.sync) sync(repoRows[+b.dataset.sync]);
+    if (b.dataset.auth) { const r = repoRows[+b.dataset.auth]; b.disabled = true; b.textContent = 'Waiting for GitHub…'; setTimeout(() => { r.auth = 'active'; r.hist = r.hist.slice(1); S.db.save(); sync(r); }, 1400); }
+  });
+  $('#connect').addEventListener('close', () => {
+    if ($('#connect').returnValue !== 'ok') return;
+    const n = $('#cn-repo').value.trim(), pv = $('[name="pv"]:checked').value;
+    if (repoRows.some(r => r.n === n)) return S.toast(`${n} is already connected`);
+    S.db.addRepo({ n, pv }); renderRepos(); render();
+    setTimeout(() => { const res = S.db.indexRepo(n); renderRepos(); render(); S.simToast(`${n} indexed · ${res.added.length ? res.added.map(a => a.name).join(', ') + ' imported as drafts' : 'no new skills'}`, 'View skills', () => $('[data-tab="skills"]').click()); }, 2400);
+  });
+  $('#cn-go').onclick = e => { const v = $('#cn-repo').value.trim(); if (!/^[\w.-]+\/[\w.-]+$/.test(v)) { e.preventDefault(); $('#cn-repo').setAttribute('aria-invalid', 'true'); $('#cn-hint').className = 'err'; $('#cn-hint').textContent = 'Enter the repository as owner/name.'; $('#cn-repo').focus(); } };
+  $('#cn-repo').oninput = () => { $('#cn-repo').removeAttribute('aria-invalid'); $('#cn-hint').className = 'hint'; $('#cn-hint').textContent = 'Format: owner/name, for example wh/finance-skills'; };
+
+  /* hub */
+  const hub = [
+    ['pdf', 'Anthropic Agent Skills', 'official', 'validated', 0], ['xlsx', 'Anthropic Agent Skills', 'official', 'validated', 0], ['mcp-builder', 'Anthropic Agent Skills', 'official', 'validated', 1],
+    ['webapp-testing', 'Anthropic Agent Skills', 'official', 'caution', 2], ['karpathy-guidelines', 'Karpathy guidelines', 'verified', 'analyzed', 0],
+    ['shell-autorunner (sample)', 'ClawHub', 'community', 'unsafe', 4], ['release-notes-writer (sample)', 'skills.sh', 'community', 'unverified', null]
+  ];
+  const verdict = v => ({ validated: '<span class="st"><i class="mk ok"></i>Validated</span>', analyzed: '<span class="st"><i class="mk ok"></i>Analyzed</span>', caution: '<span class="st p2"><i class="mk p2"></i>Caution</span>', unsafe: '<span class="st p1"><i class="mk p1"></i>Unsafe</span>', unverified: '<span class="st unk"><i class="mk unk"></i>Not scanned</span>' })[v];
+  $('#hub tbody').innerHTML = hub.map((h, i) => `<tr class="${h[3] === 'unsafe' ? 'p1row' : ''}"><td class="mono">${h[0]}</td><td>${h[1]}</td><td><span class="tag">${h[2]}</span></td><td>${verdict(h[3])}</td><td class="num">${h[4] ?? '—'}</td>
+    <td class="r">${h[3] === 'unsafe' ? '<button class="btn sm" disabled title="Blocked by the safety scan: 4 findings including shell execution">Import blocked</button>' : h[3] === 'unverified' ? `<button class="btn sm" data-scan="${i}">Scan</button>` : `<button class="btn sm" data-imp="${i}">Import</button>`}</td></tr>`).join('');
+  $('#hub').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.imp) { const h0 = hub[+b.dataset.imp], name = h0[0].replace(' (sample)', ''); const sk = S.db.addSkill({ id: 'hub-' + name, name, repo: h0[1], note: 'Imported from the marketplace · not evaluated' }); b.disabled = true; b.textContent = 'Imported'; render(); S.simToast(sk ? `${name} imported as a draft · Tier 3` : `${name} is already in the library`, 'Open', () => $('[data-tab="skills"]').click()); }
+    if (b.dataset.scan) { b.disabled = true; b.textContent = 'Scanning…'; setTimeout(() => { b.closest('tr').children[3].innerHTML = verdict('caution'); b.closest('tr').children[4].textContent = '1'; b.disabled = false; b.textContent = 'Import'; b.removeAttribute('data-scan'); b.dataset.imp = 6; }, 1600); }
+  });
+
+  /* deep links */
+  const h = location.hash.slice(1);
+  if (h === 'repositories') $('[data-tab="repositories"]').click();
+  else if (h === 'discover') $('[data-tab="discover"]').click();
+  else { setTab('skills'); if (h && S.skills.some(s => s.id === h)) inspect(h); }
+});
+</script>
+</body>
+</html>

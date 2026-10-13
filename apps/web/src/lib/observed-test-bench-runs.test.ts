@@ -12,6 +12,7 @@ const base={
  definitionRevision:1,status:"queued",expectedCases:1,completedCases:0,
  samples:[],scorecard:null,totalTokens:0,estimatedCostUsd:0,
  executionModel:null,judgeModel:null,errorCode:null,
+ executionSource:"platform-nim",executionModelPinned:null,costAccounting:"platform-estimate",
  createdAt:"2026-10-12T10:00:00Z",updatedAt:"2026-10-12T10:00:00Z",completedAt:null,
 };
 const one={
@@ -113,4 +114,28 @@ test("PER-1429: reject forged canceled responses lacking terminal provenance or 
   {...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",canceledBy:null},
   {...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",canceledBy:"owner",scorecard:{overallScore:100}},
  ])assert.throws(()=>parseObservedRun(altered,skillId,definitionId,sha),ObservedRunClientError);
+});
+
+test("PER-1438: client labels the workspace provider explicitly and never carries secrets",async()=>{
+ const key="7a67bff0-a660-42ab-9247-1befef2b9d55";
+ const accepted=await startObservedTestBenchRun(skillId,definitionId,sha,{
+  requestId:key,expectedRevision:1,executionSource:"workspace-openai",
+ },{workspaceSlug,fetcher:fake({data:{...base,executionSource:"workspace-openai",
+  executionModelPinned:"gpt-4o-mini-2024-07-18",costAccounting:"normalized-qa-proxy"}},202,
+  (_url,init)=>{
+   assert.deepEqual(JSON.parse(String(init.body)),{
+    requestId:key,expectedRevision:1,executionSource:"workspace-openai",
+   });
+   assert.doesNotMatch(String(init.body),/apiKey|credential|tenantId|baseUrl|secret|model|token/);
+  })});
+ assert.equal(accepted.executionSource,"workspace-openai");
+ assert.equal(accepted.costAccounting,"normalized-qa-proxy");
+ for(const forged of [
+  {...base,executionSource:"workspace-openai",costAccounting:"platform-estimate",
+    executionModelPinned:"gpt-4o-mini-2024-07-18"},
+  {...base,executionSource:"workspace-openai",costAccounting:"normalized-qa-proxy",
+    executionModelPinned:null},
+  {...base,executionSource:"malicious-host"},
+  {...base,costAccounting:"normalized-qa-proxy"},
+ ])assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),ObservedRunClientError);
 });

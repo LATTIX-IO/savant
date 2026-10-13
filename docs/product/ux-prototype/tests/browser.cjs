@@ -50,8 +50,22 @@ const OWN_SCROLL = new Set(['workbench', 'workflows']);
         let ok = false; try { ok = await page.evaluate(`(${fn.toString()})(${width})`); } catch (e) { ok = false; }
         results.push([label, name, ok]);
       }
-      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-      results.push([label, 'No horizontal page overflow', overflow <= 1 || OWN_SCROLL.has(step.name)]);
+      const overflow = await page.evaluate(() => {
+        const root = document.documentElement;
+        const delta = root.scrollWidth - window.innerWidth;
+        const offenders = [...document.querySelectorAll('body *')]
+          .filter(el => {
+            if (el.closest('dialog:not([open]), [hidden]')) return false;
+            const rect = el.getBoundingClientRect();
+            return rect.width > 0 && rect.right > window.innerWidth + 1 &&
+              getComputedStyle(el).position !== 'fixed';
+          }).sort((a, b) => b.getBoundingClientRect().right - a.getBoundingClientRect().right)
+          .slice(0, 7)
+          .map(el => ({ tag: el.tagName.toLowerCase(), id: el.id, cls: String(el.className).slice(0, 50), right: Math.round(el.getBoundingClientRect().right) }));
+        return { delta, offenders, main: document.querySelector('.main')?.scrollWidth };
+      });
+      results.push([label, 'No horizontal page overflow', overflow.delta <= 1 || OWN_SCROLL.has(step.name),
+        overflow.delta > 1 ? JSON.stringify(overflow) : '']);
       results.push([label, 'No script errors', errors.length === 0, errors.join(' | ')]);
       await page.screenshot({ path: path.join(dir, `${step.name}.png`), fullPage: !OWN_SCROLL.has(step.name) });
       await page.close();

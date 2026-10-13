@@ -173,6 +173,19 @@ try{
  assert.equal(identical.filter(x=>x.recorded).length,1);
  assert.equal((await runs.get(admin,skillId,suite.id,pending.run.id)).observedExecutorTokens,25);
  assert.equal((await runs.get(admin,skillId,suite.id,pending.run.id)).observedUsageReceipts,1);
+ // A case may carry a real encrypted sample, yet scoring is forbidden if
+ // its judge phase lacks a durable usage ACK. The attempted completion
+ // rolls back without a partial scorecard.
+ await runs.recordCase(initiated.row,finished.samples[0],1,[]);
+ await assert.rejects(()=>runs.complete(initiated.row,{
+  samples:finished.samples,scorecard:finished.scorecard,
+  totalTokens:180,estimatedCostUsd:0.0001,
+  executionModel:"nim-usage-test",judgeModel:"jev-usage-test",
+ }),hasCode("test_bench_usage_evidence_incomplete"));
+ const unscored=await runs.get(admin,skillId,suite.id,pending.run.id);
+ assert.equal(unscored.status,"running");
+ assert.equal(unscored.scorecard,null);
+ assert.equal(unscored.observedUsageReceipts,1);
  await runs.cancel(admin,skillId,suite.id,pending.run.id,1);
 
  const rows=await sql`select model,phase,prompt_tokens,completion_tokens
@@ -197,6 +210,7 @@ try{
   "complete run persisted separate executor+Jev receipts",
   "failed judge retained executor ACK without fabricated judge tokens",
   "ten concurrent identical receipts inserted only once",
+  "complete score refused without every durable executor/Jev receipt",
   "metadata-only receipts, queue and audit are secret-free",
  ]}));
 }finally{

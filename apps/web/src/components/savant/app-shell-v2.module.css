@@ -36,7 +36,11 @@
   z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 8px; flex: none; color: var(--sv2-fg); text-decoration: none; font-weight: 600; font-size: 15px; }
-.brandMark { width: 24px; height: 24px; display: grid; place-items: center; border: 1px solid var(--sv2-fg); font: 600 16px/1 var(--sv2-font-code); }
+.brandMark { width: 24px; height: 24px; display: grid; place-items: center; flex: none; }
+.brandMarkLight, .brandMarkDark { width: 24px; height: 24px; display: block; }
+.brandMarkDark { display: none; }
+:global(html[data-theme="dark"]) .brandMarkLight { display: none; }
+:global(html[data-theme="dark"]) .brandMarkDark { display: block; }
 .icon { display: block; flex: none; width: 16px; height: 16px; }
 .workspaceMenu { position: relative; min-width: 0; flex: 0 1 240px; }
 .switcher { position: relative; }

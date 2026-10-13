@@ -77,7 +77,7 @@ try{
   where id=(select job_id from test_bench_runs where id=${queued.id})`;
  assert.equal(stoppedJob.status,"failed");
  assert.equal((await store.beginJob(organizationId,repo.id,queued.id,stoppedJob.id,1)),null);
- await assert.rejects(()=>store.cancel(admin,skillId,"a".repeat(36),queued.id,1),
+ await assert.rejects(()=>store.cancel(admin,skillId,"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",queued.id,1),
   hasCode("test_bench_run_not_found"));
  assert.deepEqual(await store.list(outsider,skillId,def.id),[]);
 

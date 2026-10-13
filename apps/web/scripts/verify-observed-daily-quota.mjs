@@ -34,9 +34,12 @@ async function tenant(label){
   ${"skills/"+skillId},${sha},'hash')`;
  const actor={organizationId:org.id,subject:"owner-"+label,role:"admin"};
  const definition=(await definitions.create(actor,skillId,{
-  name:"Saved daily quota cases",cases:caseSet,requestId:randomUUID(),
+  name:"Saved daily quota cases A",cases:caseSet,requestId:randomUUID(),
  })).definition;
- return {id:org.id,repoId:repo.id,actor,skillId,definition};
+ const alternate=(await definitions.create(actor,skillId,{
+  name:"Saved daily quota cases B",cases:caseSet,requestId:randomUUID(),
+ })).definition;
+ return {id:org.id,repoId:repo.id,actor,skillId,definition,alternate};
 }
 try{
  const a=await tenant("a"),b=await tenant("b");
@@ -78,17 +81,19 @@ try{
 
  // Ten simultaneous admissions across separate PG connections cannot create
  // more than the existing two-active limit OR leak additional reservations.
- const concurrent=await Promise.allSettled(Array.from({length:12},()=>store.start(
-   a.actor,a.skillId,a.definition.id,
+ const concurrent=await Promise.allSettled(Array.from({length:12},(_,index)=>store.start(
+   a.actor,a.skillId,index%2===0?a.definition.id:a.alternate.id,
    {requestId:randomUUID(),expectedRevision:1,executionSource:"platform-nim"},
  )));
  const successes=concurrent.filter(x=>x.status==="fulfilled").map(x=>x.value.run);
- assert.equal(successes.length,2);
+ assert.equal(successes.length,2,"one active per definition and two active per tenant");
+ assert.deepEqual(new Set(successes.map(x=>x.definitionId)),
+   new Set([a.definition.id,a.alternate.id]));
  assert.equal(concurrent.filter(x=>x.status==="rejected").length,10);
  assert.equal((await store.quota(a.actor)).admittedRuns,3);
  assert.equal((await store.quota(a.actor)).reservedNormalizedTokens,36000);
  for(const run of successes)
-   await store.cancel(a.actor,a.skillId,a.definition.id,run.id,1);
+   await store.cancel(a.actor,a.skillId,run.definitionId,run.id,1);
 
  // Fill the rest with terminal runs. No cancellation, failure, or repeated
  // admission can sneak through once the daily limit is reached.
@@ -101,8 +106,8 @@ try{
  assert.equal((await store.quota(a.actor)).admittedRuns,9);
  // Close the remaining ONE daily slot from 12 concurrent connection attempts.
  // This exercises the UPSERT capacity predicate, not only the active-run gate.
- const lastSlot=await Promise.allSettled(Array.from({length:12},()=>store.start(
-   a.actor,a.skillId,a.definition.id,{
+ const lastSlot=await Promise.allSettled(Array.from({length:12},(_,index)=>store.start(
+   a.actor,a.skillId,index%2===0?a.definition.id:a.alternate.id,{
      requestId:randomUUID(),expectedRevision:1,executionSource:"platform-nim",
    },
  )));
@@ -112,7 +117,7 @@ try{
  assert.ok(lastSlot.filter(x=>x.status==="rejected").every(x=>
    hasCode("test_bench_daily_quota_exceeded",429)(x.reason)),
    "all losing transactions should fail the actual daily cap, not a different limit");
- await store.cancel(a.actor,a.skillId,a.definition.id,winners[0].id,1);
+ await store.cancel(a.actor,a.skillId,winners[0].definitionId,winners[0].id,1);
  const full=await store.quota(a.actor);
  assert.equal(full.admittedRuns,10);
  assert.equal(full.remainingRuns,0);

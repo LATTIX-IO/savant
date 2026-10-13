@@ -44,7 +44,14 @@ export function getUiV2RepositoryHealth(repository: RepositoryListItem): Reposit
 }
 
 export function getUiV2Kpi(overview: OverviewPayload, key: OverviewKpi["key"]): OverviewKpi | null {
-  return overview.kpis.find(item => item.key === key && Number.isFinite(item.value)) ?? null;
+  const metric = overview.kpis.find(item => item.key === key && Number.isFinite(item.value));
+  if (!metric) return null;
+  // The legacy read model emits numeric zero when a rate/turnaround has no
+  // denominator. That is not a measured 0%; do not present it as one.
+  if (key === "eval-coverage" && overview.counts.skillsUnderGovernance === 0) return null;
+  if (key === "first-pass-acceptance" && metric.deltaLabel === "0 completed reviews") return null;
+  if (key === "release-turnaround" && metric.deltaLabel === "0 completed releases") return null;
+  return metric;
 }
 
 export function safeUiV2Count(count: unknown): number | null {

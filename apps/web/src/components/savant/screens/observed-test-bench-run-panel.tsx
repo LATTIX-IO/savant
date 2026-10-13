@@ -127,7 +127,7 @@ export function ObservedTestBenchRunPanel({
           UTC daily Test Bench admissions: {dailyQuota.remainingRuns} of {dailyQuota.dailyRunLimit}
           {" "}remaining · resets {new Date(dailyQuota.resetAtUtc).toLocaleString()}.
           Each accepted run reserves 12,000 normalized QA units; cancellation and failure
-          do not restore today's allowance. This is not a provider spend cap.
+          do not restore today&apos;s allowance. This is not a provider spend cap.
         </p>
       ):quotaUnavailable?(
         <p className="subtle" style={{fontSize:12,margin:0}}>

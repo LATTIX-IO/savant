@@ -51,7 +51,8 @@ test("workbench has no direct commit, fake success or unsafe HTML rendering", ()
   const src = readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.tsx", import.meta.url)), "utf8");
   assert.match(src,/proposeFileEdits/);
   assert.match(src,/matchesWorkbenchSourceSnapshot/);
-  assert.match(src,/workspaceSlug: scope/);
+  assert.match(src,/const options = \{ workspaceSlug, signal: controller.signal \}/);
+  assert.match(src,/proposeFileEdits[\s\S]*?\}, \{ workspaceSlug \}\)/);
   assert.match(src,/AbortController/);
   assert.match(src,/useUiV2Mode/);
   assert.doesNotMatch(src,/updateSkillSource\s*\(|dangerouslySetInnerHTML|\.innerHTML\s*=|localStorage|sessionStorage|Math\.random/);

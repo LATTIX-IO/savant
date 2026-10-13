@@ -6,6 +6,8 @@ import {
 } from "@/lib/observed-test-bench-runs";
 import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
 import type {TestBenchDefinition} from "@/server/test-bench/definition-contract";
+import {readObservedDailyQuota} from "@/lib/observed-admission-quota-client";
+import type {DailyAdmissionQuota} from "@/server/test-bench/observed-admission-quota";
 
 /** Displays ONLY server-confirmed NIM/Jev chat-only observations, never synthetic scores. */
 export function ObservedTestBenchRunPanel({
@@ -19,11 +21,22 @@ export function ObservedTestBenchRunPanel({
   const [executionSource,setExecutionSource]=useState<"platform-nim"|"workspace-openai">("workspace-openai");
   const [canceling,setCanceling]=useState(false);
   const [error,setError]=useState<string|null>(null);
+  const [dailyQuota,setDailyQuota]=useState<DailyAdmissionQuota|null>(null);
+  const [quotaUnavailable,setQuotaUnavailable]=useState(false);
   const requestId=useRef<string|null>(null);
   const latest=runs[0]??null;
   const active=runs.some(run=>run.status==="queued"||run.status==="running");
-  const canRun=!readOnly&&definition.cases.length<=4&&!active&&!starting&&!canceling;
+  const canRun=!readOnly&&definition.cases.length<=4&&!active&&!starting&&!canceling&&
+    (dailyQuota?.remainingRuns??1)>0;
   const canCancel=!readOnly&&!!latest&&active&&!starting&&!canceling;
+
+  useEffect(()=>{
+    const controller=new AbortController();
+    void readObservedDailyQuota(workspaceSlug,{signal:controller.signal})
+      .then(value=>{if(!controller.signal.aborted){setDailyQuota(value);setQuotaUnavailable(false);}})
+      .catch(()=>{if(!controller.signal.aborted)setQuotaUnavailable(true);});
+    return ()=>controller.abort();
+  },[workspaceSlug]);
 
   useEffect(()=>{
     const controller=new AbortController();
@@ -69,6 +82,9 @@ export function ObservedTestBenchRunPanel({
       );
       requestId.current=null;
       setRuns(current=>[accepted,...current.filter(x=>x.id!==accepted.id)].slice(0,15));
+      void readObservedDailyQuota(workspaceSlug)
+        .then(value=>{setDailyQuota(value);setQuotaUnavailable(false);})
+        .catch(()=>{setQuotaUnavailable(true);});
     }catch{
       // Retain the request ID: a retry can safely reconcile an ambiguous 202.
       setError("Live execution was not accepted or confirmed. Check provider access, the case limit, revision or workspace permissions.");
@@ -106,6 +122,18 @@ export function ObservedTestBenchRunPanel({
         Cancellation stops subsequent provider calls once observed; it cannot guarantee
         interruption or reimbursement for an inference request already in flight.
       </p>
+      {dailyQuota?(
+        <p className="subtle" style={{fontSize:12,margin:0}}>
+          UTC daily Test Bench admissions: {dailyQuota.remainingRuns} of {dailyQuota.dailyRunLimit}
+          {" "}remaining · resets {new Date(dailyQuota.resetAtUtc).toLocaleString()}.
+          Each accepted run reserves 12,000 normalized QA units; cancellation and failure
+          do not restore today's allowance. This is not a provider spend cap.
+        </p>
+      ):quotaUnavailable?(
+        <p className="subtle" style={{fontSize:12,margin:0}}>
+          Tenant admission quota could not be read. Execution is still checked by the server.
+        </p>
+      ):null}
       {definition.cases.length>4?(
         <p className="subtle" style={{fontSize:12,margin:0}}>
           This suite contains {definition.cases.length} cases. The current bounded executor supports
@@ -124,7 +152,7 @@ export function ObservedTestBenchRunPanel({
       <div className="row" style={{gap:8,flexWrap:"wrap"}}>
         <button type="button" className="btn btn-sm btn-primary" disabled={!canRun||loading}
           onClick={()=>void run()}>
-          {starting?"Requesting execution…":active?"Run in progress":executionSource==="workspace-openai"?"Run with workspace OpenAI":"Run with Savant NIM"}
+          {starting?"Requesting execution…":active?"Run in progress":dailyQuota?.remainingRuns===0?"Daily quota reached":executionSource==="workspace-openai"?"Run with workspace OpenAI":"Run with Savant NIM"}
         </button>
         {latest&&(latest.status==="queued"||latest.status==="running")?(
           <button type="button" className="btn btn-sm btn-ghost"

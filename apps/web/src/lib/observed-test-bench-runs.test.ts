@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  listObservedTestBenchRuns,startObservedTestBenchRun,parseObservedRun,ObservedRunClientError,
+  listObservedTestBenchRuns,startObservedTestBenchRun,cancelObservedTestBenchRun,parseObservedRun,ObservedRunClientError,
 } from "./observed-test-bench-runs.ts";
 const skillId="team/skill+qa",workspaceSlug="tenant-a";
 const definitionId="97ee557d-3dc0-4ee1-af29-72fedc58e4d7";
@@ -82,4 +82,35 @@ test("PER-1425: invalid tenant and denied request never initiate cross-origin I/
  await assert.rejects(()=>listObservedTestBenchRuns(skillId,definitionId,sha,{
   workspaceSlug:"tenant-a",fetcher:fake({error:"denied"},403),
  }),ObservedRunClientError);
+});
+
+test("PER-1429: cancel exact run with same-origin credentials and no secret-bearing payload",async()=>{
+ const canceled={...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",
+  canceledBy:"member-subject",completedAt:"2026-10-13T10:00:00Z"};
+ const result=await cancelObservedTestBenchRun(skillId,definitionId,sha,runId,1,{
+  workspaceSlug,fetcher:fake({data:canceled},202,(url,init)=>{
+   assert.equal(url,
+    "/api/skills/team%2Fskill%2Bqa/test-bench/"+definitionId+
+    "/runs/"+runId+"/cancel?workspaceSlug=tenant-a");
+   assert.equal(init.method,"POST");assert.equal(init.mode,"same-origin");
+   assert.equal(init.credentials,"same-origin");assert.equal(init.cache,"no-store");
+   assert.deepEqual(JSON.parse(String(init.body)),{expectedRevision:1});
+   assert.doesNotMatch(String(init.body),/token|case|provider|apiKey|sourceCommitSha/);
+  }),
+ });
+ assert.equal(result.status,"canceled");assert.equal(result.canceledBy,"member-subject");
+ await assert.rejects(()=>cancelObservedTestBenchRun(skillId,definitionId,sha,runId,1,{
+  workspaceSlug,fetcher:fake({data:{...canceled,status:"complete"}},200),
+ }),ObservedRunClientError);
+ await assert.rejects(()=>cancelObservedTestBenchRun(skillId,definitionId,sha,"../foreign",1,{
+  workspaceSlug,fetcher:async()=>{throw Error("network must not occur");},
+ }),ObservedRunClientError);
+});
+test("PER-1429: reject forged canceled responses lacking terminal provenance or carrying scores",()=>{
+ for(const altered of [
+  {...base,status:"canceled",canceledAt:null,canceledBy:"owner"},
+  {...base,status:"canceled",canceledAt:"not a date",canceledBy:"owner"},
+  {...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",canceledBy:null},
+  {...base,status:"canceled",canceledAt:"2026-10-13T10:00:00Z",canceledBy:"owner",scorecard:{overallScore:100}},
+ ])assert.throws(()=>parseObservedRun(altered,skillId,definitionId,sha),ObservedRunClientError);
 });

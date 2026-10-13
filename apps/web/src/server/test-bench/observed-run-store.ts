@@ -376,6 +376,20 @@ export function createObservedRunStore(sql:Sql){
           returning id
         `;
         if(!saved)invalid("test_bench_progress_conflict");
+        // A complete quality score requires BOTH independently acknowledged
+        // provider phases for EVERY observed case. The check and transition
+        // are one transaction: absence/tampering rolls back the score.
+        const [usage]=await tx<{
+          receipts:number;tokens:number;
+        }[]>`
+          select count(*)::int as receipts,
+            coalesce(sum(prompt_tokens+completion_tokens),0)::int as tokens
+          from test_bench_provider_usage_receipts
+          where organization_id=${row.organization_id} and run_id=${row.id}
+        `;
+        if(!usage||usage.receipts!==row.expected_cases*2||
+          usage.tokens!==result.totalTokens)
+          invalid("test_bench_usage_evidence_incomplete");
         await tx`
           insert into audit_events(
             organization_id,actor_type,actor_ref,category,action,target_type,target_ref,payload_redacted

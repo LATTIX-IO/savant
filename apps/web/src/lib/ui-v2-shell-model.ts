@@ -73,7 +73,7 @@ export function buildUiV2Crumbs(workspaceSlug: string, crumbs: readonly SavantSh
 // Called *after* resolveTenantMembershipForUser; no client/query/localStorage override.
 export function isUiV2EnabledForWorkspace(
   workspaceSlug: string,
-  config: { enabled?: string; workspaces?: string },
+  config: { enabled?: string | undefined; workspaces?: string | undefined },
 ): boolean {
   if (config.enabled !== "true" || !workspaceSlug || !config.workspaces) return false;
   const allowed = config.workspaces.split(",").map(slug => slug.trim()).filter(Boolean);

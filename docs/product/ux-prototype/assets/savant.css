@@ -376,7 +376,12 @@ html[data-offline] .btn.primary { background: var(--recess); border-color: var(-
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
 @media (max-width: 1100px) { .g-21, .g-12, .g-3 { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 900px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: 4px 48px minmax(0, 1fr) 56px; }
+  /* A scrolling child must not widen the top-level mobile viewport.
+     The bottom navigation and table wrappers retain their own scrollbars. */
+  .app { width: 100%; max-width: 100%; overflow: hidden; grid-template-columns: minmax(0, 1fr); grid-template-rows: 4px 48px minmax(0, 1fr) 56px; }
+  .topbar { gap: 6px; overflow: hidden; }
+  .topbar > * { min-width: 0; }
+  .sidenav { min-width: 0; max-width: 100%; }
   .main { grid-column: 1; }
   .sidenav { grid-row: 4; flex-direction: row; border-right: 0; border-top: 1px solid var(--border); padding: 4px; overflow-x: auto; }
   .sidenav .nav-sep, .sidenav .nav-foot.collapse { display: none; }

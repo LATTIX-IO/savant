@@ -196,3 +196,15 @@ test("PER-1447: unverified usage cannot emit a forged positive receipt",async()=
  }),ObservedEvaluationError);
  assert.equal(receipts,0);assert.equal(stub.counts.jev,0);
 });
+
+test("PER-1447: unusable model text with real usage retains the executor ACK",async()=>{
+ const stub=mocks({completion:""}),seen:string[]=[];
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Answer",cases:[cases[0]!],clients:stub,
+  onUsage:async receipt=>{seen.push(receipt.phase);},
+ }),error=>error instanceof ObservedEvaluationError&&
+  error.code==="test_bench_model_output_invalid");
+ assert.deepEqual(seen,["executor"]);
+ assert.equal(stub.counts.nim,1);
+ assert.equal(stub.counts.jev,0);
+});

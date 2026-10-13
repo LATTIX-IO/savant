@@ -110,6 +110,9 @@ test("PER-1438: reject forged model/usage, truncated or excessively large JSON o
   response({usage:{prompt_tokens:-1,completion_tokens:3}}),
   response({usage:{prompt_tokens:0,completion_tokens:0}}),
   response({choices:[{message:{content:""}}]}),
+  response({choices:[{message:{content:"partial but nonempty"},finish_reason:"length"}]}),
+  response({choices:[{message:{content:"filtered"},finish_reason:"content_filter"}]}),
+  response({choices:[{message:{content:"tools hidden"},finish_reason:"tool_calls"}]}),
   response({choices:[{message:{content:"x".repeat(3001)}}]}),
   response({choices:[{message:{tool_calls:[{function:{name:"secret"}}]}}]}),
  ];

@@ -79,6 +79,7 @@ try{
   ai_connection_id,encrypted_secret,secret_fingerprint,algorithm,key_version)
   values(${connectionId},${credential.encryptedSecret},${credential.secretFingerprint},
   ${credential.algorithm},${credential.keyVersion})`;
+ assert.equal((await runs.quota(admin)).admittedRuns,0);
  const requestId=randomUUID();
  const run=(await runs.start(admin,skillId,suite.id,{
   requestId,expectedRevision:1,executionSource:"workspace-openai",
@@ -87,10 +88,13 @@ try{
  assert.equal(run.costAccounting,"normalized-qa-proxy");
  assert.equal(run.executionModelPinned,model);
  assert.equal(run.status,"queued");
+ assert.equal((await runs.quota(admin)).admittedRuns,1);
  const replay=await runs.start(admin,skillId,suite.id,{
   requestId,expectedRevision:1,executionSource:"workspace-openai",
  });
  assert.equal(replay.replayed,true);assert.equal(replay.run.id,run.id);
+ assert.equal((await runs.quota(admin)).admittedRuns,1,
+  "exact BYO replay must not charge tenant quota again");
  await assert.rejects(()=>runs.start(admin,skillId,suite.id,{
   requestId,expectedRevision:1,executionSource:"platform-nim",
  }),hasCode("test_bench_run_request_conflict"));
@@ -194,6 +198,7 @@ try{
  const rotated=(await runs.start(admin,skillId,suite.id,{
   requestId:randomUUID(),expectedRevision:1,executionSource:"workspace-openai",
  })).run;
+ assert.equal((await runs.quota(admin)).admittedRuns,2);
  const newCredential=encryptAIConnectionSecret(apiKey+"-rotated",{
   organizationId:orgId,aiConnectionId:connectionId,provider:"openai",
  });
@@ -220,6 +225,7 @@ try{
  const revokeRun=(await runs.start(admin,skillId,suite.id,{
   requestId:randomUUID(),expectedRevision:1,executionSource:"workspace-openai",
  })).run;
+ assert.equal((await runs.quota(admin)).admittedRuns,3);
  await sql`update ai_connections set status='revoked',is_default_execution=false
    where id=${connectionId}`;
  let afterRevokeCalls=0;
@@ -236,6 +242,8 @@ try{
  });
  assert.equal(afterRevokeCalls,0);
  assert.equal((await runs.get(admin,skillId,suite.id,revokeRun.id)).status,"failed");
+ assert.equal((await runs.quota(admin)).admittedRuns,3,
+  "failed/rotated BYO requests must not refund daily capacity");
  await assert.rejects(()=>runs.start(admin,skillId,suite.id,{
   requestId:randomUUID(),expectedRevision:1,executionSource:"workspace-openai",
  }),hasCode("test_bench_workspace_openai_unavailable"));
@@ -260,6 +268,7 @@ try{
   "composite foreign-tenant FK prevents credential substitution",
   "missing vault key and model allow-list mismatch fail before I/O",
   "normalized QA cost proxy explicit, no platform NIM fallback",
+  "BYO admission and idempotent replay count once against UTC tenant quota",
  ]}));
 }finally{
  if(orgId)await sql`delete from organizations where id=${orgId}`;

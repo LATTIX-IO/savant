@@ -92,12 +92,27 @@ try{
 
  // Fill the rest with terminal runs. No cancellation, failure, or repeated
  // admission can sneak through once the daily limit is reached.
- for(let admitted=3;admitted<10;admitted++){
+ for(let admitted=3;admitted<9;admitted++){
    const {run}=await store.start(a.actor,a.skillId,a.definition.id,{
      requestId:randomUUID(),expectedRevision:1,executionSource:"platform-nim",
    });
    await store.cancel(a.actor,a.skillId,a.definition.id,run.id,1);
  }
+ assert.equal((await store.quota(a.actor)).admittedRuns,9);
+ // Close the remaining ONE daily slot from 12 concurrent connection attempts.
+ // This exercises the UPSERT capacity predicate, not only the active-run gate.
+ const lastSlot=await Promise.allSettled(Array.from({length:12},()=>store.start(
+   a.actor,a.skillId,a.definition.id,{
+     requestId:randomUUID(),expectedRevision:1,executionSource:"platform-nim",
+   },
+ )));
+ const winners=lastSlot.filter(x=>x.status==="fulfilled").map(x=>x.value.run);
+ assert.equal(winners.length,1,"one and only one new admission at 9/10");
+ assert.equal(lastSlot.filter(x=>x.status==="rejected").length,11);
+ assert.ok(lastSlot.filter(x=>x.status==="rejected").every(x=>
+   hasCode("test_bench_daily_quota_exceeded",429)(x.reason)),
+   "all losing transactions should fail the actual daily cap, not a different limit");
+ await store.cancel(a.actor,a.skillId,a.definition.id,winners[0].id,1);
  const full=await store.quota(a.actor);
  assert.equal(full.admittedRuns,10);
  assert.equal(full.remainingRuns,0);
@@ -165,6 +180,7 @@ try{
   "failed transaction and rejected source never reserve",
   "idempotent replay consumes no additional units",
   "12-way concurrency obeys 2 active and exact reservations",
+  "12-way concurrency at 9/10 admits exactly one and denies 11 at 429",
   "10 terminal runs exhausted 120000 normalized units",
   "eleventh refused HTTP 429; replay at full cap succeeds",
   "cancel does not refund uncertain provider side effects",

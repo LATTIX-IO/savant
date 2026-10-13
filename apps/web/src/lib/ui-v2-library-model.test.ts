@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { OverviewPayload, RepositoryListItem, SkillListItem } from "@savant/types";
+import { buildTenantScopedControlPlanePath } from "./control-plane-client.ts";
 
 import {
   filterUiV2Repositories, filterUiV2Skills, getUiV2Kpi, getUiV2RepositoryHealth,
@@ -89,4 +90,13 @@ test("production screen wiring is scoped to authorized server shell, not client 
   for (const source of [overview, library]) {
     assert.doesNotMatch(source, /dangerouslySetInnerHTML|\.innerHTML\s*=|localStorage|sessionStorage|Math\.random|fixture/i);
   }
+});
+
+test("tenant-scoped live API paths carry explicit workspace selector, not the browser's current page", () => {
+  const a = buildTenantScopedControlPlanePath("/api/skills", { workspaceSlug: "ws alpha" });
+  const b = buildTenantScopedControlPlanePath("/api/repositories", { workspaceSlug: "ws beta" });
+  assert.equal(a, "/api/skills?workspaceSlug=ws+alpha");
+  assert.equal(b, "/api/repositories?workspaceSlug=ws+beta");
+  assert.ok(!a.includes("ws+beta"));
+  assert.ok(!b.includes("ws+alpha"));
 });

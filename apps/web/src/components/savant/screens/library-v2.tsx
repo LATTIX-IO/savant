@@ -169,7 +169,7 @@ export function LibraryV2() {
                     </td>
                     <td>Tier {skill.tier}</td>
                     <td>{skill.repo}</td>
-                    <td><UiV2Status state={skill.channel === "production" ? "ready" : "unavailable"} label={skill.channel} /></td>
+                    <td><span className={styles.mono}>{skill.channel}</span></td>
                     <td className={styles.mono}>{skill.projection.sourceCommitSha || "Not indexed"}</td>
                     <td className={styles.mono}>{skill.score !== null && Number.isFinite(skill.score)
                       ? skill.score.toFixed(1) : "Not available"}</td>
@@ -197,7 +197,7 @@ export function LibraryV2() {
                   return <tr key={repository.id}>
                     <td><strong>{repository.name}</strong><span className={styles.subtext}>{repository.branch}</span></td>
                     <td>{repository.provider}</td>
-                    <td><UiV2Status state={health === "ready" ? "ready" : health === "action-required" ? "warning" : "unavailable"}
+                    <td><UiV2Status state={health === "ready" ? "ready" : health === "action-required" ? "warning" : health === "indexing" ? "running" : "unavailable"}
                       label={health === "not-indexed" ? "Not indexed" : health === "indexing" ? "Indexing" :
                         health === "action-required" ? "Review connection" : "Indexed"} /></td>
                     <td className={styles.mono}>{safeUiV2Count(repository.skills) ?? "Not available"}</td>

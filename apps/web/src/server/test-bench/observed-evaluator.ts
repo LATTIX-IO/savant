@@ -1,3 +1,4 @@
+import {createHash} from "node:crypto";
 import type {ChatClient,JudgeClient,JevAnswer} from "../ai/clients.ts";
 import {DEFAULT_RUBRIC,scoringQuestions,verdictFor} from "../evaluation/eval-generation.ts";
 import {computeScorecard,type EvalSample,type Scorecard} from "../evaluation/scorecard.ts";
@@ -11,6 +12,12 @@ export const MAX_OBSERVED_TOKENS=12_000;
 export const MAX_OBSERVED_COST_USD=0.05;
 export const MAX_SKILL_INSTRUCTIONS_BYTES=12_000;
 const NIM_USD_PER_MILLION_TOKENS=0.5;
+/** Every stored comparison must carry the exact scoring contract that produced
+ * it. Never reinterpret a historical run under a new rubric/version.
+ */
+export const OBSERVED_SCORING_FINGERPRINT=createHash("sha256")
+  .update("savant:chat-only:jev-scorecard-algorithm:v1:")
+  .update(JSON.stringify(DEFAULT_RUBRIC)).digest("hex");
 export class ObservedEvaluationError extends Error{
   readonly code:string;
   constructor(code:string){super(code);this.name="ObservedEvaluationError";this.code=code;}

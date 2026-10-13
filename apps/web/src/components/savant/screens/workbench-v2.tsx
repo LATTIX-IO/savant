@@ -43,7 +43,15 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const [mode, setMode] = useState<"edit" | "preview" | "review">("edit");
   const [saveBusy, setSaveBusy] = useState(false);
   const savingRef = useRef(false);
+  const liveScopeRef = useRef("");
   const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    liveScopeRef.current = scope;
+    return () => {
+      if (liveScopeRef.current === scope) liveScopeRef.current = "";
+    };
+  }, [scope]);
 
   useEffect(() => {
     if (!enabled || !workspaceSlug || !scope) return;
@@ -110,6 +118,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
       // Compare the live repository snapshot immediately before requesting a proposal.
       // API-side review/merge guards still provide the final concurrency boundary.
       const latest = await fetchSkillSource(skillId, { workspaceSlug });
+      if (liveScopeRef.current !== scope) return; // Navigation invalidated this edit intent.
       if (!matchesWorkbenchSourceSnapshot(sourceData, latest.data)) {
         setReviewed(null);
         setNotice({
@@ -124,6 +133,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
         body: `Source: ${sourceData.repository}/${sourceData.sourcePath}. Submitted from the Savant Workbench for review.`,
         files: [{ path: sourceData.sourcePath, content: editorText }],
       }, { workspaceSlug });
+      if (liveScopeRef.current !== scope) return;
       setNotice({
         scope, kind: "proposal",
         proposalId: submitted.data.id,

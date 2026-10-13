@@ -6,6 +6,9 @@ test("PER-1425: observed case UI never falls back to browser-created scores",asy
  const panel=await readFile(new URL("./observed-test-bench-run-panel.tsx",import.meta.url),"utf8");
  const editor=await readFile(new URL("./persisted-test-bench.tsx",import.meta.url),"utf8");
  assert.match(panel,/startObservedTestBenchRun\(/);
+ assert.match(panel,/cancelObservedTestBenchRun\(/);
+ assert.match(panel,/Cancel run/);
+ assert.match(panel,/status==="canceled"/);
  assert.match(panel,/listObservedTestBenchRuns\(/);
  assert.match(panel,/status==="complete"/);
  assert.match(panel,/does not execute MCP tools, scripts or customer-owned harnesses/i);
@@ -31,4 +34,23 @@ test("PER-1425: authorization and anti-CSRF precede provider job creation",async
  assert.match(store,/job_id/);
  assert.match(store,/tx\.json\(\{runId:id\}\)/);
  assert.doesNotMatch(store,/console\.log|raw_provider_error|sk_[A-Za-z0-9]{8,}/);
+});
+
+test("PER-1429: cancellation route requires Origin, active tenant, role and bounded revision",async()=>{
+ const route=await readFile(new URL("../../../app/api/skills/[id]/test-bench/[definitionId]/runs/[runId]/cancel/route.ts",import.meta.url),"utf8");
+ const store=await readFile(new URL("../../../server/test-bench/observed-run-store.ts",import.meta.url),"utf8");
+ const worker=await readFile(new URL("../../../server/test-bench/observed-run-worker.ts",import.meta.url),"utf8");
+ assert.match(route,/assertSameOriginMutationRequest\(request\)/);
+ assert.match(route,/authorizeTenantRequest\(request\)/);
+ assert.match(route,/resolveGitActorForTenant\(tenant\)/);
+ assert.match(route,/readBoundedTestBenchBody\(request\)/);
+ assert.match(route,/parseObservedCancelRequest/);
+ assert.match(route,/Cache-Control.*no-store/);
+ assert.match(store,/actorAllowed\(actor,true\)/);
+ assert.match(store,/test_bench_run_canceled/);
+ assert.match(store,/for update/);
+ assert.match(store,/status='canceled'/);
+ assert.match(worker,/beforeCase:ensureNotCanceled/);
+ assert.match(worker,/beforeJudge:ensureNotCanceled/);
+ assert.doesNotMatch(route,/NVIDIA_NIM_API_KEY|JEV_API_KEY|process\.env/);
 });

@@ -12,10 +12,10 @@ type RunRow={
   id:string;organization_id:string;repository_id:string;definition_id:string;
   definition_revision:number;skill_id:string;source_path:string;source_commit_sha:string;
   request_id:string;requested_by:string;snapshot_ciphertext:string;
-  results_ciphertext:string|null;status:"queued"|"running"|"complete"|"failed";
+  results_ciphertext:string|null;status:"queued"|"running"|"complete"|"failed"|"canceled";
   expected_cases:number;completed_cases:number;total_tokens:number;estimated_cost_usd:string|number;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
-  job_id:string|null;error_code:string|null;
+  job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
   created_at:Date|string;updated_at:Date|string;completed_at:Date|string|null;
 };
 export type ObservedRunSummary={
@@ -23,7 +23,7 @@ export type ObservedRunSummary={
   sourceCommitSha:string;status:RunRow["status"];expectedCases:number;completedCases:number;
   samples:ObservedCase[];scorecard:Record<string,unknown>|null;
   totalTokens:number;estimatedCostUsd:number;executionModel:string|null;judgeModel:string|null;
-  errorCode:string|null;createdAt:string;updatedAt:string;completedAt:string|null;
+  errorCode:string|null;canceledBy:string|null;canceledAt:string|null;createdAt:string;updatedAt:string;completedAt:string|null;
 };
 const invalid=(code:string,status=409):never=>{throw new TestBenchError(code,status);};
 function actorAllowed(actor:GitActor,write:boolean):void{
@@ -61,7 +61,7 @@ function publicRun(row:RunRow):ObservedRunSummary{
     samples:samples(row),scorecard:row.scorecard,totalTokens:row.total_tokens,
     estimatedCostUsd:Number(row.estimated_cost_usd),
     executionModel:row.execution_model,judgeModel:row.judge_model,
-    errorCode:row.error_code,
+    errorCode:row.error_code,canceledBy:row.canceled_by,canceledAt:iso(row.canceled_at),
     createdAt:iso(row.created_at)??"",updatedAt:iso(row.updated_at)??"",
     completedAt:iso(row.completed_at),
   };
@@ -192,6 +192,68 @@ export function createObservedRunStore(sql:Sql){
       if(!row)return invalid("test_bench_run_not_found",404);
       return publicRun(row);
     },
+    /** Terminal, idempotent cancellation. Queued jobs are de-queued in the same
+     * transaction; running jobs cooperatively stop before their next provider call.
+     */
+    async cancel(actor:GitActor,skillId:string,definitionId:string,runId:string,
+      expectedRevision:number):Promise<{run:ObservedRunSummary;replayed:boolean}>{
+      actorAllowed(actor,true);validateId(definitionId);validateId(runId);
+      if(!Number.isSafeInteger(expectedRevision)||expectedRevision<1)
+        return invalid("test_bench_revision_required",428);
+      return sql.begin(async tx=>{
+        const [current]=await tx<RunRow[]>`
+          select * from test_bench_runs
+          where organization_id=${actor.organizationId}
+            and skill_id=${skillId} and definition_id=${definitionId} and id=${runId}
+          for update
+        `;
+        if(!current)return invalid("test_bench_run_not_found",404);
+        if(current.definition_revision!==expectedRevision)
+          return invalid("test_bench_revision_conflict");
+        if(current.status==="canceled")
+          return {run:publicRun(current),replayed:true};
+        if(current.status!=="queued"&&current.status!=="running")
+          return invalid("test_bench_run_already_terminal");
+        const [updated]=await tx<RunRow[]>`
+          update test_bench_runs set status='canceled',canceled_at=now(),
+            canceled_by=${actor.subject},completed_at=now(),updated_at=now(),scorecard=null
+          where organization_id=${actor.organizationId} and id=${runId}
+            and status in ('queued','running')
+          returning *
+        `;
+        if(!updated)return invalid("test_bench_run_already_terminal");
+        if(current.status==="queued"&&current.job_id){
+          await tx`
+            update background_jobs set status='failed',lease_until=null,
+              error='Canceled before execution.',completed_at=now(),updated_at=now()
+            where id=${current.job_id} and organization_id=${actor.organizationId}
+              and kind='test_bench_run' and status='queued'
+          `;
+        }
+        await tx`
+          insert into audit_events(
+            organization_id,actor_type,actor_ref,category,action,target_type,
+            target_ref,payload_redacted
+          ) values (
+            ${actor.organizationId},'user',${actor.subject},'evaluation',
+            'test_bench_run_canceled','test_bench_run',${runId},
+            ${tx.json({from:current.status,revision:current.definition_revision,
+              completedCases:current.completed_cases})}::jsonb
+          )
+        `;
+        return {run:publicRun(updated),replayed:false};
+      });
+    },
+    /** Every network boundary checks the committed terminal state. An already
+     * in-flight third-party request cannot be forcibly interrupted here.
+     */
+    async isRunning(organizationId:string,runId:string,jobId:string):Promise<boolean>{
+      const [state]=await sql<{status:RunRow["status"]}[]>`
+        select status from test_bench_runs
+        where organization_id=${organizationId} and id=${runId} and job_id=${jobId}
+      `;
+      return state?.status==="running";
+    },
     /** A reclaimed after-provider-I/O lease is never allowed to re-execute provider calls. */
     async beginJob(organizationId:string,repositoryId:string,runId:string,jobId:string,attempts:number):
       Promise<{row:RunRow;cases:TestBenchCase[]}|null>{
@@ -200,7 +262,7 @@ export function createObservedRunStore(sql:Sql){
         where organization_id=${organizationId} and repository_id=${repositoryId}
           and id=${runId} and job_id=${jobId}
       `;
-      if(!row||row.status==="complete"||row.status==="failed")return null;
+      if(!row||row.status==="complete"||row.status==="failed"||row.status==="canceled")return null;
       if(attempts!==1||row.status!=="queued"){
         await this.fail(organizationId,runId,"test_bench_unconfirmed_provider_retry");
         return null;

@@ -112,3 +112,35 @@ test("PER-1425: provider failure never fills unexecuted case results",async()=>{
  }),/provider down/);
  assert.deepEqual(seen,["case-1"]);
 });
+
+test("PER-1429: cancellation before the first case prevents all provider egress",async()=>{
+ const stub=mocks();
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Only arithmetic",cases,clients:stub,
+  beforeCase:async()=>{throw new ObservedEvaluationError("test_bench_run_cancelled");},
+ }),error=>error instanceof ObservedEvaluationError&&error.code==="test_bench_run_cancelled");
+ assert.equal(stub.counts.nim,0);assert.equal(stub.counts.jev,0);
+});
+test("PER-1429: cancellation after NIM prevents Jev judging and score publication",async()=>{
+ const stub=mocks();
+ const published:string[]=[];
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Only arithmetic",cases,clients:stub,
+  beforeJudge:async()=>{throw new ObservedEvaluationError("test_bench_run_cancelled");},
+  onCase:async sample=>{published.push(sample.caseId);},
+ }),error=>error instanceof ObservedEvaluationError&&error.code==="test_bench_run_cancelled");
+ assert.equal(stub.counts.nim,1);assert.equal(stub.counts.jev,0);
+ assert.deepEqual(published,[]);
+});
+test("PER-1429: cancellation between cases retains only real observations and avoids later costs",async()=>{
+ const stub=mocks(),seen:string[]=[];
+ await assert.rejects(()=>executeObservedCases({
+  skillName:"calc",instructions:"Only arithmetic",cases,clients:stub,
+  beforeCase:async index=>{
+   if(index===2)throw new ObservedEvaluationError("test_bench_run_cancelled");
+  },
+  onCase:async sample=>{seen.push(sample.caseId);},
+ }),error=>error instanceof ObservedEvaluationError&&error.code==="test_bench_run_cancelled");
+ assert.deepEqual(seen,["case-1"]);
+ assert.equal(stub.counts.nim,1);assert.equal(stub.counts.jev,1);
+});

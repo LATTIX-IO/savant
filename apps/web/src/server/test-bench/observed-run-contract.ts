@@ -14,3 +14,18 @@ export function parseObservedRunAdmission(value:unknown):{
     throw new TestBenchError("test_bench_run_request_invalid",422);
   return {requestId:row.requestId,expectedRevision:row.expectedRevision as number};
 }
+
+/** Caller never selects target tenant, provider, source, actor or cancellation
+ * semantics. The run identity comes solely from authenticated URL routing.
+ */
+export function parseObservedCancelRequest(value:unknown):{expectedRevision:number}{
+  if(!value||typeof value!=="object"||Array.isArray(value))
+    throw new TestBenchError("test_bench_cancel_request_invalid",422);
+  const record=value as Record<string,unknown>;
+  if(Object.keys(record).length!==1||
+    !Object.prototype.hasOwnProperty.call(record,"expectedRevision")||
+    !Number.isSafeInteger(record.expectedRevision)||
+    (record.expectedRevision as number)<1)
+    throw new TestBenchError("test_bench_cancel_request_invalid",422);
+  return {expectedRevision:record.expectedRevision as number};
+}

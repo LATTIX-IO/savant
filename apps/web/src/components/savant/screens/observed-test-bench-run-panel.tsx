@@ -2,7 +2,7 @@
 
 import {useEffect,useRef,useState} from "react";
 import {
-  listObservedTestBenchRuns,startObservedTestBenchRun,
+  listObservedTestBenchRuns,startObservedTestBenchRun,cancelObservedTestBenchRun,
 } from "@/lib/observed-test-bench-runs";
 import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
 import type {TestBenchDefinition} from "@/server/test-bench/definition-contract";
@@ -16,11 +16,13 @@ export function ObservedTestBenchRunPanel({
   const [runs,setRuns]=useState<ObservedRunSummary[]>([]);
   const [loading,setLoading]=useState(true);
   const [starting,setStarting]=useState(false);
+  const [canceling,setCanceling]=useState(false);
   const [error,setError]=useState<string|null>(null);
   const requestId=useRef<string|null>(null);
   const latest=runs[0]??null;
   const active=runs.some(run=>run.status==="queued"||run.status==="running");
-  const canRun=!readOnly&&definition.cases.length<=4&&!active&&!starting;
+  const canRun=!readOnly&&definition.cases.length<=4&&!active&&!starting&&!canceling;
+  const canCancel=!readOnly&&!!latest&&active&&!starting&&!canceling;
 
   useEffect(()=>{
     const controller=new AbortController();
@@ -71,6 +73,19 @@ export function ObservedTestBenchRunPanel({
       setError("Live execution was not accepted or confirmed. Check provider access, the case limit, revision or workspace permissions.");
     }finally{setStarting(false);}
   }
+  async function cancel(){
+    if(!latest||!canCancel)return;
+    setCanceling(true);setError(null);
+    try{
+      const terminal=await cancelObservedTestBenchRun(
+        skillId,definition.id,definition.sourceCommitSha,latest.id,
+        latest.definitionRevision,{workspaceSlug},
+      );
+      setRuns(current=>[terminal,...current.filter(x=>x.id!==terminal.id)].slice(0,15));
+    }catch{
+      setError("Cancellation was not confirmed. Reload the run; an in-flight provider request may still complete.");
+    }finally{setCanceling(false);}
+  }
   const overall=latest?.status==="complete"&&latest.scorecard&&
     typeof latest.scorecard.overallScore==="number"?
     latest.scorecard.overallScore:null;
@@ -84,6 +99,8 @@ export function ObservedTestBenchRunPanel({
         Runs the saved revision against NVIDIA NIM and grades each response with Jev.
         Up to four cases per run. This does not execute MCP tools, scripts or customer-owned harnesses.
         Results are provisional and do not constitute an automatic release approval.
+        Cancellation stops subsequent provider calls once observed; it cannot guarantee
+        interruption or reimbursement for an inference request already in flight.
       </p>
       {definition.cases.length>4?(
         <p className="subtle" style={{fontSize:12,margin:0}}>
@@ -96,6 +113,12 @@ export function ObservedTestBenchRunPanel({
           onClick={()=>void run()}>
           {starting?"Requesting execution…":active?"Run in progress":"Run saved revision (real)"}
         </button>
+        {latest&&(latest.status==="queued"||latest.status==="running")?(
+          <button type="button" className="btn btn-sm btn-ghost"
+            disabled={!canCancel} onClick={()=>void cancel()}>
+            {canceling?"Canceling…":"Cancel run"}
+          </button>
+        ):null}
         {loading?<span className="subtle">Reading persisted runs…</span>:null}
       </div>
       {error?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{error}</p>:null}
@@ -108,6 +131,12 @@ export function ObservedTestBenchRunPanel({
           <span className="mono" style={{fontSize:11,overflowWrap:"anywhere"}}>
             {latest.id} · {latest.completedCases}/{latest.expectedCases} observed cases
           </span>
+          {latest.status==="canceled"?(
+            <p className="subtle" style={{fontSize:12,margin:0}}>
+              Run canceled. {latest.completedCases} case(s) were observed before cancellation;
+              there is no aggregate score. In-flight provider charges may still apply.
+            </p>
+          ):null}
           {latest.status==="failed"?(
             <p className="subtle" style={{fontSize:12,margin:0}}>
               The run failed. Only {latest.completedCases} case(s) were observed; there is no aggregate score.

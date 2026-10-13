@@ -60,6 +60,8 @@ export async function executeObservedCases(
     skillName:string;instructions:string;cases:readonly TestBenchCase[];
     clients:{executor:ChatClient;judge:JudgeClient};
     onCase?:(sample:ObservedCase,index:number,total:number)=>Promise<void>;
+    beforeCase?:(index:number)=>Promise<void>;
+    beforeJudge?:(index:number)=>Promise<void>;
     maxTokens?:number;maxUsd?:number;costPerMillionTokens?:number;
   },
 ):Promise<ObservedEvaluation>{
@@ -78,6 +80,7 @@ export async function executeObservedCases(
   let totalTokens=0;
   let estimatedCostUsd=0;
   for(const [index,item] of cases.entries()){
+    await input.beforeCase?.(index+1);
     const prompt=item.context?`${item.prompt}\n\nContext:\n${item.context}`:item.prompt;
     const completion=await clients.executor.complete([
       {role:"system",content:`Evaluate the following chat-only skill instructions. No tools or external actions are available.\n<skill name=${JSON.stringify(skillName)}>\n${instructions}\n</skill>`},
@@ -90,6 +93,7 @@ export async function executeObservedCases(
     totalTokens+=executedTokens;
     estimatedCostUsd=totalTokens*perMillion/1_000_000;
     if(totalTokens>ceiling||estimatedCostUsd>maxUsd)reject("test_bench_budget_exceeded");
+    await input.beforeJudge?.(index+1);
     const judged=await clients.judge.ask({
       skill:{name:skillName,instructions},
       case:{kind:item.kind,prompt:item.prompt,context:item.context,expected_behavior:item.expectedBehavior},

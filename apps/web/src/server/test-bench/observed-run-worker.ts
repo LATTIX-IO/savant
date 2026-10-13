@@ -45,7 +45,12 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
   }
   if(!admitted)return "done";
   const {row,cases}=admitted;
+  const ensureNotCanceled=async()=>{
+    if(!await store.isRunning(row.organization_id,row.id,job.id))
+      throw new ObservedEvaluationError("test_bench_run_cancelled");
+  };
   try{
+    await ensureNotCanceled();
     // Check the initiating human is STILL authorized before provider egress.
     // Revoked and offboarded users cannot consume quota from an earlier queue.
     const [actor]=await sql<{authorized:boolean}[]>`
@@ -77,6 +82,8 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
     const accepted=[] as import("./observed-evaluator.ts").ObservedCase[];
     const result=await executeObservedCases({
       skillName:row.skill_id,instructions,cases,clients:configured,
+      beforeCase:ensureNotCanceled,
+      beforeJudge:ensureNotCanceled,
       onCase:async(sample,index)=>{
         await store.recordCase(row,sample,index,accepted);
         accepted.push(sample);

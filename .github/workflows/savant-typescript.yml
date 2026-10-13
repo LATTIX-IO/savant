@@ -150,3 +150,7 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-tenant-openai-test-bench.mjs
         env:
           SAVANT_TENANT_OPENAI_TEST: "1"
+      - name: Verify UTC tenant daily admissions, idempotency, races and no-refund controls
+        run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
+        env:
+          SAVANT_DAILY_QUOTA_TEST: "1"

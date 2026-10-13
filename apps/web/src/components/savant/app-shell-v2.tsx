@@ -45,7 +45,7 @@ export function SavantShellV2({
 }: {
   children: ReactNode;
   viewer: AuthViewer;
-  shellData?: SavantShellData;
+  shellData?: SavantShellData | undefined;
   workspace: WorkspaceSummary;
   memberships: readonly WorkspaceMembershipSummary[];
 }) {

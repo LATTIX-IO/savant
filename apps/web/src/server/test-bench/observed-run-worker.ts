@@ -130,11 +130,11 @@ export async function runObservedTestBenchJob(
       if(row.execution_source==="workspace-openai")
         return {
           executor:await createPinnedTenantOpenAiClient(ctx.sql,row),
-          judge:createJevClient(config.jev),
+          judge:createJevClient(config.jev,fetch,{singleAttempt:true}),
         };
       if(!config.nim)return null;
       return {
-        executor:createNimChatClient(config.nim,config.nim.executionModel),
+        executor:createNimChatClient(config.nim,config.nim.executionModel,fetch,{singleAttempt:true}),
         judge:createJevClient(config.jev),
       };
     },

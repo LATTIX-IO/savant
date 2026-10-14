@@ -256,7 +256,7 @@ export function createJevClient(config: NonNullable<AiServiceConfig["jev"]>, fet
         state,
         questions,
       }, options.timeoutMs ?? 60_000, policy.singleAttempt ? 1 : 4) as { model?: string; answers?: Record<string, JevAnswer>; usage?: { input_tokens?: number; output_tokens?: number } };
-      const answers = data.answers && typeof data.answers === "object" &&
+      const answers: Record<string, JevAnswer> = data.answers && typeof data.answers === "object" &&
         !Array.isArray(data.answers) ? data.answers : {};
       for (const id of Object.keys(questions)) {
         if (!answers[id] && !options.usageEvidenceMode) {

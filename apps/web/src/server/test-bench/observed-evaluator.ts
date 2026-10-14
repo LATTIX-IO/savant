@@ -94,7 +94,7 @@ export async function executeObservedCases(
     const completion=await clients.executor.complete([
       {role:"system",content:`Evaluate the following chat-only skill instructions. No tools or external actions are available.\n<skill name=${JSON.stringify(skillName)}>\n${instructions}\n</skill>`},
       {role:"user",content:prompt},
-    ],{maxTokens:400,temperature:0.2,timeoutMs:15_000});
+    ],{maxTokens:400,temperature:0.2,timeoutMs:15_000,usageEvidenceMode:true});
     // The provider can report genuine usage even if its model output is
     // unusable. Acknowledged tokens must precede output/grade validation
     // rather than being silently discarded with a failed run.
@@ -102,7 +102,7 @@ export async function executeObservedCases(
     await input.onUsage?.({index:index+1,phase:"executor",model:completion.model,
       promptTokens:completion.usage.promptTokens,
       completionTokens:completion.usage.completionTokens});
-    if(!completion.content.trim()||completion.content.length>3_000||
+    if(completion.finishReason!=="stop"||!completion.content.trim()||completion.content.length>3_000||
       !Number.isFinite(completion.latencyMs)||completion.latencyMs<0)
       reject("test_bench_model_output_invalid");
     totalTokens+=executedTokens;
@@ -113,7 +113,7 @@ export async function executeObservedCases(
       skill:{name:skillName,instructions},
       case:{kind:item.kind,prompt:item.prompt,context:item.context,expected_behavior:item.expectedBehavior},
       output:completion.content,
-    },scoringQuestions(),{timeoutMs:10_000});
+    },scoringQuestions(),{timeoutMs:10_000,usageEvidenceMode:true});
     const judgedTokens=tokens(judged.usage);
     await input.onUsage?.({index:index+1,phase:"judge",model:judged.model,
       promptTokens:judged.usage.inputTokens,

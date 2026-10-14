@@ -164,3 +164,27 @@ test("PER-1447: provider usage is acknowledged even when no complete scorecard e
    assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),
     ObservedRunClientError);
 });
+
+
+test("PER-1457: client requires bounded, truthful pending provider-call intent counts",()=>{
+ const uncertain={...base,status:"failed",unconfirmedProviderCalls:1};
+ assert.equal(parseObservedRun(uncertain,skillId,definitionId,sha).unconfirmedProviderCalls,1);
+ const partial={...base,status:"canceled",canceledAt:"2026-10-14T10:00:00Z",
+  canceledBy:"operator",observedExecutorTokens:90,observedJudgeTokens:0,
+  observedUsageReceipts:1,unconfirmedProviderCalls:1};
+ assert.equal(parseObservedRun(partial,skillId,definitionId,sha).unconfirmedProviderCalls,1);
+ for(const changed of [
+  {...uncertain,unconfirmedProviderCalls:-1},
+  {...uncertain,unconfirmedProviderCalls:9},
+  {...uncertain,unconfirmedProviderCalls:0.5},
+  {...uncertain,unconfirmedProviderCalls:"1"},
+  {...uncertain,unconfirmedProviderCalls:null},
+  {...uncertain,unconfirmedProviderCalls:3},
+  {...partial,unconfirmedProviderCalls:2},
+  {...base,status:"queued",unconfirmedProviderCalls:1},
+  {...base,status:"complete",completedCases:1,samples:[one],
+    scorecard:{overallScore:50},unconfirmedProviderCalls:1},
+ ])
+  assert.throws(()=>parseObservedRun(changed,skillId,definitionId,sha),
+    ObservedRunClientError);
+});

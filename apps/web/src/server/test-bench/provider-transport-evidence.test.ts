@@ -152,3 +152,15 @@ test("PER-1453: invalid or absent provider usage is never converted to a receipt
   }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_provider_usage_missing");
   assert.equal(receipts,0);assert.equal(judgeCalls,0);
 });
+
+
+test("PER-1453: malformed and oversized NIM text is dropped but positive usage is retained",async()=>{
+ for(const raw of [101,{"message":"do not trust"}, "x".repeat(3_201)]){
+  const c=createNimChatClient(nimConfig,"nim-test",async()=>
+    json(nimResponse([{finish_reason:"stop",message:{content:raw}}])),
+  {singleAttempt:true});
+  const out=await c.complete(messages,{usageEvidenceMode:true});
+  assert.equal(out.content,"");
+  assert.deepEqual(out.usage,{promptTokens:80,completionTokens:20});
+ }
+});

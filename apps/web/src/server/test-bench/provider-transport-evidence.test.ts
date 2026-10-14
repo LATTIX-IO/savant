@@ -5,6 +5,7 @@ import {
   type ChatMessage,type FetchLike,
 } from "../ai/clients.ts";
 import {executeObservedCases,ObservedEvaluationError} from "./observed-evaluator.ts";
+import {createSingleAttemptObservedJudge} from "./observed-run-worker.ts";
 import type {TestBenchCase} from "./definition-contract.ts";
 
 const nimConfig={
@@ -163,4 +164,17 @@ test("PER-1453: malformed and oversized NIM text is dropped but positive usage i
   assert.equal(out.content,"");
   assert.deepEqual(out.usage,{promptTokens:80,completionTokens:20});
  }
+});
+
+test("PER-1453 regression: production Test Bench judge factory never repeats a paid request",async()=>{
+ let calls=0;
+ const judge=createSingleAttemptObservedJudge(jevConfig,async(_url,options)=>{
+  calls++;
+  assert.equal(options?.redirect,"error");
+  return new Response("PROVIDER_503_PAYLOAD",{status:503});
+ });
+ await assert.rejects(()=>judge.ask({skill:"test"},{quality:{
+  type:"score",instructions:"Assess",criteria:[],
+ }}),AiServiceError);
+ assert.equal(calls,1,"platform NIM and BYO OpenAI must share the single-attempt judge factory");
 });

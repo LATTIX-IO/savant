@@ -18,7 +18,7 @@ type RunRow=PinnedWorkspaceRun&{
   results_ciphertext:string|null;status:"queued"|"running"|"complete"|"failed"|"canceled";
   expected_cases:number;completed_cases:number;total_tokens:number;estimated_cost_usd:string|number;
   observed_executor_tokens:number;observed_judge_tokens:number;observed_usage_receipts:number;
-  unconfirmed_provider_calls?:number;
+  unconfirmed_provider_calls?:number|undefined;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
   job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
   cost_accounting:"platform-estimate"|"normalized-qa-proxy";

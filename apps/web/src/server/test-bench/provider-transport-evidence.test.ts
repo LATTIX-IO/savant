@@ -114,7 +114,7 @@ test("PER-1453: real NIM adapter retains usage for empty or truncated completion
     await assert.rejects(()=>executeObservedCases({
       skillName:"example",instructions:"Answer faithfully.",cases,
       clients:{executor:nim,judge:jev},
-      onUsage:async receipt=>seen.push(receipt.phase+":"+String(receipt.promptTokens+receipt.completionTokens)),
+      onUsage:async receipt=>{seen.push(receipt.phase+":"+String(receipt.promptTokens+receipt.completionTokens));},
     }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_model_output_invalid");
     assert.equal(executorCalls,1);assert.equal(judgeCalls,0);
     assert.deepEqual(seen,["executor:100"]);
@@ -132,7 +132,7 @@ test("PER-1453: real Jev adapter returns malformed judge answers for usage ACK, 
   },{singleAttempt:true});
   await assert.rejects(()=>executeObservedCases({
     skillName:"example",instructions:"Answer faithfully.",cases,
-    clients:{executor:nim,judge},onUsage:async r=>seen.push(r.phase),
+    clients:{executor:nim,judge},onUsage:async r=>{seen.push(r.phase);},
   }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_judge_score_invalid");
   assert.equal(nimCalls,1);assert.equal(jevCalls,1);
   assert.deepEqual(seen,["executor","judge"]);

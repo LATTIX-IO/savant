@@ -174,7 +174,14 @@ export function createNimChatClient(
       };
       const choice = data.choices?.[0];
       const message = choice?.message;
-      const content = stripReasoning(message?.content ?? "");
+      // Preserve genuine usage metadata even if the provider's content is
+      // malformed or over the Test Bench grading bound. Never feed the
+      // unusable body into durable evidence or downstream scoring.
+      const parsedContent = stripReasoning(
+        typeof message?.content === "string" ? message.content : "",
+      );
+      const content = options.usageEvidenceMode && parsedContent.length > 3_000
+        ? "" : parsedContent;
       if (!content && !options.usageEvidenceMode) {
         throw new AiServiceError("nim", `NVIDIA NIM returned an empty completion (finish reason: ${choice?.finish_reason ?? "unknown"}${message?.reasoning_content ? `, ${message.reasoning_content.length} characters of reasoning` : ""}).`, 422);
       }

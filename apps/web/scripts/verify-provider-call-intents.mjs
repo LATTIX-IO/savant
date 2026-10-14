@@ -108,6 +108,8 @@ try{
  assert.equal((await runs.get(a.actor,a.skillId,a.suite.id,first.run.id)).unconfirmedProviderCalls,1);
  await usage.record(a.id,first.run.id,first.job.id,ack(1,"judge","jev-test",40,10));
  assert.equal((await runs.get(a.actor,a.skillId,a.suite.id,first.run.id)).unconfirmedProviderCalls,0);
+ // Finish the first active definition before opening another attempt.
+ await runs.cancel(a.actor,a.skillId,a.suite.id,first.run.id,1);
 
  // Cancellation of an already dispatched request cannot refund or assume
  // billable amount is zero. Legitimate ACK after cancellation resolves pending.

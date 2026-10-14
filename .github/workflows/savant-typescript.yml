@@ -154,6 +154,10 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:
           SAVANT_DAILY_QUOTA_TEST: "1"
+      - name: Verify global provider capacity reservations, contention and rollback
+        run: pnpm --filter @savant/web exec node ./scripts/verify-platform-provider-admission.mjs
+        env:
+          SAVANT_GLOBAL_PROVIDER_ADMISSION_TEST: "1"
       - name: Verify immutable provider-reported token receipts, partial usage and cross-tenant refusal
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-provider-usage.mjs
         env:

@@ -146,3 +146,38 @@ test("PER-1438: unapproved additional tool, endpoint or oversized request never 
   expectFailure("test_bench_workspace_openai_request_invalid"));
  assert.equal(count,0);
 });
+
+
+test("PER-1453: BYO OpenAI usage-first evidence captures valid tokens despite unusable output",async()=>{
+ const malformed=[
+  response({choices:[{message:{content:"partial"},finish_reason:"length"}]}),
+  response({choices:[{message:{content:"filtered"},finish_reason:"content_filter"}]}),
+  response({choices:[{message:{content:"tools"},finish_reason:"tool_calls"}]}),
+  response({choices:[{message:{content:""}}]}),
+  response({choices:[{message:{content:"x".repeat(3001)},finish_reason:"stop"}]}),
+  response({choices:[{message:{content:"4",tool_calls:[{id:"bad"}]},finish_reason:"stop"}]}),
+ ];
+ for(const data of malformed){
+  let calls=0;
+  const client=createTenantOpenAiChatClient({model,apiKey:secret,
+   fetchImpl:async()=>{calls++;return new Response(JSON.stringify(data),{status:200});},
+  });
+  const evidence=await client.complete(messages,{usageEvidenceMode:true});
+  assert.equal(evidence.content,"","unsafe model text cannot be treated as completed result");
+  assert.equal(evidence.usage.promptTokens,42);
+  assert.equal(evidence.usage.completionTokens,7);
+  assert.equal(calls,1);
+ }
+ // Provenance and positive exact counts must still fail before any ACK.
+ for(const data of [
+  response({model:"forged-model"}),
+  response({usage:null}),
+  response({usage:{prompt_tokens:-4,completion_tokens:1}}),
+  response({usage:{prompt_tokens:0,completion_tokens:0}}),
+ ]){
+  const client=createTenantOpenAiChatClient({model,apiKey:secret,
+   fetchImpl:async()=>new Response(JSON.stringify(data),{status:200})});
+  await assert.rejects(()=>client.complete(messages,{usageEvidenceMode:true}),
+   expectFailure("test_bench_workspace_openai_response_invalid"));
+ }
+});

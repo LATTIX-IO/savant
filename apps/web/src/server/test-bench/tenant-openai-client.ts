@@ -182,16 +182,21 @@ export function createTenantOpenAiChatClient(input:{
           (reply as Record<string,unknown>).content:null;
         const finishReason=choice&&typeof choice==="object"?
           (choice as Record<string,unknown>).finish_reason:null;
-        // A truncated, filtered, or tool-routed response is not complete
-        // observable evidence, even if the provider emits partial text.
-        if(body.model!==model||finishReason!=="stop"||typeof content!=="string"||
-          !content.trim()||content.length>3_000||!validUsage(body.usage))
+        // A genuine provider ACK may accompany filtered/truncated/tool
+        // output. In Test Bench evidence mode only, return validated counts
+        // but never expose unusable model text as successful content.
+        if(body.model!==model||!validUsage(body.usage))
+          return err("test_bench_workspace_openai_response_invalid");
+        const usable=finishReason==="stop"&&typeof content==="string"&&
+          !!content.trim()&&content.length<=3_000&&
+          !(reply&&typeof reply==="object"&&"tool_calls" in reply);
+        if(!usable&&!options.usageEvidenceMode)
           return err("test_bench_workspace_openai_response_invalid");
         return {
-          content:content.trim(),model,latencyMs:Date.now()-started,
+          content:usable?(content as string).trim():"",model,latencyMs:Date.now()-started,
           usage:{promptTokens:body.usage.prompt_tokens,
             completionTokens:body.usage.completion_tokens},
-          finishReason:"stop",
+          finishReason:typeof finishReason==="string"?finishReason:null,
           reasoningChars:0,
         };
       }catch(error){

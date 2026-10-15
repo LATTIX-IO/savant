@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
+import {createNimChatClient,createJevClient} from "../src/server/ai/clients.ts";
 import postgres from "postgres";
 import {createTestBenchDefinitionStore} from "../src/server/test-bench/definition-store.ts";
 import {createObservedRunStore} from "../src/server/test-bench/observed-run-store.ts";
@@ -188,9 +189,82 @@ try{
  assert.equal(unscored.observedUsageReceipts,1);
  await runs.cancel(admin,skillId,suite.id,pending.run.id,1);
 
+ // 6. Exercise real HTTP adapter code with synthetic responses (no network):
+ // an unusable NIM completion with real tokens still leaves a durable ACK,
+ // and cannot contact the paid Jev judge or create a score.
+ const nimConfig={apiKey:"sk-PROVIDER-SECRET",baseUrl:"https://nim.example.test/v1",
+  generationModel:"nim-usage-test",executionModel:"nim-usage-test",extraBody:{}};
+ const jevConfig={apiKey:"sk-PROVIDER-SECRET",baseUrl:"https://jev.example.test/v1",
+  model:"jev-usage-test"};
+ const invalidNim=await newRun();let nimCalls=0,blockedJudgeCalls=0;
+ const noNimScore=await executeQueuedObservedRun({
+  sql,job:invalidNim.job,
+  queue:{release:async()=>{throw Error("unexpected release");}},
+  deadline:Date.now()+230000,
+  readInstructions:async()=> "Respond only with the numeral four.",
+  clients:()=>({
+   executor:createNimChatClient(nimConfig,"nim-usage-test",async(_url,init)=>{
+    nimCalls++;
+    assert.equal(init?.redirect,"error");
+    return new Response(JSON.stringify({
+     model:"nim-usage-test",
+     choices:[{finish_reason:"length",message:{content:"PRIVATE_UNUSABLE_MODEL_TEXT"}}],
+     usage:{prompt_tokens:80,completion_tokens:20},
+    }),{status:200});
+   },{singleAttempt:true}),
+   judge:createJevClient(jevConfig,async()=>{
+    blockedJudgeCalls++;throw Error("judge egress should never occur");
+   },{singleAttempt:true}),
+  }),
+ });
+ assert.equal(noNimScore,"done");
+ assert.equal(nimCalls,1);assert.equal(blockedJudgeCalls,0);
+ const invalidNimRun=await runs.get(admin,skillId,suite.id,invalidNim.run.id);
+ assert.equal(invalidNimRun.status,"failed");
+ assert.equal(invalidNimRun.scorecard,null);
+ assert.equal(invalidNimRun.observedExecutorTokens,100);
+ assert.equal(invalidNimRun.observedJudgeTokens,0);
+ assert.equal(invalidNimRun.observedUsageReceipts,1);
+
+ // 7. An incomplete Jev response with real usage MUST acknowledge both
+ // phases then fail grading (no synthetic PASS or provider retries).
+ const invalidJev=await newRun();let nimOkCalls=0,jevCalls=0;
+ const noJevScore=await executeQueuedObservedRun({
+  sql,job:invalidJev.job,
+  queue:{release:async()=>{throw Error("unexpected release");}},
+  deadline:Date.now()+230000,
+  readInstructions:async()=> "Respond only with the numeral four.",
+  clients:()=>({
+   executor:createNimChatClient(nimConfig,"nim-usage-test",async()=>{
+    nimOkCalls++;
+    return new Response(JSON.stringify({
+      model:"nim-usage-test",
+      choices:[{finish_reason:"stop",message:{content:"4"}}],
+      usage:{prompt_tokens:80,completion_tokens:20},
+    }),{status:200});
+   },{singleAttempt:true}),
+   judge:createJevClient(jevConfig,async()=>{
+    jevCalls++;
+    return new Response(JSON.stringify({
+      model:"jev-usage-test",answers:{},
+      usage:{input_tokens:65,output_tokens:15},
+    }),{status:200});
+   },{singleAttempt:true}),
+  }),
+ });
+ assert.equal(noJevScore,"done");
+ assert.equal(nimOkCalls,1);assert.equal(jevCalls,1);
+ const invalidJevRun=await runs.get(admin,skillId,suite.id,invalidJev.run.id);
+ assert.equal(invalidJevRun.status,"failed");
+ assert.equal(invalidJevRun.scorecard,null);
+ assert.equal(invalidJevRun.observedExecutorTokens,100);
+ assert.equal(invalidJevRun.observedJudgeTokens,80);
+ assert.equal(invalidJevRun.observedUsageReceipts,2);
+ assert.equal(invalidJevRun.totalTokens,0);
+
  const rows=await sql`select model,phase,prompt_tokens,completion_tokens
   from test_bench_provider_usage_receipts where organization_id=${orgId}`;
- assert.equal(rows.length,5);
+ assert.equal(rows.length,8);
  const allEvents=JSON.stringify(await sql`select payload_redacted from audit_events
   where organization_id=${orgId} and target_type='test_bench_run'`);
  const allReceipts=JSON.stringify(rows);
@@ -198,7 +272,8 @@ try{
   where organization_id=${orgId} and kind='test_bench_run'`);
  for(const material of [allEvents,allReceipts,allJobs]){
   for(const secret of [secretPrompt,"PRIVATE_REAL_MODEL_OUTPUT",
-    "PRIVATE_PROVIDER_ERROR_NOT_LOGGABLE","sk-PROVIDER-SECRET"]){
+    "PRIVATE_PROVIDER_ERROR_NOT_LOGGABLE","PRIVATE_UNUSABLE_MODEL_TEXT",
+    "sk-PROVIDER-SECRET"]){
    assert.ok(!material.includes(secret),"usage evidence must be metadata-only");
   }
  }
@@ -211,6 +286,8 @@ try{
   "failed judge retained executor ACK without fabricated judge tokens",
   "ten concurrent identical receipts inserted only once",
   "complete score refused without every durable executor/Jev receipt",
+  "real NIM invalid content retains executor ACK and refuses judge egress",
+  "real Jev invalid answers retain both ACKs but refuse score",
   "metadata-only receipts, queue and audit are secret-free",
  ]}));
 }finally{

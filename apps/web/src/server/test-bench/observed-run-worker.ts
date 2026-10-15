@@ -1,5 +1,5 @@
 import {AiServiceError,createJevClient,createNimChatClient,
-  readAiServiceConfig,type ChatClient,type JudgeClient} from "../ai/clients.ts";
+  readAiServiceConfig,type AiServiceConfig,type ChatClient,type JudgeClient,type FetchLike} from "../ai/clients.ts";
 import type {GitRuntime} from "../git/runtime.ts";
 import {openRepositoryFiles} from "../jobs/repository-files.ts";
 import type {BackgroundJob,JobQueue} from "../jobs/queue.ts";
@@ -10,6 +10,12 @@ import {createObservedProviderUsageStore} from "./observed-provider-usage.ts";
 import {assertTenantOpenAiCanContinue,createPinnedTenantOpenAiClient,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
+/** Every Test Bench Jev invocation, including platform NIM runs, must be single-attempt. */
+export function createSingleAttemptObservedJudge(
+  config:NonNullable<AiServiceConfig["jev"]>,fetchImpl:FetchLike=fetch,
+):JudgeClient{
+  return createJevClient(config,fetchImpl,{singleAttempt:true});
+}
 function safeFailure(error:unknown):string{
   if(error instanceof ObservedEvaluationError)return error.code;
   if(error instanceof TestBenchError&&error.code.startsWith("test_bench_"))return error.code;
@@ -130,12 +136,12 @@ export async function runObservedTestBenchJob(
       if(row.execution_source==="workspace-openai")
         return {
           executor:await createPinnedTenantOpenAiClient(ctx.sql,row),
-          judge:createJevClient(config.jev),
+          judge:createSingleAttemptObservedJudge(config.jev),
         };
       if(!config.nim)return null;
       return {
-        executor:createNimChatClient(config.nim,config.nim.executionModel),
-        judge:createJevClient(config.jev),
+        executor:createNimChatClient(config.nim,config.nim.executionModel,fetch,{singleAttempt:true}),
+        judge:createSingleAttemptObservedJudge(config.jev),
       };
     },
   });

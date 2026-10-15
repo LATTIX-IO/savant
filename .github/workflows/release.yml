@@ -41,7 +41,7 @@ jobs:
           SAVANT_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: node scripts/release-verify.mjs
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.30.0
           run_install: false

@@ -134,7 +134,7 @@ test("PER-1453: real Jev adapter returns malformed judge answers for usage ACK, 
   await assert.rejects(()=>executeObservedCases({
     skillName:"example",instructions:"Answer faithfully.",cases,
     clients:{executor:nim,judge},onUsage:async r=>{seen.push(r.phase);},
-  }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_judge_score_invalid");
+  }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_judge_binary_invalid");
   assert.equal(nimCalls,1);assert.equal(jevCalls,1);
   assert.deepEqual(seen,["executor","judge"]);
 });

@@ -125,6 +125,33 @@ do $$ begin
         (rate_card_id is not null and reserved_micro_usd>0));
   end if;
 end $$;
+-- Previous 0027 integrity required platform-NIM model pin to be NULL.
+-- Keep legacy unpriced rows valid; when monetary reservation is present,
+-- require the exact platform execution model to be pinned and bounded.
+alter table test_bench_runs drop constraint if exists test_bench_runs_source_integrity;
+alter table test_bench_runs add constraint test_bench_runs_source_integrity check (
+  (execution_source='platform-nim'
+    and execution_connection_id is null
+    and execution_secret_fingerprint is null
+    and cost_accounting='platform-estimate'
+    and (
+      (rate_card_id is null and execution_model_pinned is null)
+      or
+      (rate_card_id is not null and length(execution_model_pinned) between 1 and 160)
+    ))
+  or
+  (execution_source='workspace-openai'
+    and execution_connection_id is not null
+    and execution_secret_fingerprint ~ '^[0-9a-f]{64}
+  'Operator-approved immutable price evidence. Exactly one approved card may be active. No default is seeded.';
+comment on table test_bench_tenant_monetary_days is
+  'Conservative nonrefundable monetary admission reservations, NOT actual billed provider costs.';
+comment on column test_bench_runs.reserved_micro_usd is
+  'Conservative rate-versioned planned micro-USD admission cushion, NOT actual invoice, settled usage or guaranteed maximum provider charges.';
+
+    and length(execution_model_pinned) between 1 and 160
+    and cost_accounting='normalized-qa-proxy')
+);
 comment on table test_bench_provider_rate_cards is
   'Operator-approved immutable price evidence. Exactly one approved card may be active. No default is seeded.';
 comment on table test_bench_tenant_monetary_days is

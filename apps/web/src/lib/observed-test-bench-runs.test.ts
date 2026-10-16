@@ -188,3 +188,23 @@ test("PER-1457: client requires bounded, truthful pending provider-call intent c
   assert.throws(()=>parseObservedRun(changed,skillId,definitionId,sha),
     ObservedRunClientError);
 });
+
+
+test("PER-1545: rate-versioned monetary reservation is bounded and never parsed as invoice",()=>{
+ const cardId="aa9e55ab-239a-4baa-8ef9-79da9b3d3b36";
+ const valid={...base,rateCardId:cardId,monetaryReservationMicroUsd:9856};
+ assert.equal(parseObservedRun(valid,skillId,definitionId,sha).monetaryReservationMicroUsd,9856);
+ assert.equal(parseObservedRun(base,skillId,definitionId,sha).rateCardId,null);
+ for(const forged of [
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:0},
+  {...base,rateCardId:null,monetaryReservationMicroUsd:1},
+  {...base,rateCardId:"foreign-card",monetaryReservationMicroUsd:1},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:-1},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:Infinity},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:"9856"},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:1.5},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:1000000000001},
+ ])
+  assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),
+    ObservedRunClientError);
+});

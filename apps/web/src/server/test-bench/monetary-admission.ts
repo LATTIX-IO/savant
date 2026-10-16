@@ -127,7 +127,7 @@ export async function reserveTestBenchMonetaryAdmission(
     where ledger.reserved_micro_usd<=${String(dayCap-BigInt(cost))}
     returning organization_id
   `;
-  if(day.length!==1)return deny("test_bench_monetary_capacity_exceeded",429);
+  if(!day)return deny("test_bench_monetary_capacity_exceeded",429);
   const [month]=await tx<{organization_id:string}[]>`
     insert into test_bench_tenant_monetary_months as ledger(
       organization_id,utc_month,reserved_micro_usd
@@ -140,7 +140,7 @@ export async function reserveTestBenchMonetaryAdmission(
     where ledger.reserved_micro_usd<=${String(monthCap-BigInt(cost))}
     returning organization_id
   `;
-  if(month.length!==1)return deny("test_bench_monetary_capacity_exceeded",429);
+  if(!month)return deny("test_bench_monetary_capacity_exceeded",429);
   return {
     rateCardId:card.id,reservedMicroUsd:cost,
     executionModel:source==="platform-nim"?models.find(x=>x.provider_code==="nim")!.model:null,

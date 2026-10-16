@@ -12,7 +12,7 @@ const base={
  definitionRevision:1,status:"queued",expectedCases:1,completedCases:0,
  samples:[],scorecard:null,totalTokens:0,estimatedCostUsd:0,
  observedExecutorTokens:0,observedJudgeTokens:0,observedUsageReceipts:0,
- unconfirmedProviderCalls:0,
+ unconfirmedProviderCalls:0,rateCardId:null,monetaryReservationMicroUsd:0,
  executionModel:null,judgeModel:null,errorCode:null,
  executionSource:"platform-nim",executionModelPinned:null,costAccounting:"platform-estimate",
  createdAt:"2026-10-12T10:00:00Z",updatedAt:"2026-10-12T10:00:00Z",completedAt:null,

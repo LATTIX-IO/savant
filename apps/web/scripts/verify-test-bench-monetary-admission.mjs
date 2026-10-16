@@ -189,6 +189,38 @@ try{
   e=>e?.code==="23514");
  await assert.rejects(()=>sql`update test_bench_runs
   set reserved_micro_usd=0 where id=${bRun.run.id}`,e=>e?.code==="23514");
+ // Price versions rotate without mutating old contracts or invalidating the
+ // price pinned on an already admitted run.
+ const successor=randomUUID();
+ await sql`insert into test_bench_provider_rate_cards(
+   id,version,status,source_uri,source_sha256,valid_from
+ ) values (${successor},${"ci-successor-"+suffix},'draft',
+   'https://example.invalid/pricing/ci-successor',${"e".repeat(64)},
+   now()-interval '1 hour')`;
+ for(const rate of rates)
+   await sql`insert into test_bench_provider_rate_entries(
+    rate_card_id,provider_code,model,input_micro_usd_per_million,
+    output_micro_usd_per_million,fixed_micro_usd_per_call
+   ) values(${successor},${rate.provider_code},${rate.model},
+     ${rate.input_micro_usd_per_million},${rate.output_micro_usd_per_million},
+     ${rate.fixed_micro_usd_per_call})`;
+ await sql`update test_bench_provider_rate_cards set
+   status='approved',approved_by='ci-successor-review',approved_at=now()
+   where id=${successor}`;
+ await sql.begin(async tx=>{
+   await tx`update test_bench_provider_rate_cards set active=false where id=${id}`;
+   await tx`update test_bench_provider_rate_cards set active=true where id=${successor}`;
+ });
+ const [active]=await sql`select id from test_bench_provider_rate_cards
+   where active=true and status='approved'`;
+ assert.equal(active.id,successor);
+ await sql`update test_bench_tenant_monetary_policies set enabled=true
+  where organization_id=${b.id}`;
+ await assertMonetaryExecutionAuthorized(sql,saved);
+ const [original]=await sql`select status,active from test_bench_provider_rate_cards
+    where id=${id}`;
+ assert.equal(original.status,"approved");
+ assert.equal(original.active,false);
  const metadata=JSON.stringify(await sql`select organization_id,reserved_micro_usd
    from test_bench_tenant_monetary_days where organization_id in (${a.id},${b.id})`)+
   JSON.stringify(await sql`select payload_redacted from audit_events
@@ -197,7 +229,7 @@ try{
   assert.ok(!metadata.includes(leak),"no secrets/prompts in budget/audit");
  console.log(JSON.stringify({monetaryAdmission:"passed",tests:[
   "no active card/draft/unentitled actor fails before a run or quota",
-  "approved card immutable and one active contract",
+  "approved card immutable, single active contract and historical rate rotation",
   "12 concurrent one-slot admissions have exactly one winner",
   "idempotent replay and no-refund cancellation",
   "tenant budgets isolated and month rejection rolls back day budget",

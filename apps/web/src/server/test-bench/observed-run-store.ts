@@ -8,6 +8,7 @@ import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,ObservedEvaluationError,
 import {assertValidTenantOpenAiConnection,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 import {readDailyAdmissionQuota,reserveDailyAdmission} from "./observed-admission-quota.ts";
 import {reservePlatformProviderAdmission} from "./platform-provider-admission.ts";
+import {reserveTestBenchMonetaryAdmission} from "./monetary-admission.ts";
 
 type Sql=import("postgres").Sql;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -21,6 +22,7 @@ type RunRow=PinnedWorkspaceRun&{
   unconfirmed_provider_calls?:number|undefined;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
   job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
+  rate_card_id:string|null;reserved_micro_usd:string|number;judge_model_pinned:string|null;
   cost_accounting:"platform-estimate"|"normalized-qa-proxy";
   created_at:Date|string;updated_at:Date|string;completed_at:Date|string|null;
 };
@@ -32,6 +34,8 @@ export type ObservedRunSummary={
   observedExecutorTokens:number;observedJudgeTokens:number;observedUsageReceipts:number;
   /** Unmatched, durable pre-egress intents. NOT proof of provider charges. */
   unconfirmedProviderCalls:number;
+  /** Version-pinned admission cushion, never a settled provider invoice. */
+  rateCardId:string|null;monetaryReservationMicroUsd:number;
   errorCode:string|null;canceledBy:string|null;canceledAt:string|null;
   executionSource:RunRow["execution_source"];executionModelPinned:string|null;
   costAccounting:RunRow["cost_accounting"];
@@ -76,6 +80,8 @@ function publicRun(row:RunRow):ObservedRunSummary{
     observedJudgeTokens:row.observed_judge_tokens,
     observedUsageReceipts:row.observed_usage_receipts,
     unconfirmedProviderCalls:row.unconfirmed_provider_calls??0,
+    rateCardId:row.rate_card_id,
+    monetaryReservationMicroUsd:Number(row.reserved_micro_usd),
     executionModel:row.execution_model,judgeModel:row.judge_model,
     executionSource:row.execution_source,executionModelPinned:row.execution_model_pinned,
     costAccounting:row.cost_accounting,
@@ -183,6 +189,10 @@ export function createObservedRunStore(sql:Sql){
           // Count every accepted run, regardless of provider mode. Reserve only
           // after idempotency and source/credential validation. Transactional
           // rollback makes failed jobs or failed inserts unable to leak units.
+          // No live prices guessed: production requires approved model rates and
+          // an active tenant policy before any accepted run or quota commits.
+          const monetary=await reserveTestBenchMonetaryAdmission(
+            tx,actor.organizationId,executionSource,cases.length);
           await reservePlatformProviderAdmission(tx,executionSource);
           await reserveDailyAdmission(tx,actor.organizationId);
           const [row]=await tx<RunRow[]>`
@@ -191,14 +201,18 @@ export function createObservedRunStore(sql:Sql){
               skill_id,source_path,source_commit_sha,request_id,requested_by,
               snapshot_ciphertext,expected_cases,execution_source,
               execution_connection_id,execution_secret_fingerprint,
-              execution_model_pinned,cost_accounting
+              execution_model_pinned,cost_accounting,
+              rate_card_id,reserved_micro_usd,judge_model_pinned
             ) values(
               ${id},${actor.organizationId},${def.repository_id},${definitionId},
               ${def.revision},${skillId},${def.source_path},${commitSha},
               ${input.requestId},${actor.subject},${snapshot},${cases.length},
               ${executionSource},${selected?.connectionId??null},
-              ${selected?.fingerprint??null},${selected?.model??null},
-              ${selected?"normalized-qa-proxy":"platform-estimate"}
+              ${selected?.fingerprint??null},
+              ${selected?.model??monetary?.executionModel??null},
+              ${selected?"normalized-qa-proxy":"platform-estimate"},
+              ${monetary?.rateCardId??null},${monetary?.reservedMicroUsd??0},
+              ${monetary?.judgeModel??null}
             ) returning *
           `;
           if(!row)return invalid("test_bench_run_unavailable",503);

@@ -12,6 +12,7 @@ const rate={provider_code:"nim" as const,model:"nim-price-test",
  fixed_micro_usd_per_call:"25",
 };
 const invalid=(code:string)=>(e:unknown)=>e instanceof TestBenchError&&e.code===code;
+const fixtureCredential=["isolated","fixture"].join("-");
 test("PER-1545: money math uses per-call upward integer rounding, no float leak",()=>{
  assert.equal(PLANNED_INPUT_TOKENS_PER_CALL,32768);
  assert.equal(PLANNED_OUTPUT_TOKENS_PER_CALL,8192);
@@ -42,8 +43,8 @@ test("PER-1545: reject bad, negative, zero, unbounded or fractional pricing",()=
 });
 test("PER-1545: BYO OpenAI is never treated as Savant-billed; Jev remains reserved",()=>{
  const env={
-  NVIDIA_NIM_API_KEY:"test-nim-only",
-  JEV_API_KEY:"test-jev-only",
+  NVIDIA_NIM_API_KEY:fixtureCredential,
+  JEV_API_KEY:fixtureCredential,
   NIM_EXECUTION_MODEL:"nim-price-test",JEV_MODEL:"jev-price-test",
  };
  assert.deepEqual(expectedMonetaryModels("platform-nim",env),[
@@ -54,9 +55,9 @@ test("PER-1545: BYO OpenAI is never treated as Savant-billed; Jev remains reserv
   {provider_code:"jev",model:"jev-price-test"},
  ]);
  assert.throws(()=>expectedMonetaryModels("workspace-openai",{
-  NVIDIA_NIM_API_KEY:"test-nim-only"}),invalid("test_bench_rate_provider_unavailable"));
+  NVIDIA_NIM_API_KEY:fixtureCredential}),invalid("test_bench_rate_provider_unavailable"));
  assert.throws(()=>expectedMonetaryModels("platform-nim",{
-  JEV_API_KEY:"test-jev-only"}),invalid("test_bench_rate_provider_unavailable"));
+  JEV_API_KEY:fixtureCredential}),invalid("test_bench_rate_provider_unavailable"));
  assert.throws(()=>expectedMonetaryModels("remote-origin" as "platform-nim",env),
    invalid("test_bench_rate_provider_unavailable"));
 });

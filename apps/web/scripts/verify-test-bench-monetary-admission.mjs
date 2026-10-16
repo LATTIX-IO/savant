@@ -88,7 +88,7 @@ try{
  const a=await tenant("a"),b=await tenant("b");
  // 1: no rate cards exist, denial precedes every queued job or quota.
  await assert.rejects(()=>start(a),hasCode("test_bench_rate_unavailable"));
- await noAcceptedRun(a);
+ await noAcceptedRun(a.id);
  await sql`insert into test_bench_provider_rate_cards(
    id,version,status,source_uri,source_sha256,valid_from)
   values(${id},${"ci-only-"+suffix},'draft',
@@ -101,12 +101,12 @@ try{
     ${rate.input_micro_usd_per_million},${rate.output_micro_usd_per_million},
     ${rate.fixed_micro_usd_per_call})`;
  await assert.rejects(()=>start(a),hasCode("test_bench_rate_unavailable"));
- await noAcceptedRun(a);
+ await noAcceptedRun(a.id);
  await sql`update test_bench_provider_rate_cards set
    status='approved',active=true,approved_by='ci-isolated-fixture',approved_at=now()
    where id=${id}`;
  await assert.rejects(()=>start(a),hasCode("test_bench_monetary_entitlement_unavailable"));
- await noAcceptedRun(a);
+ await noAcceptedRun(a.id);
  // Approved rates cannot be edited, backfilled or removed.
  await assert.rejects(()=>sql`update test_bench_provider_rate_entries
    set input_micro_usd_per_million=1 where rate_card_id=${id}`,
@@ -149,7 +149,7 @@ try{
  await assert.rejects(()=>start(a),hasCode("test_bench_monetary_capacity_exceeded"));
  // Other tenant has no policy and cannot spend from A or consume its ledger.
  await assert.rejects(()=>start(b),hasCode("test_bench_monetary_entitlement_unavailable"));
- await noAcceptedRun(b);
+ await noAcceptedRun(b.id);
  await sql`insert into test_bench_tenant_monetary_policies(
    organization_id,enabled,daily_limit_micro_usd,monthly_limit_micro_usd)
    values(${b.id},true,${reserve*2},${reserve*2})`;

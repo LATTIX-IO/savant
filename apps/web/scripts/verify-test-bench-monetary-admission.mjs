@@ -131,7 +131,8 @@ try{
  const attempts=await Promise.allSettled(requestIds.map(req=>start(a,req)));
  const winners=attempts.map((v,i)=>({v,req:requestIds[i]}))
   .filter(x=>x.v.status==="fulfilled");
- assert.equal(winners.length,1);
+ assert.equal(winners.length,1,JSON.stringify(attempts.map(v=>v.status==="rejected"?
+   {code:v.reason?.code??"unknown",type:v.reason?.name??"Error"}:"accepted")));
  assert.ok(attempts.filter(x=>x.status==="rejected").every(x=>
   hasCode("test_bench_monetary_capacity_exceeded")(x.reason)));
  const accepted=winners[0].v.value;

@@ -103,7 +103,7 @@ try{
  await assert.rejects(()=>start(a),hasCode("test_bench_rate_unavailable"));
  await noAcceptedRun(a);
  await sql`update test_bench_provider_rate_cards set
-   status='approved',approved_by='ci-isolated-fixture',approved_at=now()
+   status='approved',active=true,approved_by='ci-isolated-fixture',approved_at=now()
    where id=${id}`;
  await assert.rejects(()=>start(a),hasCode("test_bench_monetary_entitlement_unavailable"));
  await noAcceptedRun(a);

@@ -4,6 +4,7 @@ create table if not exists test_bench_provider_rate_cards (
   id uuid primary key,
   version text not null unique check(length(version) between 1 and 80),
   status text not null default 'draft' check(status in ('draft','approved')),
+  active boolean not null default false,
   currency text not null default 'USD' check(currency='USD'),
   source_uri text not null check(length(source_uri) between 12 and 1024 and source_uri like 'https://%'),
   source_sha256 text not null check(source_sha256 ~ '^[0-9a-f]{64}$'),
@@ -13,17 +14,19 @@ create table if not exists test_bench_provider_rate_cards (
   approved_at timestamptz,
   created_at timestamptz not null default now(),
   constraint test_bench_rate_card_approval_check check (
-    (status='draft' and approved_by is null and approved_at is null) or
-    (status='approved' and length(approved_by) between 1 and 200
+    (status='draft' and approved_by is null and approved_at is null
+      and not active) or
+    (status='approved' and approved_by is not null
+      and length(btrim(approved_by)) between 1 and 200
       and approved_at is not null)
   ),
   constraint test_bench_rate_card_window_check
     check(valid_until is null or valid_until>valid_from)
 );
--- A single immutable approved version is active at a time. New contract
--- activation requires controlled ops change instead of editing historical rates.
-create unique index if not exists test_bench_provider_one_approved_rate_card
-  on test_bench_provider_rate_cards(status) where status='approved';
+-- Approved contract contents remain immutable, while an operator may replace
+-- the active version. Historical approved versions remain version-addressable.
+create unique index if not exists test_bench_provider_one_active_rate_card
+  on test_bench_provider_rate_cards(active) where active=true;
 create table if not exists test_bench_provider_rate_entries (
   rate_card_id uuid not null references test_bench_provider_rate_cards(id),
   provider_code text not null check(provider_code in ('nim','jev','openai')),
@@ -49,7 +52,8 @@ begin
     end if;
     return OLD;
   end if;
-  if OLD.status='approved' then
+  if OLD.status='approved' and
+    (to_jsonb(NEW)-'active') is distinct from (to_jsonb(OLD)-'active') then
     raise exception 'approved provider rate version immutable';
   end if;
   return NEW;
@@ -66,7 +70,8 @@ language plpgsql as $$
 declare card_status text;
 begin
   select status into card_status from test_bench_provider_rate_cards
-  where id=case when TG_OP='DELETE' then OLD.rate_card_id else NEW.rate_card_id end;
+  where id=case when TG_OP='DELETE' then OLD.rate_card_id else NEW.rate_card_id end
+  for share;
   if card_status is distinct from 'draft' then
     raise exception 'cannot change approved or missing provider rate version';
   end if;
@@ -121,7 +126,7 @@ do $$ begin
   end if;
 end $$;
 comment on table test_bench_provider_rate_cards is
-  'Operator-approved price evidence; rate source must be verified. Immutable once approved. No default is seeded.';
+  'Operator-approved immutable price evidence. Exactly one approved card may be active. No default is seeded.';
 comment on table test_bench_tenant_monetary_days is
   'Conservative nonrefundable monetary admission reservations, NOT actual billed provider costs.';
 comment on column test_bench_runs.reserved_micro_usd is

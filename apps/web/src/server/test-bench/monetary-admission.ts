@@ -84,7 +84,7 @@ export async function reserveTestBenchMonetaryAdmission(
   const models=expectedMonetaryModels(source,env);
   const [card]=await tx<{id:string}[]>`
     select id from test_bench_provider_rate_cards
-    where status='approved' and valid_from<=now()
+    where status='approved' and active and valid_from<=now()
       and (valid_until is null or valid_until>now())
     for share
   `;

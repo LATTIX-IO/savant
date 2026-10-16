@@ -142,13 +142,7 @@ alter table test_bench_runs add constraint test_bench_runs_source_integrity chec
   or
   (execution_source='workspace-openai'
     and execution_connection_id is not null
-    and execution_secret_fingerprint ~ '^[0-9a-f]{64}
-  'Operator-approved immutable price evidence. Exactly one approved card may be active. No default is seeded.';
-comment on table test_bench_tenant_monetary_days is
-  'Conservative nonrefundable monetary admission reservations, NOT actual billed provider costs.';
-comment on column test_bench_runs.reserved_micro_usd is
-  'Conservative rate-versioned planned micro-USD admission cushion, NOT actual invoice, settled usage or guaranteed maximum provider charges.';
-
+    and execution_secret_fingerprint ~ '^[0-9a-f]{64}$'
     and length(execution_model_pinned) between 1 and 160
     and cost_accounting='normalized-qa-proxy')
 );

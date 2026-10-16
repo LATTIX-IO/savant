@@ -118,9 +118,9 @@ try{
     output_micro_usd_per_million,fixed_micro_usd_per_call
    ) values(${id},'openai','unexpected',1,1,0)`,e=>e?.code==="P0001");
  await assert.rejects(()=>sql`insert into test_bench_provider_rate_cards(
-   id,version,status,source_uri,source_sha256,valid_from,approved_by,approved_at)
+   id,version,status,active,source_uri,source_sha256,valid_from,approved_by,approved_at)
   values(${randomUUID()},'second-active',
-    'approved','https://example.invalid/rates',${"b".repeat(64)},
+    'approved',true,'https://example.invalid/rates',${"b".repeat(64)},
     now()-interval '1 day','forged',now())`,e=>e?.code==="23505");
  // Per-tenant scope: only one run allowed for A. Twelve contenders
  // share one remaining *monetary* reservation, without double spending.

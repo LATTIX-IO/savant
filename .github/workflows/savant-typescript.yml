@@ -171,3 +171,8 @@ jobs:
         env:
           SAVANT_MONETARY_ADMISSION_TEST: "1"
           SAVANT_MONETARY_EPHEMERAL_DATABASE: "1"
+      - name: Verify immutable billing source ingestion and tenant-safe reconciliation evidence
+        run: pnpm --filter @savant/web exec node ./scripts/verify-test-bench-billing-evidence.mjs
+        env:
+          SAVANT_BILLING_SOURCE_TEST: "1"
+          SAVANT_BILLING_EPHEMERAL_DATABASE: "1"

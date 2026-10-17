@@ -69,9 +69,9 @@ test("PER-1547: fail-closed parser rejects forged schema, currency, provider, mo
  assert.throws(()=>parseBillingSource(b,hash(b)),err("test_bench_billing_document_invalid"));
 });
 test("PER-1547: correction references an earlier source, not a self-reference",()=>{
- const x=fixture();
- x.lines=[{lineRef:"c1",model:"nim-fixture",kind:"credit",
-   amountMicroUsd:"-10",corrects:{documentSha256:"b".repeat(64),lineRef:"n1"}}];
+ const x={...fixture(),lines:[{lineRef:"c1",model:"nim-fixture",
+   kind:"credit",amountMicroUsd:"-10",
+   corrects:{documentSha256:"b".repeat(64),lineRef:"n1"}}]};
  const b=bytes(x);
  assert.equal(parseBillingSource(b,hash(b)).statement.lines[0]?.kind,"credit");
  const broken={...x,lines:[{...x.lines[0],corrects:{

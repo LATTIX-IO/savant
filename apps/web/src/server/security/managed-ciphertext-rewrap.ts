@@ -54,13 +54,14 @@ function requireTarget(value:unknown):asserts value is RewrapTarget{
 }
 function requireKeyId(target:RewrapTarget,
   env:Record<string,string|undefined>):string{
+  let keyId:string|null;
   try{
-    const ring=readKeyring(env,target==="ai-secrets"?aiConfig:benchConfig);
-    if(!ring.activeId)fail("crypto_rewrap_v2_key_required");
-    return ring.activeId!;
+    keyId=readKeyring(env,target==="ai-secrets"?aiConfig:benchConfig).activeId;
   }catch{
     return fail("crypto_rewrap_keyring_unavailable");
   }
+  if(!keyId)fail("crypto_rewrap_v2_key_required");
+  return keyId;
 }
 const sha=(value:string)=>createHash("sha256").update(value,"utf8").digest("hex");
 const isV1=(value:string|null)=>typeof value==="string"&&value.startsWith("v1:");

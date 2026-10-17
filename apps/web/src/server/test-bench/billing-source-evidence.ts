@@ -178,7 +178,6 @@ export function createPlatformBillingSourceStore(sql:Sql){
         `;
         // A correction locks its original charge before checking all earlier
         // credits; a concurrent correction must wait and re-evaluate balance.
-        const inBatch=new Map<string,bigint>();
         for(const line of s.lines){
           let originalId:string|null=null;
           if(line.kind==="credit"){
@@ -203,12 +202,10 @@ export function createPlatformBillingSourceStore(sql:Sql){
               select coalesce(sum(-amount_micro_usd),0)::text as used
               from test_bench_billing_lines where corrects_line_id=${originalId}
             `;
-            const extra=inBatch.get(originalId)??0n;
             const credit=-parseMicroUsd(line.amountMicroUsd,"credit");
-            if(credit+BigInt(used?.used??"0")+extra>
+            if(credit+BigInt(used?.used??"0")>
               BigInt(original.amount_micro_usd))
               return deny("test_bench_billing_overcredit",409);
-            inBatch.set(originalId,extra+credit);
           }
           await tx`
             insert into test_bench_billing_lines(

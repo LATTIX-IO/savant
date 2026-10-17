@@ -68,6 +68,10 @@ export function readKeyring(env:Record<string,string|undefined>,
   if(id&&!env[cfg.legacyEnv])throw new VersionedKeyringError();
   const legacyKey=env[cfg.legacyEnv]
     ?decodeKey(env[cfg.legacyEnv],cfg.encoding):activeKey;
+  // Without v2 framing a new v1 write MUST use the exact same key as a
+  // subsequent v1 read. A different legacy key is unsafe until key IDs exist.
+  if(!id&&!timingSafeEqual(legacyKey,activeKey))
+    throw new VersionedKeyringError();
   return {activeKey,activeId:id??null,legacyKey,previous};
 }
 /** v2 ciphertext lookup is by authenticated ID only; no brute-force fallback. */

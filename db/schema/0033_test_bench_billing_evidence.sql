@@ -91,7 +91,7 @@ do $$ begin
 end $$;
 -- A frozen period cannot be unfrozen or have its account/period rewritten.
 create or replace function test_bench_billing_period_freeze_once()
-returns trigger language plpgsql as $
+returns trigger language plpgsql as $$
 begin
   if row(NEW.provider_code,NEW.account_sha256,NEW.utc_month) is distinct from
      row(OLD.provider_code,OLD.account_sha256,OLD.utc_month) or
@@ -101,15 +101,15 @@ begin
     raise exception 'billing period freeze is irreversible';
   end if;
   return NEW;
-end $;
-do $ begin
+end $$;
+do $$ begin
   if not exists(select 1 from pg_trigger where
     tgname='test_bench_billing_period_freeze_once_trg') then
     create trigger test_bench_billing_period_freeze_once_trg
       before update or delete on test_bench_billing_periods
       for each row execute function test_bench_billing_period_freeze_once();
   end if;
-end $;
+end $$;
 comment on table test_bench_billing_documents is
   'Unverified operator-provided platform account source digests. Not authenticated with any provider and never tenant-attributed.';
 comment on table test_bench_billing_lines is

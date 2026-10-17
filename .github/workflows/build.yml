@@ -86,7 +86,7 @@ jobs:
 
       - name: Cache Rust build artifacts
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
 
       - name: Configure aws-lc C standard
         if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Linux'
@@ -180,14 +180,14 @@ jobs:
 
       - name: Upload Grype SARIF
         if: always() && steps.mesh_node_access.outputs.enabled == 'true' && github.event_name != 'pull_request' && steps.code_scanning_upload.outputs.enabled == 'true'
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: grype-results.sarif
           category: grype
 
       - name: Upload Semgrep SARIF
         if: always() && steps.mesh_node_access.outputs.enabled == 'true' && github.event_name != 'pull_request' && steps.code_scanning_upload.outputs.enabled == 'true'
-        uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
+        uses: github/codeql-action/upload-sarif@24c54180a607b1449ed407dd24f251e4e9147c8d # v4.38.3
         with:
           sarif_file: semgrep-results.sarif
           category: semgrep
@@ -249,7 +249,7 @@ jobs:
 
       - name: Cache Rust build artifacts
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           key: quality-${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04
       - name: Configure aws-lc C standard
@@ -361,7 +361,7 @@ jobs:
 
       - name: Cache Rust build artifacts
         if: steps.mesh_node_access.outputs.enabled == 'true'
-        uses: Swatinem/rust-cache@258712b0b7b1ddf8bddc9fc3b0faca682b2736c3 # v2
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2
         with:
           key: desktop-shell-${{ matrix.os }}-${{ matrix.platform_id }}
 
@@ -451,7 +451,7 @@ jobs:
 
       - name: Upload installer artifact (unix)
         if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os != 'Windows'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mesh-node-installer-${{ matrix.platform_id }}
           path: ${{ steps.collect_unix.outputs.files }}
@@ -460,7 +460,7 @@ jobs:
 
       - name: Upload installer artifact (windows)
         if: steps.mesh_node_access.outputs.enabled == 'true' && runner.os == 'Windows'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: mesh-node-installer-${{ matrix.platform_id }}
           path: ${{ steps.collect_windows.outputs.files }}

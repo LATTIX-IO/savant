@@ -66,3 +66,55 @@ test("PER-1425: complete-case receipts have a separate capped encrypted envelope
  assert.throws(()=>encryptTestBenchCases("y".repeat(65537),ctx,env,65536),TestBenchError);
  assert.throws(()=>decryptTestBenchCases(blob,{...ctx,organizationId:"other"},env,65536),TestBenchError);
 });
+
+
+test("PER-1550: AES v1 legacy reads survive v2 writing and HMAC replay remains stable",()=>{
+  const original={TEST_BENCH_ENCRYPTION_KEY:Buffer.alloc(32,0x31).toString("base64url")};
+  const migrated={
+    TEST_BENCH_ENCRYPTION_KEY:Buffer.alloc(32,0x52).toString("base64url"),
+    TEST_BENCH_ENCRYPTION_KEY_ID:"oct2026",
+    TEST_BENCH_LEGACY_ENCRYPTION_KEY:original.TEST_BENCH_ENCRYPTION_KEY,
+  };
+  const value=JSON.stringify([{caseId:"legacy",prompt:"private v1 data"}]);
+  const v1=encryptTestBenchCases(value,ctx,original);
+  const digestOriginal=testBenchRequestDigest(value,ctx.organizationId,original);
+  assert.match(v1,/^v1:/);
+  assert.equal(decryptTestBenchCases(v1,ctx,migrated),value);
+  assert.equal(testBenchRequestDigest(value,ctx.organizationId,migrated),digestOriginal);
+  const v2=encryptTestBenchCases(value,ctx,migrated);
+  assert.match(v2,/^v2:oct2026:/);
+  assert.equal(decryptTestBenchCases(v2,ctx,migrated),value);
+  assert.throws(()=>decryptTestBenchCases(v2,ctx,original),TestBenchError);
+  assert.throws(()=>decryptTestBenchCases(v2,{...ctx,organizationId:"other"},migrated),TestBenchError);
+  assert.throws(()=>decryptTestBenchCases(v2.replace(":oct2026:",":otherid:"),ctx,migrated),TestBenchError);
+});
+test("PER-1550: post-rotation previous key can read old v2 without reusing old v1 AES as current",()=>{
+  const legacy=Buffer.alloc(32,0x31).toString("base64url");
+  const a=Buffer.alloc(32,0x52).toString("base64url");
+  const b=Buffer.alloc(32,0x73).toString("base64url");
+  const first={
+    TEST_BENCH_ENCRYPTION_KEY:a,
+    TEST_BENCH_ENCRYPTION_KEY_ID:"oct2026",
+    TEST_BENCH_LEGACY_ENCRYPTION_KEY:legacy,
+  };
+  const after={
+    TEST_BENCH_ENCRYPTION_KEY:b,
+    TEST_BENCH_ENCRYPTION_KEY_ID:"nov2026",
+    TEST_BENCH_LEGACY_ENCRYPTION_KEY:legacy,
+    TEST_BENCH_PREVIOUS_ENCRYPTION_KEYS:JSON.stringify({oct2026:a}),
+  };
+  const oldV1=encryptTestBenchCases("v1-data",ctx,{TEST_BENCH_ENCRYPTION_KEY:legacy});
+  const previousV2=encryptTestBenchCases("v2-data",ctx,first);
+  const newV2=encryptTestBenchCases("v2-new",ctx,after);
+  assert.equal(decryptTestBenchCases(oldV1,ctx,after),"v1-data");
+  assert.equal(decryptTestBenchCases(previousV2,ctx,after),"v2-data");
+  assert.equal(decryptTestBenchCases(newV2,ctx,after),"v2-new");
+  assert.throws(()=>decryptTestBenchCases(previousV2,ctx,{
+    ...after,TEST_BENCH_PREVIOUS_ENCRYPTION_KEYS:"{}",
+  }),TestBenchError);
+  assert.equal(testBenchRequestDigest("request",ctx.organizationId,first),
+    testBenchRequestDigest("request",ctx.organizationId,after));
+  assert.throws(()=>encryptTestBenchCases("x",ctx,{
+    ...after,TEST_BENCH_LEGACY_ENCRYPTION_KEY:undefined,
+  }),e=>e instanceof TestBenchError&&e.code==="test_bench_key_unconfigured");
+});

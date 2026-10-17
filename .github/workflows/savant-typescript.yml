@@ -150,6 +150,10 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-tenant-openai-test-bench.mjs
         env:
           SAVANT_TENANT_OPENAI_TEST: "1"
+      - name: Verify v1 legacy to v2 key-ID migration, retained HMAC and PostgreSQL recovery
+        run: pnpm --filter @savant/web exec node ./scripts/verify-versioned-keyring-persistence.mjs
+        env:
+          SAVANT_V2_KEYRING_SCHEMA_TEST: "1"
       - name: Verify UTC tenant daily admissions, idempotency, races and no-refund controls
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:

@@ -154,6 +154,11 @@ jobs:
         run: pnpm --filter @savant/web exec node ./scripts/verify-versioned-keyring-persistence.mjs
         env:
           SAVANT_V2_KEYRING_SCHEMA_TEST: "1"
+      - name: Verify bounded tenant ciphertext rewrap, concurrent resume, atomic rollback and audit
+        run: pnpm --filter @savant/web exec node ./scripts/verify-managed-ciphertext-rewrap.mjs
+        env:
+          SAVANT_CIPHER_REWRAP_TEST: "1"
+          SAVANT_REWRAP_EPHEMERAL_DATABASE: "1"
       - name: Verify UTC tenant daily admissions, idempotency, races and no-refund controls
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:

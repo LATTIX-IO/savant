@@ -124,6 +124,20 @@ try{
  await assert.rejects(()=>importOne(fixture("foreign-correction-"+suffix,
   [credit("credit-3","-10",digest)],foreignAccount)),
   denied("test_bench_billing_correction_invalid"));
+ // Direct SQL also cannot use a valid charge from platform account A as a
+ // credit target under platform account B; this exercises the COMPOSITE FK,
+ // not merely rejection of an absent random correction UUID.
+ const foreignDoc=await importOne(fixture("foreign-source-"+suffix,
+   [charge("foreign-positive","500000")],foreignAccount));
+ const [realCharge]=await sql`select id from test_bench_billing_lines
+   where document_id=${sourceId} and line_ref='charge-1'`;
+ await assert.rejects(()=>sql`insert into test_bench_billing_lines(
+   id,document_id,provider_code,account_sha256,utc_month,
+   line_ref,model,line_kind,amount_micro_usd,corrects_line_id
+ ) values(${randomUUID()},${foreignDoc.documentId},'nim',
+   ${foreignAccount},${month+"-01"}::date,
+   'forged-cross-account-credit','nim-fixture','credit',-1,
+   ${realCharge.id})`,e=>e?.code==="23503");
 
  // Schema defense in depth; immutable evidence cannot be changed or purged.
  await assert.rejects(()=>sql`update test_bench_billing_documents

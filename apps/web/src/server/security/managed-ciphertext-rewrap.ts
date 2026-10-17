@@ -60,7 +60,7 @@ function requireKeyId(target:RewrapTarget,
   }catch{
     return fail("crypto_rewrap_keyring_unavailable");
   }
-  if(!keyId)fail("crypto_rewrap_v2_key_required");
+  if(typeof keyId!=="string")return fail("crypto_rewrap_v2_key_required");
   return keyId;
 }
 const sha=(value:string)=>createHash("sha256").update(value,"utf8").digest("hex");

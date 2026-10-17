@@ -69,7 +69,11 @@ export function inspectPublishedApiContract(input:{
 }):DiscoveryAttestation{
   if(!Object.hasOwn(BILLING_API_EVIDENCE,input.provider))
     return fail("test_bench_billing_provider_invalid",422);
-  const expected=BILLING_API_EVIDENCE[input.provider].publicReference;
+  // NVIDIA's pinned page is human-readable hosted API documentation, NOT an
+  // authenticated invoice schema or machine-readable billing OpenAPI.
+  if(input.provider==="nim")
+    return fail("test_bench_nim_export_contract_undocumented",409);
+  const expected=BILLING_API_EVIDENCE.jev.publicReference;
   if(input.sourceUrl!==expected||
     !(input.rawBytes instanceof Uint8Array)||
     input.rawBytes.byteLength<2||input.rawBytes.byteLength>262_144)

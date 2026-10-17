@@ -12,9 +12,9 @@ export function inspectWorkflowPins(file,content){
   let total=0;
   for(let i=0;i<lines.length;i++){
     const line=lines[i];
-    const match=line.match(/^\s*(?:-\s*)?uses:\s*(\S+)(?:\s+#.*)?\s*$/);
+    const match=line.match(/^\s*(?:-\s*)?uses:\s*(.*)$/);
     if(!match)continue;
-    const action=match[1];
+    const action=match[1].replace(/\s+#.*$/,"").trim();
     if(action.startsWith("./"))continue;
     total++;
     if(!pinned.test(action))findings.push({file,line:i+1,action});

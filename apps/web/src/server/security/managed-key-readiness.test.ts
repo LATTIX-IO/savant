@@ -40,6 +40,7 @@ test("PER-1551: reject malformed, ambiguous or noncanonical 32-byte encodings",(
   const samples=[
     keyA.toString("base64")+" ",
     keyA.toString("base64url")+"==",
+    keyA.toString("base64"), // valid base64, but NOT valid Test Bench v1 key syntax
     "zz".repeat(32),
     "aa".repeat(31),
     Buffer.alloc(31,1).toString("base64url"),
@@ -68,4 +69,13 @@ test("PER-1551: output shape cannot expose secret bytes or claim rotation proof"
     "ready","missing","invalid","domainsDistinct",
     "versionedDualReadSupported","managedProvisioningVerified",
   ].sort());
+});
+
+test("PER-1551: AI-connection key format cannot be accepted if runtime would reject it",()=>{
+  const r=inspectManagedKeyReadiness({
+    TEST_BENCH_ENCRYPTION_KEY:keyA.toString("base64url"),
+    AI_CONNECTION_ENCRYPTION_KEY:keyB.toString("base64url"),
+  });
+  assert.equal(r.ready,false);
+  assert.deepEqual(r.invalid,["AI_CONNECTION_ENCRYPTION_KEY"]);
 });

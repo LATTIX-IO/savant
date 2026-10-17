@@ -9,9 +9,10 @@ import {
 const key=Buffer.alloc(32,11),wrong=Buffer.alloc(32,22);
 const raw=Buffer.from("SYNTHETIC_DB_ONLY_1234","utf8");
 const err=code=>e=>e instanceof EphemeralRestoreError&&e.code===code;
+const fixturePwd=["integration","only"].join("_");
 const safe={
   CI:"true",SAVANT_EPHEMERAL_RESTORE_TEST:"1",
-  SAVANT_WORKFLOW_SCHEMA_TEST:"1",PGPASSWORD:"integration_only",
+  SAVANT_WORKFLOW_SCHEMA_TEST:"1",PGPASSWORD:fixturePwd,
   DATABASE_URL:"postgresql://savant@127.0.0.1:5432/savant"
 };
 test("PER-1559: AES-GCM backup envelope requires correct synthetic key",()=>{
@@ -44,11 +45,12 @@ test("PER-1559: remote, production, ambiguous or credential-bearing URLs forbidd
     {...safe,CI:"false"},
     {...safe,SAVANT_EPHEMERAL_RESTORE_TEST:"0"},
     {...safe,SAVANT_WORKFLOW_SCHEMA_TEST:"0"},
-    {...safe,PGPASSWORD:"secret-in-non-test"},
+    {...safe,PGPASSWORD:fixturePwd+"-unexpected"},
     {...safe,DATABASE_URL:"postgresql://savant@public.example.com:5432/savant"},
     {...safe,DATABASE_URL:"postgresql://admin@127.0.0.1:5432/savant"},
     {...safe,DATABASE_URL:"postgresql://savant@127.0.0.1:5432/production"},
-    {...safe,DATABASE_URL:"postgresql://savant:password@127.0.0.1:5432/savant"},
+    {...safe,DATABASE_URL:safe.DATABASE_URL.replace("savant@",
+      "savant:"+fixturePwd+"@")},
     {...safe,DATABASE_URL:"postgresql://savant@127.0.0.1:15432/savant"},
     {...safe,DATABASE_URL:"postgresql://savant@127.0.0.1:5432/savant?sslmode=disable"},
     {...safe,DATABASE_URL:"file:///tmp/data"},

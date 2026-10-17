@@ -97,7 +97,10 @@ async function addCredential(organizationId,label){
 const scope=(organizationId,target,maxRows=20)=>({organizationId,target,maxRows});
 try{
   setEnv({...testOld,...aiOldEnv});
-  const a=await setup("a",2),b=await setup("b",1);
+  const a=await setup("a",3),b=await setup("b",1);
+  // archive increments metadata revision but intentionally leaves historical
+  // ciphertext at its previous authenticated revision.
+  await definitions.archive(a.admin,a.skillId,a.defs[2].id,1);
   const credentials=await Promise.all([
     addCredential(a.orgId,"one"),addCredential(a.orgId,"two"),
   ]);
@@ -113,7 +116,7 @@ try{
     [fixtureResults,run.id]);
   const beforeDefs=await sql.unsafe(
     "select id,cases_ciphertext,request_digest,revision,source_commit_sha,"+
-    "updated_at from test_bench_definitions "+
+    "updated_at,archived_at from test_bench_definitions "+
     "where organization_id=$1 order by id",[a.orgId]);
   const oldRun=await fetchOne("select * from test_bench_runs where id=$1",[run.id]);
   const oldCred=await sql.unsafe(
@@ -124,7 +127,7 @@ try{
     "select cases_ciphertext,request_digest from test_bench_definitions "+
     "where id=$1",[b.defs[0].id]);
   const before=await service.preview(actor,a.orgId);
-  assert.equal(before.definitions,2);
+  assert.equal(before.definitions,3);
   assert.equal(before.runs,1);
   assert.equal(before.aiSecrets,2);
   assert.deepEqual((await service.preview(actor,b.orgId)).definitions,1);
@@ -133,7 +136,7 @@ try{
 
   // Force a second-row v1 GCM integrity failure. This proves the first
   // successful UPDATE and its audit entry both ROLLBACK atomically.
-  const damaged=beforeDefs[1];
+  const damaged=beforeDefs[beforeDefs.length-1];
   await sql.unsafe("update test_bench_definitions set cases_ciphertext=$1 "+
     "where id=$2",["v1:bad:bad:bad",damaged.id]);
   await assert.rejects(()=>service.rewrapNext(actor,scope(a.orgId,"definitions"),testNew),
@@ -141,8 +144,9 @@ try{
   const afterFailure=await sql.unsafe(
     "select id,cases_ciphertext from test_bench_definitions "+
     "where organization_id=$1 order by id",[a.orgId]);
-  assert.equal(afterFailure[0].cases_ciphertext,beforeDefs[0].cases_ciphertext);
-  assert.equal(afterFailure[1].cases_ciphertext,"v1:bad:bad:bad");
+  for(let i=0;i<afterFailure.length-1;i++)
+    assert.equal(afterFailure[i].cases_ciphertext,beforeDefs[i].cases_ciphertext);
+  assert.equal(afterFailure.at(-1).cases_ciphertext,"v1:bad:bad:bad");
   assert.equal(await countAudit(a.orgId),0);
   await sql.unsafe("update test_bench_definitions set cases_ciphertext=$1 "+
     "where id=$2",[damaged.cases_ciphertext,damaged.id]);
@@ -151,24 +155,25 @@ try{
   // the same source despite lock contention.
   const jobs=await Promise.all(Array.from({length:12},
     ()=>service.rewrapNext(actor,scope(a.orgId,"definitions",1),testNew)));
-  assert.equal(jobs.reduce((n,j)=>n+j.migrated,0),2);
-  assert.equal(await countAudit(a.orgId),2);
+  assert.equal(jobs.reduce((n,j)=>n+j.migrated,0),3);
+  assert.equal(await countAudit(a.orgId),3);
   assert.equal((await service.preview(actor,a.orgId)).definitions,0);
   assert.equal((await service.rewrapNext(actor,scope(a.orgId,"definitions"),testNew)).migrated,0);
   const migratedDefs=await sql.unsafe(
     "select id,cases_ciphertext,request_digest,revision,source_commit_sha,"+
     "updated_at from test_bench_definitions "+
     "where organization_id=$1 order by id",[a.orgId]);
-  for(let i=0;i<2;i++){
+  for(let i=0;i<beforeDefs.length;i++){
     assert.match(migratedDefs[i].cases_ciphertext,/^v2:oct2026:/);
-    for(const field of ["request_digest","revision","source_commit_sha","updated_at"])
+    for(const field of ["request_digest","revision","source_commit_sha","updated_at","archived_at"])
       assert.deepEqual(migratedDefs[i][field],beforeDefs[i][field]);
     const old=beforeDefs[i];
+    const cipherRevision=old.archived_at?old.revision-1:old.revision;
     assert.equal(decryptTestBenchCases(migratedDefs[i].cases_ciphertext,{
-      organizationId:a.orgId,definitionId:old.id,revision:old.revision,
+      organizationId:a.orgId,definitionId:old.id,revision:cipherRevision,
       commitSha:old.source_commit_sha,
     },testNew),decryptTestBenchCases(old.cases_ciphertext,{
-      organizationId:a.orgId,definitionId:old.id,revision:old.revision,
+      organizationId:a.orgId,definitionId:old.id,revision:cipherRevision,
       commitSha:old.source_commit_sha,
     },testOld));
   }
@@ -190,7 +195,7 @@ try{
   const aiJobs=await Promise.all(Array.from({length:12},
     ()=>service.rewrapNext(actor,scope(a.orgId,"ai-secrets",1),aiNewEnv)));
   assert.equal(aiJobs.reduce((n,j)=>n+j.migrated,0),2);
-  assert.equal(await countAudit(a.orgId),5);
+  assert.equal(await countAudit(a.orgId),6);
   const aiAfter=await sql.unsafe(
     "select encrypted_secret,secret_fingerprint,key_version,ai_connection_id,"+
     "updated_at from ai_connection_secrets where ai_connection_id=any($1::uuid[])",
@@ -214,7 +219,7 @@ try{
     "select target_type,target_ref,payload_redacted from audit_events "+
     "where organization_id=$1 and action='crypto_aead_v1_rewrapped' "+
     "order by occurred_at,id",[a.orgId]);
-  assert.equal(audits.length,5);
+  assert.equal(audits.length,6);
   for(const event of audits){
     const audit=JSON.stringify(event);
     for(const secret of [
@@ -240,7 +245,8 @@ try{
     const old=beforeDefs[0];
     assert.equal(decryptTestBenchCases(restored.cases_ciphertext,{
       organizationId:a.orgId,definitionId:old.id,
-      revision:old.revision,commitSha:old.source_commit_sha,
+      revision:old.archived_at?old.revision-1:old.revision,
+      commitSha:old.source_commit_sha,
     },testOld),JSON.stringify(a.defs.find(x=>x.id===old.id).cases));
     throw Error("simulate-restoration-rollback");
   }),/simulate-restoration-rollback/);
@@ -260,7 +266,7 @@ try{
   assert.equal((await service.preview(actor,b.orgId)).definitions,1);
   assert.equal((await service.preview(actor,a.orgId)).aiSecrets,0);
   console.log(JSON.stringify({cryptoRewrap:"passed",checks:[
-    "three bounded tenant-scoped ciphertext target classes",
+    "three bounded tenant-scoped ciphertext classes including archived cases",
     "mid-batch AEAD failure rolls back both data and audit",
     "twelve concurrent resumable invocations convert each record once",
     "AAD-bound snapshot plus results and AI secret key_version=2",

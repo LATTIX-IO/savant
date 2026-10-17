@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import {createHmac,randomUUID} from "node:crypto";
 import postgres from "postgres";
+import {mkdtemp,mkdir,writeFile,symlink,rm} from "node:fs/promises";
+import {join} from "node:path";
+import {tmpdir} from "node:os";
+import {createAksProjectedAssertionReader}
+  from "../src/server/harness/aks-projected-assertion.ts";
 import {createAzureKeyVaultHarnessResolver}
   from "../src/server/harness/azure-vault-hmac.ts";
 import {createAzureFederatedWorkloadTokenProvider}
@@ -27,7 +32,7 @@ const providerOrigin="https://tenant-harness.example.com";
 const endpoint=providerOrigin+"/v1/savant/status";
 const key=Buffer.alloc(48,0x2b);
 const token=Array(80).fill("t").join("");
-let tenant=null,foreign=null,enabled=true;
+let tenant=null,foreign=null,enabled=true,projectionRoot=null;
 const configs=[];
 const vaultRequests=[];
 try{
@@ -39,11 +44,28 @@ try{
   const ref=`vault:${tenant}:${adapterId}:status-key.${version}`;
   const identityTenant="33333333-3333-4333-8333-333333333333";
   const identityClient="44444444-4444-4444-8444-444444444444";
-  const assertion="aGVhZGVy.cGF5bG9hZA.c2lnbmF0dXJl";
+  const serviceIssuer="https://issuer.example.com/aks/savant/";
+  const serviceSubject="system:serviceaccount:savant:harness-status";
+  const claim={iss:serviceIssuer,sub:serviceSubject,aud:["api://AzureADTokenExchange"],
+    iat:Math.floor(now/1000)-60,nbf:Math.floor(now/1000)-60,
+    exp:Math.floor(now/1000)+3600};
+  const assertion=[{alg:"RS256",typ:"JWT"},claim,{test:"signature"}]
+    .map(v=>Buffer.from(JSON.stringify(v)).toString("base64url")).join(".");
+  projectionRoot=await mkdtemp(join(tmpdir(),"savant-aks-uat-"));
+  const release=join(projectionRoot,"..release-1");
+  await mkdir(release);
+  await writeFile(join(release,"assertion"),assertion);
+  await symlink("..release-1",join(projectionRoot,"..data"));
+  const tokenFilePath=join(projectionRoot,"azure-identity-token");
+  await symlink("..data/assertion",tokenFilePath);
+  const projectedReader=createAksProjectedAssertionReader({
+    tokenFilePath,trustedMountRoot:projectionRoot,
+    expectedIssuer:serviceIssuer,expectedSubject:serviceSubject,nowMs:()=>now,
+  });
   let federationCalls=0;
   const federatedToken=createAzureFederatedWorkloadTokenProvider({
     tenantId:identityTenant,clientId:identityClient,
-    readFederatedAssertion:async()=>assertion,
+    readFederatedAssertion:projectedReader,
     transport:async(tokenUrl,init)=>{
       federationCalls++;
       assert.equal(tokenUrl,"https://login.microsoftonline.com/"+identityTenant+"/oauth2/v2.0/token");
@@ -177,5 +199,6 @@ try{
 }finally{
   if(tenant)await sql`delete from organizations where id=${tenant}`;
   if(foreign)await sql`delete from organizations where id=${foreign}`;
+  if(projectionRoot)await rm(projectionRoot,{recursive:true,force:true});
   await sql.end({timeout:5});
 }

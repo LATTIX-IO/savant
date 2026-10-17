@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import postgres from "postgres";
 import {createTestBenchDefinitionStore} from "../src/server/test-bench/definition-store.ts";
+import {createObservedRunStore} from "../src/server/test-bench/observed-run-store.ts";
 import {
   encryptAIConnectionSecret,decryptAIConnectionSecret,
 } from "../src/server/control-plane/ai-connection-secrets.ts";
@@ -16,6 +17,7 @@ const benchOld="31".repeat(32),benchNew="51".repeat(32),
  aiNew="52".repeat(32),aiNext="72".repeat(32);
 const sql=postgres(uri,{max:8,prepare:false});
 const store=createTestBenchDefinitionStore(sql);
+const runs=createObservedRunStore(sql);
 const unique=randomUUID().slice(0,8),pinnedSha="a".repeat(40);
 const skillId="keyring-"+unique,ctxSecret={
   organizationId:"",aiConnectionId:randomUUID(),provider:"openai",
@@ -105,6 +107,18 @@ try{
   const [newRow]=await sql`select cases_ciphertext from test_bench_definitions
     where id=${before.definition.id}`;
   assert.match(newRow.cases_ciphertext,/^v2:oct2026:/);
+  const acceptedRun=(await runs.start(actor,skillId,before.definition.id,{
+    requestId:randomUUID(),expectedRevision:2,executionSource:"platform-nim",
+  })).run;
+  const [runEnvelope]=await sql`select snapshot_ciphertext from test_bench_runs
+    where id=${acceptedRun.id}`;
+  assert.match(runEnvelope.snapshot_ciphertext,/^v2:oct2026:/);
+  await assert.rejects(()=>sql`update test_bench_runs set
+    snapshot_ciphertext='v2:Invalid-ID:bad:bad:bad'
+    where id=${acceptedRun.id}`,e=>e?.code==="23514");
+  await assert.rejects(()=>sql`update test_bench_definitions set
+    cases_ciphertext='v2:INVALID:bad:bad:bad'
+    where id=${before.definition.id}`,e=>e?.code==="23514");
   const v2Secret=encryptAIConnectionSecret("private-fixture-credential",ctxSecret);
   assert.match(v2Secret.encryptedSecret,/^v2:oct2026:/);
   await sql`update ai_connection_secrets set
@@ -135,7 +149,7 @@ try{
     failCode("ai_connection_secret_decrypt_failed"));
   console.log(JSON.stringify({keyringPersistence:"passed",checks:[
     "legacy v1 DB Test Bench case and BYO secret read after v2 activation",
-    "v2 Test Bench revision and persisted BYO key_version=2",
+    "v2 Test Bench revision and queued run snapshot, persisted BYO key_version=2",
     "original request digest unchanged through two active-key rotations",
     "previous-v2 key recovery and retired key fail-closed",
     "no network, plaintext secrets, production KMS or database rewrap",

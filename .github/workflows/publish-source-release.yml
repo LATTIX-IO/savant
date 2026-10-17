@@ -120,7 +120,7 @@ jobs:
       # The audit script itself performs GET requests only; no admin mutation is permitted.
       - name: Mint short-lived GitHub ruleset evidence token
         id: governance_evidence
-        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v3
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3
         with:
           client-id: ${{ vars.SAVANT_GOVERNANCE_APP_CLIENT_ID }}
           private-key: ${{ secrets.SAVANT_GOVERNANCE_APP_PRIVATE_KEY }}

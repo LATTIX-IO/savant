@@ -38,6 +38,18 @@ export function parseObservedRun(value:unknown,skillId:string,definitionId:strin
     !Number.isSafeInteger(x.observedExecutorTokens)||
     !Number.isSafeInteger(x.observedJudgeTokens)||
     !Number.isSafeInteger(x.observedUsageReceipts)||
+    !Number.isSafeInteger(x.monetaryReservationMicroUsd)||
+    (x.monetaryReservationMicroUsd as number)<0||
+    (x.monetaryReservationMicroUsd as number)>1_000_000_000_000||
+    !((x.rateCardId===null&&x.monetaryReservationMicroUsd===0)||
+      (typeof x.rateCardId==="string"&&UUID.test(x.rateCardId)&&
+        (x.monetaryReservationMicroUsd as number)>0))||
+    !Number.isSafeInteger(x.unconfirmedProviderCalls)||
+    (x.unconfirmedProviderCalls as number)<0||
+    (x.unconfirmedProviderCalls as number)>8||
+    (x.unconfirmedProviderCalls as number)+(x.observedUsageReceipts as number)>
+      (x.expectedCases as number)*2||
+    ((x.status==="queued"||x.status==="complete")&&x.unconfirmedProviderCalls!==0)||
     (x.observedExecutorTokens as number)<0||
     (x.observedJudgeTokens as number)<0||
     (x.observedUsageReceipts as number)<0||

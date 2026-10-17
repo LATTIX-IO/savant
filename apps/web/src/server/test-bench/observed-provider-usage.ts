@@ -54,11 +54,22 @@ export function createObservedProviderUsageStore(sql:Sql){
           where organization_id=${organizationId} and run_id=${runId}
             and case_index=${receipt.index} and phase=${receipt.phase}
         `;
+        // An exact duplicate ACK may repair an intent pending from a legacy
+        // partial write, but never duplicates observed usage counters.
+        const acknowledge=async()=>{
+          await tx`
+            update test_bench_provider_call_intents set acknowledged_at=now()
+            where organization_id=${organizationId} and run_id=${runId}
+              and job_id=${jobId} and case_index=${receipt.index}
+              and phase=${receipt.phase} and acknowledged_at is null
+          `;
+        };
         if(previous){
           if(previous.model!==receipt.model||
             previous.prompt_tokens!==receipt.promptTokens||
             previous.completion_tokens!==receipt.completionTokens)
             return invalid("test_bench_usage_receipt_conflict");
+          await acknowledge();
           return {recorded:false};
         }
         if(run.status!=="running"&&run.status!=="canceled")
@@ -84,6 +95,9 @@ export function createObservedProviderUsageStore(sql:Sql){
           where organization_id=${organizationId} and id=${runId}
             and job_id=${jobId}
         `;
+        // Same transaction as validated provider-reported receipt and counters.
+        // Missing receipt never clears a pre-egress pending intent.
+        await acknowledge();
         return {recorded:true};
       });
     },

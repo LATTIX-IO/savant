@@ -12,6 +12,7 @@ const base={
  definitionRevision:1,status:"queued",expectedCases:1,completedCases:0,
  samples:[],scorecard:null,totalTokens:0,estimatedCostUsd:0,
  observedExecutorTokens:0,observedJudgeTokens:0,observedUsageReceipts:0,
+ unconfirmedProviderCalls:0,rateCardId:null,monetaryReservationMicroUsd:0,
  executionModel:null,judgeModel:null,errorCode:null,
  executionSource:"platform-nim",executionModelPinned:null,costAccounting:"platform-estimate",
  createdAt:"2026-10-12T10:00:00Z",updatedAt:"2026-10-12T10:00:00Z",completedAt:null,
@@ -161,5 +162,49 @@ test("PER-1447: provider usage is acknowledged even when no complete scorecard e
   {...partial,observedExecutorTokens:"95"},
  ])
    assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),
+    ObservedRunClientError);
+});
+
+
+test("PER-1457: client requires bounded, truthful pending provider-call intent counts",()=>{
+ const uncertain={...base,status:"failed",unconfirmedProviderCalls:1};
+ assert.equal(parseObservedRun(uncertain,skillId,definitionId,sha).unconfirmedProviderCalls,1);
+ const partial={...base,status:"canceled",canceledAt:"2026-10-14T10:00:00Z",
+  canceledBy:"operator",observedExecutorTokens:90,observedJudgeTokens:0,
+  observedUsageReceipts:1,unconfirmedProviderCalls:1};
+ assert.equal(parseObservedRun(partial,skillId,definitionId,sha).unconfirmedProviderCalls,1);
+ for(const changed of [
+  {...uncertain,unconfirmedProviderCalls:-1},
+  {...uncertain,unconfirmedProviderCalls:9},
+  {...uncertain,unconfirmedProviderCalls:0.5},
+  {...uncertain,unconfirmedProviderCalls:"1"},
+  {...uncertain,unconfirmedProviderCalls:null},
+  {...uncertain,unconfirmedProviderCalls:3},
+  {...partial,unconfirmedProviderCalls:2},
+  {...base,status:"queued",unconfirmedProviderCalls:1},
+  {...base,status:"complete",completedCases:1,samples:[one],
+    scorecard:{overallScore:50},unconfirmedProviderCalls:1},
+ ])
+  assert.throws(()=>parseObservedRun(changed,skillId,definitionId,sha),
+    ObservedRunClientError);
+});
+
+
+test("PER-1545: rate-versioned monetary reservation is bounded and never parsed as invoice",()=>{
+ const cardId="aa9e55ab-239a-4baa-8ef9-79da9b3d3b36";
+ const valid={...base,rateCardId:cardId,monetaryReservationMicroUsd:9856};
+ assert.equal(parseObservedRun(valid,skillId,definitionId,sha).monetaryReservationMicroUsd,9856);
+ assert.equal(parseObservedRun(base,skillId,definitionId,sha).rateCardId,null);
+ for(const forged of [
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:0},
+  {...base,rateCardId:null,monetaryReservationMicroUsd:1},
+  {...base,rateCardId:"foreign-card",monetaryReservationMicroUsd:1},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:-1},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:Infinity},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:"9856"},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:1.5},
+  {...base,rateCardId:cardId,monetaryReservationMicroUsd:1000000000001},
+ ])
+  assert.throws(()=>parseObservedRun(forged,skillId,definitionId,sha),
     ObservedRunClientError);
 });

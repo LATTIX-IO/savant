@@ -4,6 +4,7 @@ import {DEFAULT_RUBRIC,scoringQuestions,verdictFor} from "../evaluation/eval-gen
 import {computeScorecard,type EvalSample,type Scorecard} from "../evaluation/scorecard.ts";
 import type {TestBenchCase} from "./definition-contract.ts";
 import type {ObservedProviderUsage} from "./observed-provider-usage.ts";
+import type {ObservedProviderIntent} from "./provider-call-intents.ts";
 
 /** Deliberately bounded FIRST execution adapter: real NIM chat + Jev only.
  * External harness tools and MCP require their own authenticated executor.
@@ -69,6 +70,7 @@ export async function executeObservedCases(
     clients:{executor:ChatClient;judge:JudgeClient};
     onCase?:(sample:ObservedCase,index:number,total:number)=>Promise<void>;
     onUsage?:(receipt:ObservedProviderUsage)=>Promise<void>;
+    onAttempt?:(intent:ObservedProviderIntent)=>Promise<void>;
     beforeCase?:(index:number)=>Promise<void>;
     beforeJudge?:(index:number)=>Promise<void>;
     maxTokens?:number;maxUsd?:number;costPerMillionTokens?:number;
@@ -91,6 +93,9 @@ export async function executeObservedCases(
   for(const [index,item] of cases.entries()){
     await input.beforeCase?.(index+1);
     const prompt=item.context?`${item.prompt}\n\nContext:\n${item.context}`:item.prompt;
+    // Persist durable dispatch intent after cancel/credential preflight and
+    // BEFORE the first byte of external provider I/O.
+    await input.onAttempt?.({index:index+1,phase:"executor"});
     const completion=await clients.executor.complete([
       {role:"system",content:`Evaluate the following chat-only skill instructions. No tools or external actions are available.\n<skill name=${JSON.stringify(skillName)}>\n${instructions}\n</skill>`},
       {role:"user",content:prompt},
@@ -109,6 +114,7 @@ export async function executeObservedCases(
     estimatedCostUsd=totalTokens*perMillion/1_000_000;
     if(totalTokens>ceiling||estimatedCostUsd>maxUsd)reject("test_bench_budget_exceeded");
     await input.beforeJudge?.(index+1);
+    await input.onAttempt?.({index:index+1,phase:"judge"});
     const judged=await clients.judge.ask({
       skill:{name:skillName,instructions},
       case:{kind:item.kind,prompt:item.prompt,context:item.context,expected_behavior:item.expectedBehavior},

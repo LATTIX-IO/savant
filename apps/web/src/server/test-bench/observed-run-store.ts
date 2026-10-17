@@ -8,6 +8,7 @@ import {MAX_OBSERVED_CASES,OBSERVED_SCORING_FINGERPRINT,ObservedEvaluationError,
 import {assertValidTenantOpenAiConnection,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 import {readDailyAdmissionQuota,reserveDailyAdmission} from "./observed-admission-quota.ts";
 import {reservePlatformProviderAdmission} from "./platform-provider-admission.ts";
+import {reserveTestBenchMonetaryAdmission} from "./monetary-admission.ts";
 
 type Sql=import("postgres").Sql;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -18,8 +19,10 @@ type RunRow=PinnedWorkspaceRun&{
   results_ciphertext:string|null;status:"queued"|"running"|"complete"|"failed"|"canceled";
   expected_cases:number;completed_cases:number;total_tokens:number;estimated_cost_usd:string|number;
   observed_executor_tokens:number;observed_judge_tokens:number;observed_usage_receipts:number;
+  unconfirmed_provider_calls?:number|undefined;
   scorecard:Record<string,unknown>|null;execution_model:string|null;judge_model:string|null;
   job_id:string|null;error_code:string|null;canceled_by:string|null;canceled_at:Date|string|null;
+  rate_card_id:string|null;reserved_micro_usd:string|number;judge_model_pinned:string|null;
   cost_accounting:"platform-estimate"|"normalized-qa-proxy";
   created_at:Date|string;updated_at:Date|string;completed_at:Date|string|null;
 };
@@ -29,6 +32,10 @@ export type ObservedRunSummary={
   samples:ObservedCase[];scorecard:Record<string,unknown>|null;
   totalTokens:number;estimatedCostUsd:number;executionModel:string|null;judgeModel:string|null;
   observedExecutorTokens:number;observedJudgeTokens:number;observedUsageReceipts:number;
+  /** Unmatched, durable pre-egress intents. NOT proof of provider charges. */
+  unconfirmedProviderCalls:number;
+  /** Version-pinned admission cushion, never a settled provider invoice. */
+  rateCardId:string|null;monetaryReservationMicroUsd:number;
   errorCode:string|null;canceledBy:string|null;canceledAt:string|null;
   executionSource:RunRow["execution_source"];executionModelPinned:string|null;
   costAccounting:RunRow["cost_accounting"];
@@ -72,6 +79,9 @@ function publicRun(row:RunRow):ObservedRunSummary{
     observedExecutorTokens:row.observed_executor_tokens,
     observedJudgeTokens:row.observed_judge_tokens,
     observedUsageReceipts:row.observed_usage_receipts,
+    unconfirmedProviderCalls:row.unconfirmed_provider_calls??0,
+    rateCardId:row.rate_card_id,
+    monetaryReservationMicroUsd:Number(row.reserved_micro_usd),
     executionModel:row.execution_model,judgeModel:row.judge_model,
     executionSource:row.execution_source,executionModelPinned:row.execution_model_pinned,
     costAccounting:row.cost_accounting,
@@ -100,9 +110,14 @@ export function createObservedRunStore(sql:Sql){
           // Serialize tenant capacity and all idempotency checks across definitions.
           await tx`select pg_advisory_xact_lock(hashtext(${actor.organizationId}),1)`;
           const [previous]=await tx<RunRow[]>`
-            select * from test_bench_runs
-            where organization_id=${actor.organizationId} and request_id=${input.requestId}
-            for update
+            select r.*, (
+              select count(*)::int from test_bench_provider_call_intents i
+              where i.organization_id=r.organization_id and i.run_id=r.id
+                and i.acknowledged_at is null
+            ) as unconfirmed_provider_calls
+            from test_bench_runs r
+            where r.organization_id=${actor.organizationId} and r.request_id=${input.requestId}
+            for update of r
           `;
           if(previous){
             if(previous.definition_id!==definitionId||previous.skill_id!==skillId||
@@ -174,6 +189,10 @@ export function createObservedRunStore(sql:Sql){
           // Count every accepted run, regardless of provider mode. Reserve only
           // after idempotency and source/credential validation. Transactional
           // rollback makes failed jobs or failed inserts unable to leak units.
+          // No live prices guessed: production requires approved model rates and
+          // an active tenant policy before any accepted run or quota commits.
+          const monetary=await reserveTestBenchMonetaryAdmission(
+            tx,actor.organizationId,executionSource,cases.length);
           await reservePlatformProviderAdmission(tx,executionSource);
           await reserveDailyAdmission(tx,actor.organizationId);
           const [row]=await tx<RunRow[]>`
@@ -182,14 +201,18 @@ export function createObservedRunStore(sql:Sql){
               skill_id,source_path,source_commit_sha,request_id,requested_by,
               snapshot_ciphertext,expected_cases,execution_source,
               execution_connection_id,execution_secret_fingerprint,
-              execution_model_pinned,cost_accounting
+              execution_model_pinned,cost_accounting,
+              rate_card_id,reserved_micro_usd,judge_model_pinned
             ) values(
               ${id},${actor.organizationId},${def.repository_id},${definitionId},
               ${def.revision},${skillId},${def.source_path},${commitSha},
               ${input.requestId},${actor.subject},${snapshot},${cases.length},
               ${executionSource},${selected?.connectionId??null},
-              ${selected?.fingerprint??null},${selected?.model??null},
-              ${selected?"normalized-qa-proxy":"platform-estimate"}
+              ${selected?.fingerprint??null},
+              ${selected?.model??monetary?.executionModel??null},
+              ${selected?"normalized-qa-proxy":"platform-estimate"},
+              ${monetary?.rateCardId??null},${monetary?.reservedMicroUsd??0},
+              ${monetary?.judgeModel??null}
             ) returning *
           `;
           if(!row)return invalid("test_bench_run_unavailable",503);
@@ -233,18 +256,28 @@ export function createObservedRunStore(sql:Sql){
     async list(actor:GitActor,skillId:string,definitionId:string):Promise<ObservedRunSummary[]>{
       actorAllowed(actor,false);validateId(definitionId);
       const rows=await sql<RunRow[]>`
-        select * from test_bench_runs
-        where organization_id=${actor.organizationId} and skill_id=${skillId}
-          and definition_id=${definitionId}
-        order by created_at desc limit 15
+        select r.*, (
+          select count(*)::int from test_bench_provider_call_intents i
+          where i.organization_id=r.organization_id and i.run_id=r.id
+            and i.acknowledged_at is null
+        ) as unconfirmed_provider_calls
+        from test_bench_runs r
+        where r.organization_id=${actor.organizationId} and r.skill_id=${skillId}
+          and r.definition_id=${definitionId}
+        order by r.created_at desc limit 15
       `;
       return rows.map(publicRun);
     },
     async get(actor:GitActor,skillId:string,definitionId:string,id:string):Promise<ObservedRunSummary>{
       actorAllowed(actor,false);validateId(definitionId);validateId(id);
       const [row]=await sql<RunRow[]>`
-        select * from test_bench_runs where organization_id=${actor.organizationId}
-          and skill_id=${skillId} and definition_id=${definitionId} and id=${id}
+        select r.*, (
+          select count(*)::int from test_bench_provider_call_intents i
+          where i.organization_id=r.organization_id and i.run_id=r.id
+            and i.acknowledged_at is null
+        ) as unconfirmed_provider_calls
+        from test_bench_runs r where r.organization_id=${actor.organizationId}
+          and r.skill_id=${skillId} and r.definition_id=${definitionId} and r.id=${id}
       `;
       if(!row)return invalid("test_bench_run_not_found",404);
       return publicRun(row);
@@ -259,10 +292,15 @@ export function createObservedRunStore(sql:Sql){
         return invalid("test_bench_revision_required",428);
       return sql.begin(async tx=>{
         const [current]=await tx<RunRow[]>`
-          select * from test_bench_runs
-          where organization_id=${actor.organizationId}
-            and skill_id=${skillId} and definition_id=${definitionId} and id=${runId}
-          for update
+          select r.*, (
+            select count(*)::int from test_bench_provider_call_intents i
+            where i.organization_id=r.organization_id and i.run_id=r.id
+              and i.acknowledged_at is null
+          ) as unconfirmed_provider_calls
+          from test_bench_runs r
+          where r.organization_id=${actor.organizationId}
+            and r.skill_id=${skillId} and r.definition_id=${definitionId} and r.id=${runId}
+          for update of r
         `;
         if(!current)return invalid("test_bench_run_not_found",404);
         if(current.definition_revision!==expectedRevision)
@@ -298,7 +336,8 @@ export function createObservedRunStore(sql:Sql){
               completedCases:current.completed_cases})}::jsonb
           )
         `;
-        return {run:publicRun(updated),replayed:false};
+        return {run:publicRun({...updated,
+          unconfirmed_provider_calls:current.unconfirmed_provider_calls}),replayed:false};
       });
     },
     /** Every network boundary checks the committed terminal state. An already
@@ -392,6 +431,13 @@ export function createObservedRunStore(sql:Sql){
         if(!usage||usage.receipts!==row.expected_cases*2||
           usage.tokens!==result.totalTokens)
           invalid("test_bench_usage_evidence_incomplete");
+        const [unresolved]=await tx<{count:number}[]>`
+          select count(*)::int as count from test_bench_provider_call_intents
+          where organization_id=${row.organization_id} and run_id=${row.id}
+            and acknowledged_at is null
+        `;
+        if(!unresolved||unresolved.count!==0)
+          invalid("test_bench_provider_intents_unconfirmed");
         await tx`
           insert into audit_events(
             organization_id,actor_type,actor_ref,category,action,target_type,target_ref,payload_redacted

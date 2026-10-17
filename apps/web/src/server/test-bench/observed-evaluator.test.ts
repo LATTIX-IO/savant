@@ -208,3 +208,53 @@ test("PER-1447: unusable model text with real usage retains the executor ACK",as
  assert.equal(stub.counts.nim,1);
  assert.equal(stub.counts.jev,0);
 });
+
+
+test("PER-1457: every provider intent is durably committed before corresponding model I/O",async()=>{
+ const x=mocks(),events:string[]=[];
+ const clients={
+  executor:{...x.executor,async complete(...args:Parameters<ChatClient["complete"]>){
+   events.push("provider:executor");return x.executor.complete(...args);
+  }},
+  judge:{...x.judge,async ask(...args:Parameters<JudgeClient["ask"]>){
+   events.push("provider:judge");return x.judge.ask(...args);
+  }},
+ };
+ await executeObservedCases({skillName:"calc",instructions:"Answer truthfully",
+  cases,clients,
+  onAttempt:async v=>{events.push("intent:"+v.phase+":"+v.index);},
+  onUsage:async v=>{events.push("ack:"+v.phase+":"+v.index);},
+ });
+ assert.deepEqual(events,[
+  "intent:executor:1","provider:executor","ack:executor:1",
+  "intent:judge:1","provider:judge","ack:judge:1",
+  "intent:executor:2","provider:executor","ack:executor:2",
+  "intent:judge:2","provider:judge","ack:judge:2",
+ ]);
+});
+test("PER-1457: failed pre-egress intent prevents the corresponding paid request",async()=>{
+ for(const refused of ["executor","judge"] as const){
+  const x=mocks(),recorded:string[]=[];
+  await assert.rejects(()=>executeObservedCases({skillName:"calc",instructions:"Answer",
+   cases:[cases[0]!],clients:x,
+   onAttempt:async v=>{
+    recorded.push(v.phase);
+    if(v.phase===refused)throw Error("durable intent unavailable");
+   },
+  }),/durable intent unavailable/);
+  assert.deepEqual(recorded,refused==="executor"?["executor"]:["executor","judge"]);
+  assert.equal(x.counts.nim,refused==="executor"?0:1);
+  assert.equal(x.counts.jev,0);
+ }
+});
+test("PER-1457: cancellation before judge leaves no new judge intent",async()=>{
+ const x=mocks(),intents:string[]=[];
+ await assert.rejects(()=>executeObservedCases({skillName:"calc",instructions:"Answer",
+  cases:[cases[0]!],clients:x,
+  onAttempt:async i=>{intents.push(i.phase);},
+  beforeJudge:async()=>{throw new ObservedEvaluationError("test_bench_run_cancelled");},
+ }),e=>e instanceof ObservedEvaluationError&&e.code==="test_bench_run_cancelled");
+ assert.deepEqual(intents,["executor"]);
+ assert.equal(x.counts.nim,1);
+ assert.equal(x.counts.jev,0);
+});

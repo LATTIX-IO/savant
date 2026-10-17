@@ -180,6 +180,15 @@ export function ObservedTestBenchRunPanel({
             These are observed provider reports, not an invoice. Missing receipts can
             still mean a network call incurred charges.
           </p>
+          {latest.rateCardId?(
+            <p className="subtle" style={{fontSize:12,margin:0}}>
+              Rate-versioned admission reservation: {(latest.monetaryReservationMicroUsd/1_000_000).toFixed(6)} USD
+              {" · "}Rate card {latest.rateCardId.slice(0,8)}.
+              This is a conservative reserved allowance, not actual charges, settled usage,
+              a customer invoice, or a guaranteed provider spending limit.
+              Tenant-owned OpenAI billing remains external to Savant.
+            </p>
+          ):null}
           {latest.unconfirmedProviderCalls>0?(
             <p role="alert" className="subtle" style={{fontSize:12,margin:0}}>
               {latest.unconfirmedProviderCalls} provider call intent(s) lack acknowledged usage.

@@ -8,6 +8,7 @@ import {MAX_SKILL_INSTRUCTIONS_BYTES,ObservedEvaluationError,executeObservedCase
 import {createObservedRunStore} from "./observed-run-store.ts";
 import {createObservedProviderUsageStore} from "./observed-provider-usage.ts";
 import {createObservedProviderCallIntentStore} from "./provider-call-intents.ts";
+import {assertMonetaryExecutionAuthorized} from "./monetary-admission.ts";
 import {assertTenantOpenAiCanContinue,createPinnedTenantOpenAiClient,type PinnedWorkspaceRun} from "./tenant-openai-client.ts";
 
 type Sql=import("postgres").Sql;
@@ -61,6 +62,7 @@ export async function executeQueuedObservedRun(deps:Dependencies):Promise<"done"
       throw new ObservedEvaluationError("test_bench_run_cancelled");
     if(row.execution_source==="workspace-openai")
       await assertTenantOpenAiCanContinue(sql,row);
+    await assertMonetaryExecutionAuthorized(sql,row);
   };
   try{
     await ensureNotCanceled();

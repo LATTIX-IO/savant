@@ -8,7 +8,7 @@ The server-only managed-ciphertext-rewrap.ts exposes preview and rewrapNext to a
 
 Each call targets **one explicitly supplied organization UUID, one target class, and 1–20 records maximum**. Supported targets:
 
-1. Test Bench definitions — cases_ciphertext, bound to organization, definition ID, revision, and source SHA.
+1. Test Bench definitions — cases_ciphertext, bound to organization, definition ID, authenticated ciphertext revision, and source SHA. Archived definitions increment metadata revision without re-encrypting cases, so their original ciphertext AAD must use stored revision minus one; rewrapping does not change that metadata.
 2. Test Bench runs — snapshot_ciphertext and results_ciphertext, bound to organization, run ID, definition revision and source SHA; both fields change in one row transaction.
 3. BYO AI-connection secrets — encrypted_secret and key_version, bound to organization, connection ID and provider.
 

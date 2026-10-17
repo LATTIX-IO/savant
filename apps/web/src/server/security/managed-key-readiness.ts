@@ -16,13 +16,15 @@ export type ManagedKeyReadiness={
 const names:readonly KeyName[]=[
   "TEST_BENCH_ENCRYPTION_KEY","AI_CONNECTION_ENCRYPTION_KEY",
 ];
-function decode(value:string):Buffer|null{
+function decode(value:string,domain:KeyName):Buffer|null{
   if(value!==value.trim()||value.length===0)return null;
   if(/^[0-9a-f]{64}$/i.test(value))return Buffer.from(value,"hex");
-  // Test Bench accepts canonical unpadded URL base64. Connection storage
-  // originally accepts standard base64. The config gate accepts both.
-  if(!/^(?:[A-Za-z0-9_-]{43}|[A-Za-z0-9+/]{43}=)$/.test(value))return null;
-  const codec=value.endsWith("=")?"base64":"base64url";
+  // Match each existing production decryption contract precisely. An
+  // apparent readiness PASS must not accept a key that runtime will reject.
+  const codec=domain==="TEST_BENCH_ENCRYPTION_KEY"?"base64url":"base64";
+  if(codec==="base64url"
+    ?!/^[A-Za-z0-9_-]{43}$/.test(value)
+    :!/^[A-Za-z0-9+/]{43}=$/.test(value))return null;
   const decoded=Buffer.from(value,codec);
   if(decoded.byteLength!==32||decoded.toString(codec)!==value)return null;
   return decoded;
@@ -36,7 +38,7 @@ export function inspectManagedKeyReadiness(env:Env):ManagedKeyReadiness{
   for(const key of names){
     const raw=env[key];
     if(raw===undefined||raw===""){missing.push(key);continue;}
-    const decoded=decode(raw);
+    const decoded=decode(raw,key);
     if(!decoded){invalid.push(key);continue;}
     valid.set(key,decoded);
   }

@@ -30,13 +30,13 @@ Main currently does **not** have a successful standalone production dependency a
 
 ## Controlled integration boundary
 
-After Phase 1, obtain independent security/DevOps approval and all currently required exact-head checks on PR #95. Confirm real staging, managed secret recovery and authenticated access risks have been accepted for any deployment triggered by merging main. **Do not merge PR #95 solely because its preview is READY.** The required GitHub workflow is normal squash-only protected PR merge. There must be no temporary ruleset disablement or administrator bypass.
+After Phase 1, obtain independent security/DevOps approval and all currently required exact-head checks on PR #95. After #95's protected merge, separately review and reconcile the stacked PR #96 onto the updated main baseline; merge #96 only through the same protected, independently approved workflow before running its operator tool. Confirm real staging, managed secret recovery and authenticated access risks have been accepted for any deployment triggered by merging main. **Do not merge PR #95 solely because its preview is READY.** The required GitHub workflow is normal squash-only protected PR merge. There must be no temporary ruleset disablement or administrator bypass.
 
 If new code and infrastructure cannot safely be deployed, leave PR #95 draft even after Phase 1.
 
 ## Phase 2: enforce standalone dependency audit in main ruleset
 
-Run only after PR #95 is merged under the Phase 1 protections, its new main commit has a completed success for all ten GitHub Actions App ID 15368 required contexts, and all independent authorization controls remain enforced.
+Run only after **both** PR #95 (production dependency audit job) **and PR #96 (this upgrade script)** have undergone independent security review and been merged through the Phase 1 protected main ruleset. The #96 branch is currently stacked on #95's integration branch; once #95 merges, reconcile/rebase #96 to the resulting main history so its PR contains only the governance-upgrade increment. Do not merge it blindly as a duplicate dependency stack. The latest post-#96-merge main commit must have a completed success for all ten GitHub Actions App ID 15368 required contexts, and all independent authorization controls must remain enforced. No admin token may execute scripts directly from an unmerged or unreviewed branch.
 
 On **reviewed** main after that merge, set `SAVANT_RELEASE_MAIN_SHA` to the exact live, post-merge **main commit SHA** (not the old #95 feature SHA). Set `GITHUB_REPOSITORY`, `SAVANT_RELEASE_OPERATOR_ID`, and `GH_TOKEN` as above.
 

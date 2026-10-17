@@ -5,3 +5,10 @@ packages:
 ignoredBuiltDependencies:
   - sharp
   - unrs-resolver
+# PER-1409: force patched, same-major transitive resolutions across the workspace.
+# Remove an override when its upstream dependency range naturally resolves safely.
+overrides:
+  postcss: ">=8.5.18 <9"
+  "nanoid@3": ">=3.3.18 <4"
+  browserslist: ">=4.28.7 <5"
+  source-map-js: ">=1.2.2 <2"

@@ -35,6 +35,11 @@ jobs:
           node-version: '24'
           cache: pnpm
 
+      - name: Verify immutable GitHub Actions pins and negative security regression
+        run: |
+          node --test scripts/verify-github-actions-pins.test.mjs
+          node scripts/verify-github-actions-pins.mjs
+
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
 

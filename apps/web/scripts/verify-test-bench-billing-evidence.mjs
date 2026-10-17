@@ -194,6 +194,30 @@ try{
  assert.equal(recon.phases[0].reportedTokens,80);
  assert.equal(recon.state,"unknown","no rate card or invoice match, never bill 0");
  assert.equal(recon.actualBilledMicroUsd,null);
+ // An approved, immutable model rate enables an ESTIMATE, never confirmed
+ // invoice attribution. This fake card exists in this disposable CI DB only.
+ const mockCard=randomUUID();
+ await sql`insert into test_bench_provider_rate_cards(
+  id,version,status,active,source_uri,source_sha256,valid_from
+ ) values(${mockCard},${"billing-7a-"+suffix},'draft',false,
+   'https://example.invalid/ci-test-billing-source',
+   ${"d".repeat(64)},now()-interval '1 day')`;
+ await sql`insert into test_bench_provider_rate_entries(
+  rate_card_id,provider_code,model,input_micro_usd_per_million,
+  output_micro_usd_per_million,fixed_micro_usd_per_call
+ ) values(${mockCard},'nim','nim-fixture',100,500,0)`;
+ await sql`update test_bench_provider_rate_cards set status='approved',
+  approved_by='ci-test-only',approved_at=now() where id=${mockCard}`;
+ await sql`update test_bench_runs set
+   rate_card_id=${mockCard},reserved_micro_usd=100,
+   execution_model_pinned='nim-fixture',judge_model_pinned='jev-fixture'
+   where organization_id=${a.orgId} and id=${run.id}`;
+ recon=await evidence.read(a.orgId,run.id);
+ assert.equal(recon.state,"estimated");
+ assert.equal(recon.rateCardId,mockCard);
+ assert.equal(recon.reservationMicroUsd,100);
+ assert.equal(recon.actualBilledMicroUsd,null);
+ assert.equal(recon.providerInvoiceMatched,false);
  const unverified=(await sources.accountSummary(operator,"nim",account,month));
  assert.equal(unverified.actualBilledMicroUsd,null);
  assert.equal(unverified.requestLevelAttribution,false);
@@ -216,7 +240,7 @@ try{
   "cumulative overcredit and cross-account correction denied",
   "period freeze irreversible and rejects imports",
   "tenant-scoped run evidence; no falsely attributed provider invoices",
-  "timeouts remain unknown, provider ACKs remain non-invoiced",
+  "timeouts remain unknown; approved model rates yield estimates only",
   "no plaintext prompt, provider secrets or billing source content persisted",
  ]}));
 }finally{

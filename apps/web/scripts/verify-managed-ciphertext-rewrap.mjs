@@ -161,7 +161,7 @@ try{
   assert.equal((await service.rewrapNext(actor,scope(a.orgId,"definitions"),testNew)).migrated,0);
   const migratedDefs=await sql.unsafe(
     "select id,cases_ciphertext,request_digest,revision,source_commit_sha,"+
-    "updated_at from test_bench_definitions "+
+    "updated_at,archived_at from test_bench_definitions "+
     "where organization_id=$1 order by id",[a.orgId]);
   for(let i=0;i<beforeDefs.length;i++){
     assert.match(migratedDefs[i].cases_ciphertext,/^v2:oct2026:/);

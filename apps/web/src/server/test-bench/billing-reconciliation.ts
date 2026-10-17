@@ -118,8 +118,11 @@ export function createRunBillingEvidenceReader(sql:Sql){
         `;
         const rateRows=run.rate_card_id?
           await tx<{provider_code:string;model:string}[]>`
-            select provider_code,model from test_bench_provider_rate_entries
-            where rate_card_id=${run.rate_card_id}
+            select e.provider_code,e.model
+            from test_bench_provider_rate_entries e
+              join test_bench_provider_rate_cards c on c.id=e.rate_card_id
+            where e.rate_card_id=${run.rate_card_id}
+              and c.status='approved'
           `: [];
         return reconcileRunEvidence({
           run,intents,rateModels:new Set(rateRows.map(r=>r.provider_code+":"+r.model)),

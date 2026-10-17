@@ -19,8 +19,8 @@ const names:readonly KeyName[]=[
 function decode(value:string,domain:KeyName):Buffer|null{
   if(value!==value.trim()||value.length===0)return null;
   if(/^[0-9a-f]{64}$/i.test(value))return Buffer.from(value,"hex");
-  // Match each existing production decryption contract precisely. An
-  // apparent readiness PASS must not accept a key that runtime will reject.
+  // Apply the approved canonical per-domain configuration contract.
+  // This is intentionally stricter than permissive legacy base64 decoders.
   const codec=domain==="TEST_BENCH_ENCRYPTION_KEY"?"base64url":"base64";
   if(codec==="base64url"
     ?!/^[A-Za-z0-9_-]{43}$/.test(value)

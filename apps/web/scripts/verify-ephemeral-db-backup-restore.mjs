@@ -15,7 +15,7 @@ import {
   createEphemeralRestoreDatabase,restoreEphemeralDatabase,
   dropEphemeralRestoreDatabase,restoredDatabaseUri,
   writeEncryptedFixtureSnapshot,readVerifiedFixtureSnapshot,
-  withPrivateBackupDirectory,EphemeralRestoreError
+  decryptFixtureBackup,withPrivateBackupDirectory
 } from "./ephemeral-encrypted-pg-archive.mjs";
 
 const ctx=assertEphemeralRestoreContext();

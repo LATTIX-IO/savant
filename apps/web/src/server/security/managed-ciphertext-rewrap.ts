@@ -67,7 +67,7 @@ const sha=(value:string)=>createHash("sha256").update(value,"utf8").digest("hex"
 const isV1=(value:string|null)=>typeof value==="string"&&value.startsWith("v1:");
 type DefinitionRow={
   id:string;organization_id:string;revision:number;source_commit_sha:string;
-  cases_ciphertext:string;
+  cases_ciphertext:string;archived_at:Date|null;
 };
 type RunRow={
   id:string;organization_id:string;definition_revision:number;
@@ -152,15 +152,23 @@ export function createManagedCiphertextRewrapper(sql:Sql){
           };
           if(scope.target==="definitions"){
             const rows=await tx.unsafe<DefinitionRow[]>(
-              "select id,organization_id,revision,source_commit_sha,cases_ciphertext "+
+              "select id,organization_id,revision,source_commit_sha,cases_ciphertext,archived_at "+
               "from test_bench_definitions where organization_id=$1 "+
               "and left(cases_ciphertext,3)='v1:' "+
               "order by id limit $2 for update skip locked",
               [organizationId,scope.maxRows],
             );
             for(const row of rows){
+              // Definition-store.archive increments revision WITHOUT re-encrypting
+              // cases. Archived rows retain the AAD of the prior revision.
+              // Treating the current archived revision as the cipher revision
+              // would permanently strand valid encrypted historical records.
+              if(row.archived_at!==null&&row.revision<2)
+                fail("crypto_rewrap_archived_revision_invalid");
+              const cipherRevision=row.archived_at===null?
+                row.revision:row.revision-1;
               const ctx={organizationId:row.organization_id,definitionId:row.id,
-                revision:row.revision,commitSha:row.source_commit_sha};
+                revision:cipherRevision,commitSha:row.source_commit_sha};
               const next=rewrapBench(row.cases_ciphertext,ctx,env,16384);
               const changed=await tx.unsafe(
                 "update test_bench_definitions set cases_ciphertext=$1 "+

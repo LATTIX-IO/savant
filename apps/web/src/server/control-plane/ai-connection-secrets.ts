@@ -1,9 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import {readKeyring,selectV2Key,VersionedKeyringError, type DomainKeyring} from "../security/versioned-aead-keyring.ts";
 
-const AI_CONNECTION_ENCRYPTION_ENV_NAME = "AI_CONNECTION_ENCRYPTION_KEY";
 const AI_CONNECTION_CIPHER_ALGORITHM = "aes-256-gcm";
-const AI_CONNECTION_SECRET_KEY_BYTES = 32;
 const AI_CONNECTION_SECRET_IV_BYTES = 12;
 const AI_CONNECTION_SECRET_KEY_VERSION = 1;
 

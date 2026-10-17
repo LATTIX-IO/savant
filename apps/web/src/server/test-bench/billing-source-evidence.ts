@@ -40,9 +40,10 @@ export type BillingImportResult={
 };
 function exactKeys(value:unknown,required:string[],optional:string[]=[]):void{
   if(!value||typeof value!=="object"||Array.isArray(value))
-    deny("test_bench_billing_document_invalid");
-  const found=Object.keys(value);
-  if(required.some(key=>!Object.hasOwn(value,key))||
+    return deny("test_bench_billing_document_invalid");
+  const record=value as Record<string,unknown>;
+  const found=Object.keys(record);
+  if(required.some(key=>!Object.hasOwn(record,key))||
     found.some(key=>!required.includes(key)&&!optional.includes(key)))
     deny("test_bench_billing_document_invalid");
 }

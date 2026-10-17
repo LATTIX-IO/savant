@@ -75,6 +75,32 @@ export function readAiServiceConfig(env: Env = process.env): AiServiceConfig {
   };
 }
 
+/** Official NVIDIA terms restrict Developer Program catalog endpoints to
+ * evaluation/prototyping. A user-set flag cannot self-attest a production
+ * contract. Until vendor account evidence is separately approved, all
+ * commercial use of the catalog origin is blocked before provider egress.
+ */
+export function assertNimCatalogUseAuthorized(
+  baseUrl:string,env:Record<string,string|undefined>=process.env,
+):void{
+  let hostname:string;
+  try{
+    const url=new URL(baseUrl);
+    if(url.protocol!=="https:")throw Error("invalid protocol");
+    hostname=url.hostname.toLowerCase();
+  }catch{
+    throw new AiServiceError("nim","Invalid NIM service origin.",422);
+  }
+  const commercial=env.VERCEL_ENV==="production"||
+    env.SAVANT_DEPLOYMENT_ENV==="production";
+  if(commercial&&hostname==="integrate.api.nvidia.com")
+    throw new AiServiceError(
+      "nim",
+      "NVIDIA Developer Program catalog use is unavailable for production. A verified enterprise entitlement and approved deployment are required.",
+      403,
+    );
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function postJson(
@@ -157,6 +183,7 @@ export function createNimChatClient(
   return {
     model,
     async complete(messages, options = {}) {
+      assertNimCatalogUseAuthorized(config.baseUrl);
       const started = Date.now();
       const data = await postJson("nim", fetchImpl, `${config.baseUrl}/chat/completions`, config.apiKey, {
         model,

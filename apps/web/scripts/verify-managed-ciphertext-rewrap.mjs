@@ -226,11 +226,13 @@ try{
       "PRIVATE_CASE_a_0","PRIVATE_CASE_a_1","PRIVATE_EXPECTED",
       "sk-PRIVATE_","v1:","v2:","31".repeat(32),"32".repeat(32)])
       assert.equal(audit.includes(secret),false);
-    assert.equal(event.payload_redacted.from,"v1");
-    assert.equal(event.payload_redacted.to,"v2");
-    assert.equal(event.payload_redacted.keyId,"oct2026");
-    assert.match(event.payload_redacted.previousSha256,/^[a-f0-9]{64}$/);
-    assert.match(event.payload_redacted.nextSha256,/^[a-f0-9]{64}$/);
+    const payload=typeof event.payload_redacted==="string"?
+      JSON.parse(event.payload_redacted):event.payload_redacted;
+    assert.equal(payload.from,"v1");
+    assert.equal(payload.to,"v2");
+    assert.equal(payload.keyId,"oct2026");
+    assert.match(payload.previousSha256,/^[a-f0-9]{64}$/);
+    assert.match(payload.nextSha256,/^[a-f0-9]{64}$/);
   }
 
   // Simulate a recovery check using a pre-migration encrypted backup row and

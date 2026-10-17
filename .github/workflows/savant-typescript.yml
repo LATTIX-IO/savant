@@ -159,6 +159,16 @@ jobs:
         env:
           SAVANT_CIPHER_REWRAP_TEST: "1"
           SAVANT_REWRAP_EPHEMERAL_DATABASE: "1"
+      - name: Verify encrypted full PostgreSQL backup/restore for v1/v2 and preserved replay
+        run: |
+          command -v pg_dump
+          command -v pg_restore
+          command -v createdb
+          command -v dropdb
+          pnpm --filter @savant/web exec node ./scripts/verify-ephemeral-db-backup-restore.mjs
+        env:
+          SAVANT_EPHEMERAL_RESTORE_TEST: "1"
+          CI: "true"
       - name: Verify UTC tenant daily admissions, idempotency, races and no-refund controls
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:

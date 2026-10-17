@@ -39,7 +39,7 @@ test("PER-1551: reject shared secret material across both encryption domains",()
 test("PER-1551: reject malformed, ambiguous or noncanonical 32-byte encodings",()=>{
   const samples=[
     keyA.toString("base64")+" ",
-    keyA.toString("base64url")+"=",
+    keyA.toString("base64url")+"==",
     "zz".repeat(32),
     "aa".repeat(31),
     Buffer.alloc(31,1).toString("base64url"),

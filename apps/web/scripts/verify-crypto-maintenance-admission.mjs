@@ -95,7 +95,9 @@ try{
     "crypto_maintenance_completed","crypto_maintenance_admitted",
     "crypto_maintenance_started","crypto_maintenance_uncertain"
   ]);
-  assert.ok(audits.every(a=>a.payload_redacted.schema===
+  const redacted=audits.map(a=>typeof a.payload_redacted==="string"?
+    JSON.parse(a.payload_redacted):a.payload_redacted);
+  assert.ok(redacted.every(a=>a?.schema===
     "savant.crypto-maintenance-proof.v1"));
   assert.ok(audits.every(a=>!JSON.stringify(a).includes("SYNTHETIC_SECRET")));
   const rows=await sql.unsafe(

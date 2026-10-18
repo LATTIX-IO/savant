@@ -57,12 +57,19 @@ jobs:
           SAVANT_RELEASE_REVIEWER_TYPE: User
         run: |
           $ErrorActionPreference = 'Stop'
+          # An expected native nonzero exit must not be promoted to a PowerShell
+          # terminating error before its denial JSON and exit status are read.
+          $PSNativeCommandUseErrorActionPreference = $false
           if ($env:GH_TOKEN) { throw "Admin token must not be provided to Windows regression" }
-          $applyOutput = & node scripts/release-governance-bootstrap.mjs --apply --confirm=PROTECT-LATTIX-IO-savant 2>&1
-          if ($LASTEXITCODE -eq 0) { throw "Administrative apply silently returned success without token" }
-          $deny = ($applyOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          $applyDenialPath = Join-Path $env:RUNNER_TEMP 'savant-governance-apply-denied.json'
+          & node scripts/release-governance-bootstrap.mjs --apply --confirm=PROTECT-LATTIX-IO-savant 2> $applyDenialPath | Out-Null
+          $applyExit = $LASTEXITCODE
+          if ($applyExit -ne 1) { throw "Administrative apply must explicitly deny without an admin token" }
+          $deny = Get-Content -Raw $applyDenialPath | ConvertFrom-Json
           if ($deny.ready -ne $false -or $deny.code -ne 'missing_admin_token') { throw "Apply did not fail closed" }
-          $auditOutput = & node scripts/release-controls-audit.mjs 2>&1
-          if ($LASTEXITCODE -eq 0) { throw "Audit silently returned success without read token" }
-          $audit = ($auditOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          Remove-Item -LiteralPath $applyDenialPath
+          $auditOutput = & node scripts/release-controls-audit.mjs
+          $auditExit = $LASTEXITCODE
+          if ($auditExit -ne 1) { throw "Audit must explicitly deny without a read token" }
+          $audit = ($auditOutput | Out-String) | ConvertFrom-Json
           if ($audit.ready -ne $false -or $audit.problems -notcontains 'missing_read_token') { throw "Audit did not fail closed" }

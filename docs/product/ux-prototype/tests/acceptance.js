@@ -182,6 +182,19 @@ test('Rendering', 'shared toasts and menus render text, not HTML', () => {
   ok(!/Math\.random/.test(fs.readFileSync(path.join(ROOT, 'integrations.html'), 'utf8')), 'tokens do not use Math.random');
 });
 
+/* CI supply-chain regression: all prototype checkout jobs clear git auth before
+   untrusted assets and npm dependencies are executed. */
+test('Workflow security', 'checkout tokens cannot persist into prototype tests', () => {
+  const workflow = fs.readFileSync(path.join(ROOT, '../../../.github/workflows/ux-prototype.yml'), 'utf8');
+  const checkout = 'uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1';
+  const parts = workflow.split(checkout);
+  eq(parts.length, 3, 'exactly two immutable checkout actions');
+  parts.slice(1).forEach(part => ok(part.startsWith('\n        with:\n          persist-credentials: false'),
+    'checkout must disable credential persistence'));
+  ok(!/^\\s*uses:\\s*[a-z0-9_./-]+@(?:v\\d+|main|master)\\b/m.test(workflow),
+    'remote GitHub Actions references must be SHA pinned');
+});
+
 /* report */
 const pass = results.filter(r => r[2]).length;
 let group = '';

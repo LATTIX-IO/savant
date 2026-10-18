@@ -10,17 +10,6 @@ on:
       - .github/agent-standards/**
       - scripts/sync-agent-standards.ps1
       - scripts/sync-agent-standards.sh
-  push:
-    branches:
-      - main
-    paths:
-      - AGENTS.md
-      - .github/copilot-instructions.md
-      - .github/instructions/**
-      - .github/prompts/**
-      - .github/agent-standards/**
-      - scripts/sync-agent-standards.ps1
-      - scripts/sync-agent-standards.sh
   workflow_dispatch:
     inputs:
       apply:
@@ -29,7 +18,7 @@ on:
         default: 'false'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: agent-standards-sync-${{ github.ref }}
@@ -44,9 +33,10 @@ jobs:
       - name: Checkout repository with submodules
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
+          token: ${{ github.token }}
 
       - name: Preview drift
         id: preview
@@ -65,14 +55,16 @@ jobs:
             else
               echo "Generated child-repo standards would change after this PR lands."
               echo
-              echo "The push-to-main job applies and pushes those generated updates automatically using the configured bot token."
+              echo "Applying drift requires protected-main manual dispatch, independent environment approval, and explicit enablement."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   apply:
     name: Apply and push generated standards
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply == 'true')
+    if: github.event_name == 'workflow_dispatch' && inputs.apply == 'true' && github.ref == 'refs/heads/main' && github.repository == 'LATTIX-IO/savant' && vars.SAVANT_AGENT_STANDARDS_SYNC_ENABLED == 'true'
     runs-on: ubuntu-latest
+    # Environment policy must be independently reviewed and main-only.
+    environment: savant-release
     env:
       CHILD_REPO_PUSH_TOKEN: ${{ secrets.LATTIX_BOT_PAT }}
     steps:
@@ -82,7 +74,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
-          persist-credentials: true
+          persist-credentials: false
 
       - name: Verify child repository push token
         shell: bash

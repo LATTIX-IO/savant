@@ -191,7 +191,7 @@ test('Workflow security', 'checkout tokens cannot persist into prototype tests',
   eq(parts.length, 3, 'exactly two immutable checkout actions');
   parts.slice(1).forEach(part => ok(part.startsWith('\n        with:\n          persist-credentials: false'),
     'checkout must disable credential persistence'));
-  ok(!/^\\s*uses:\\s*[a-z0-9_./-]+@(?:v\\d+|main|master)\\b/m.test(workflow),
+  ok(!/^\s*uses:\s*[a-z0-9_./-]+@(?:v\d+|main|master)\b/m.test(workflow),
     'remote GitHub Actions references must be SHA pinned');
 });
 

@@ -24,6 +24,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
       - name: Verify
-        run: node ./scripts/seo/verify-live.mjs --origin "${{ github.event.inputs.origin || 'https://savantskills.app' }}"
+        env:
+          SEO_VERIFY_ORIGIN: ${{ inputs.origin || 'https://savantskills.app' }}
+        run: node ./scripts/seo/verify-live.mjs --origin "$SEO_VERIFY_ORIGIN"

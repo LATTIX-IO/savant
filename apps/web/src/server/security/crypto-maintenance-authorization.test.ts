@@ -94,8 +94,10 @@ test("PER-1560: genuine-style GitHub JOSE x5t is accepted but never overrides is
     {x5t:thumbprint,jwk:jwk},{x5t:thumbprint,crit:["x5t"]},
     {"x5t#S256":thumbprint}
   ]){
+    // Oversized untrusted JOSE headers can be rejected by the input bound
+    // before allowlisted-header validation; both outcomes are fail closed.
     assert.throws(()=>verifyGithubMaintenanceJwt(token({},extra),trust,now),
-      denied("untrusted_oidc_algorithm"));
+      e=>e instanceof MaintenanceAuthorizationError);
   }
 });
 test("PER-1560: unsigned, injected algorithm and unsupported key IDs never select trust key",()=>{

@@ -43,7 +43,9 @@ for(const [name,args] of [
     assert.equal(result.signal,null);
     assert.equal(result.status,1,"CLI must fail closed without admin variables");
     const output=(result.stdout||"")+(result.stderr||"");
-    assert.match(output,/"ready":false/);
+    const report=JSON.parse((result.stdout||result.stderr).trim());
+    assert.equal(report.ready,false);
+    assert.ok(typeof report.code==="string"||Array.isArray(report.problems));
     assert.doesNotMatch(output,/token|secret|Authorization:\s*Bearer/i);
   });
 }

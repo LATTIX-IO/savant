@@ -110,8 +110,17 @@ export function verifyGithubMaintenanceJwt(
   const pieces=jwt.split(".");
   if(pieces.length!==3)deny("invalid_oidc_token");
   const header=safeJson(b64(pieces[0],600),400);
-  exact(header,["alg","kid","typ"]);
-  if(header.alg!=="RS256"||header.typ!=="JWT"||
+  // GitHub Actions may include a signed JOSE x5t certificate thumbprint.
+  // It is informational: key selection is ONLY the trusted issuer JWKS kid.
+  // Never honor JWT-supplied jwk, jku, x5u, crit, b64 or alg overrides.
+  const headerKeys=Object.keys(header);
+  if(headerKeys.length!==(Object.hasOwn(header,"x5t")?4:3)||
+    !["alg","kid","typ"].every(k=>Object.hasOwn(header,k))||
+    headerKeys.some(k=>!["alg","kid","typ","x5t"].includes(k))||
+    (Object.hasOwn(header,"x5t")&&
+      (typeof header.x5t!=="string"||
+        !/^[A-Za-z0-9_-]{20,128}$/.test(header.x5t)))||
+    header.alg!=="RS256"||header.typ!=="JWT"||
     typeof header.kid!=="string"||!KID.test(header.kid))
     deny("untrusted_oidc_algorithm");
   const keys=trust.oidcJwks.filter(k=>k.kid===header.kid);

@@ -85,7 +85,7 @@ jobs:
       - name: Install frozen dependencies
         run: pnpm install --frozen-lockfile
       - name: Fail for high/critical production advisories
-        run: pnpm audit --prod --audit-level high
+        run: pnpm run security:deps
 
   workflow-postgres:
     name: Workflow schema migration and tenant integrity

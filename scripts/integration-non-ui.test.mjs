@@ -40,7 +40,9 @@ test("INTEGRATION: actual isolated PostgreSQL workflow executes all four product
 
 test("INTEGRATION: CI retains supply-chain and Python telemetry security gates",()=>{
  assert.match(workflow,/name: Blocking production dependency audit \(high\/critical\)/);
- assert.match(workflow,/pnpm audit --prod --audit-level high/);
+ assert.match(workflow,/run: pnpm run security:deps/);
+ const pkg=JSON.parse(readFileSync(join(root,"package.json"),"utf8"));
+ assert.equal(pkg.scripts?.["security:deps"],"pnpm audit --prod --audit-level high");
  assert.match(workflow,/node scripts\/verify-github-actions-pins\.mjs/);
  assert.match(workflow,/python3 -m unittest discover -s sdks\/python/);
  assert.match(workflow,/name: Savant unit, type, lint, build and secrets/);

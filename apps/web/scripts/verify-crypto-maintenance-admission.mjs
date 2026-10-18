@@ -88,7 +88,7 @@ try{
   const audits=await sql.unsafe(
     "select action,target_ref,payload_redacted from audit_events "+
     "where organization_id=$1 and category='security' and "+
-    "action like 'crypto_maintenance_%' order by id",[orgId]);
+    "action like 'crypto_maintenance_%' order by occurred_at,id",[orgId]);
   assert.deepEqual(audits.map(x=>x.action),[
     "crypto_maintenance_admitted","crypto_maintenance_started",
     "crypto_maintenance_completed","crypto_maintenance_admitted",

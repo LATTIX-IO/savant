@@ -52,9 +52,9 @@ export type MaintenanceTrustPolicy={
 function object(value:unknown):Record<string,unknown>{
   try{
     if(!value||typeof value!=="object"||Array.isArray(value)||
-      (Object.getPrototypeOf(value)!==Object.prototype&&Object.getPrototypeOf(value)!==null))
+      (Object.getPrototypeOf(value as object)!==Object.prototype&&Object.getPrototypeOf(value)!==null))
       deny("invalid_attestation_shape");
-    const d=Object.getOwnPropertyDescriptors(value);
+    const d=Object.getOwnPropertyDescriptors(value as object);
     if(Reflect.ownKeys(value).length!==Object.keys(d).length ||
       Object.values(d).some(x=>!("value" in x)))deny("invalid_attestation_shape");
     return Object.fromEntries(Object.entries(d).map(([k,x])=>[k,x.value]));
@@ -67,7 +67,7 @@ function exact(value:Record<string,unknown>,keys:readonly string[]){
 function b64(s:unknown,max:number):Buffer{
   if(typeof s!=="string"||s.length>max||!B64.test(s))
     deny("invalid_attestation_encoding");
-  const decoded=Buffer.from(s,"base64url");
+  const decoded=Buffer.from(s as string,"base64url");
   if(!decoded.length||decoded.toString("base64url")!==s)
     deny("invalid_attestation_encoding");
   return decoded;

@@ -70,6 +70,25 @@ test("PER-1557: agent preview cannot receive bot credentials and apply is manual
   }
   assert.ok(inspectAgentStandardsBoundary(agentFixture.replace("  workflow_dispatch:","  push:\n    branches:\n      - main\n  workflow_dispatch:")).length>0);
 });
+test("PER-1557: missing sync implementation must fail before preview and cannot mutate protected main",()=>{
+  assert.match(agentFixture,/Require checked-in preview implementation/);
+  assert.match(agentFixture,/\[ ! -f scripts\/sync-agent-standards\.ps1 \]/);
+  assert.match(agentFixture,/\[ ! -f \.gitmodules \]/);
+  const changed=[
+    agentFixture.replace("Require checked-in preview implementation","Preview without prerequisites"),
+    agentFixture.replace("Refuse unsafe cross-repository mutation","Permit unreviewed mutation"),
+    agentFixture.replace("          exit 1\n","          git push origin HEAD:main\n"),
+    agentFixture.replace("      - name: Refuse unsafe cross-repository mutation",
+      "      - name: Refuse unsafe cross-repository mutation\n        env:\n          CHILD_REPO_PUSH_TOKEN: leaked")
+  ];
+  for(const modified of changed){
+    assert.notEqual(modified,agentFixture);
+    assert.ok(inspectAgentStandardsBoundary(modified).length>0,
+      "Tampered apply/preview boundary must fail closed");
+  }
+  assert.deepEqual(inspectAgentStandardsBoundary(agentFixture),[]);
+});
+
 test("PER-1557: caller-provided SEO origin cannot be interpolated into shell code",()=>{
   assert.deepEqual(inspectSeoOriginBoundary(seoFixture),[]);
   const bad=seoFixture.replace(

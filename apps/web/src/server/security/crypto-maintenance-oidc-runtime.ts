@@ -72,8 +72,10 @@ async function boundedJSON(
       parts.push(Buffer.from(value.value));
     }
   }finally{
-    try{await reader.cancel();}catch{/* deny response bodies any further reads */}
-    reader.releaseLock();
+    // Never await cancellation after an adversarial stream ignores abort;
+    // a pending reader must not outlive the caller's strict deadline.
+    try{void reader.cancel().catch(()=>{});}catch{/* sanitized */}
+    try{reader.releaseLock();}catch{/* pending reads are already timed out */}
   }
   if(!total)deny("oidc_response_invalid");
   let json:unknown;

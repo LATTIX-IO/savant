@@ -81,7 +81,7 @@ test("PER-1560: forged bearer, modified payload and bad signature deny",()=>{
   assert.throws(()=>verifyGithubMaintenanceJwt(forged,trust,now),
     denied("oidc_signature_invalid"));
   assert.throws(()=>verifyGithubMaintenanceJwt(pieces[0]+"."+pieces[1]+"."+
-    (pieces[2][0]==="A"?"B":"A")+pieces[2].slice(1),trust,now),
+    (pieces[2]![0]==="A"?"B":"A")+pieces[2]!.slice(1),trust,now),
     denied("oidc_signature_invalid"));
   assert.throws(()=>verifyGithubMaintenanceJwt("arbitrary",trust,now));
 });

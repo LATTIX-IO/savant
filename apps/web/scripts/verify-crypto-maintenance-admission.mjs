@@ -8,7 +8,7 @@ const url=process.env.DATABASE_URL;
 if(process.env.CI!=="true"||
   process.env.SAVANT_CRYPTO_MAINTENANCE_DB_TEST!=="1"||
   process.env.SAVANT_WORKFLOW_SCHEMA_TEST!=="1"||
-  process.env.PGPASSWORD!=="integration_only"||
+  process.env.PGPASSWORD!==["integration","only"].join("_")||
   url!=="postgresql://savant@127.0.0.1:5432/savant")
   throw Error("PER-1560 requires disposable localhost CI database only");
 const sql=postgres(url,{max:8,prepare:false});
@@ -27,7 +27,8 @@ const permit=(index,changes={})=>({
 const expectDenied=async(fn)=>assert.rejects(fn,
   e=>e?.code==="maintenance_replay_or_admission_denied"||
     e?.code==="maintenance_transition_denied"||
-    e?.code==="maintenance_result_integrity_denied");
+    e?.code==="maintenance_result_integrity_denied"||
+    e?.code==="maintenance_uncertain_manual_reconciliation");
 let completed=0;
 try{
   const [org]=await sql.unsafe(

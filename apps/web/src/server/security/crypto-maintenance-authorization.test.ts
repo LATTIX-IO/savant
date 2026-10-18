@@ -80,7 +80,8 @@ test("PER-1560: forged bearer, modified payload and bad signature deny",()=>{
   const forged=pieces[0]+"."+enc({...baseClaims,actor_id:"901"})+"."+pieces[2];
   assert.throws(()=>verifyGithubMaintenanceJwt(forged,trust,now),
     denied("oidc_signature_invalid"));
-  assert.throws(()=>verifyGithubMaintenanceJwt(original.slice(0,-1)+"Z",trust,now),
+  assert.throws(()=>verifyGithubMaintenanceJwt(pieces[0]+"."+pieces[1]+"."+
+    (pieces[2][0]==="A"?"B":"A")+pieces[2].slice(1),trust,now),
     denied("oidc_signature_invalid"));
   assert.throws(()=>verifyGithubMaintenanceJwt("arbitrary",trust,now));
 });
@@ -161,7 +162,7 @@ test("PER-1560: invalid grants reject unknown fields, accessors, IDs and overbro
     {maxRows:0},{maxRows:21},{maxRows:1.5},{target:"all"},
     {organizationId:"not-uuid"},{approvalId:"not-uuid"},{activeKeyId:"invalid?"},
     {backupSha256:"none"},{backupId:"../backup"},{changeTicket:"PER-0"},
-    {notBeforeMs:now-100},{expiresAtMs:now+3600000},
+    {notBeforeMs:now+200000},{expiresAtMs:now+3600000},
     {reviewerId:"0"},{githubRunAttempt:"0"}
   ])assert.throws(()=>canonicalApprovalBytes({...p,...change} as never));
   assert.throws(()=>canonicalApprovalBytes({...p,extra:"allow"} as never),

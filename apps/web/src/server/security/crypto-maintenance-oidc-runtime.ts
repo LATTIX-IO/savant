@@ -6,6 +6,11 @@
  * The fetcher MUST use system-trusted TLS and approved outbound DNS/IP policy.
  */
 import {createPublicKey,type JsonWebKey} from "node:crypto";
+import {
+  verifyGithubMaintenanceJwt,verifySignedMaintenanceApproval,
+  type MaintenanceTrustPolicy,type SignedMaintenanceApproval,
+  type VerifiedMaintenancePermit
+} from "./crypto-maintenance-authorization.ts";
 
 export class MaintenanceIssuerError extends Error{
   readonly code:string;
@@ -173,4 +178,36 @@ export async function requestGithubRunnerOidcToken(
     // verified with the pinned repository, workflow, environment and audience.
     return body.value as string;
   }finally{boundary.close();}
+}
+
+
+/** Read-only attestation of a protected maintainer run.
+ * Any actual DB migration is a SEPARATE transactionally replay-fenced step
+ * requiring real, independently recovered managed keys and restricted DB role.
+ */
+export async function verifyProtectedMaintenanceAdmission(input:{
+  env:RunnerEnv;
+  /** Pinned admin-owned identity, audience and independent review key material.
+   * Must come from privileged deployment configuration, NOT from the approval.
+   */
+  policy:Omit<MaintenanceTrustPolicy,"oidcJwks">;
+  signedApproval:SignedMaintenanceApproval;
+  fetcher?:Fetcher;
+  nowMs:number;
+}):Promise<VerifiedMaintenancePermit>{
+  const runtime=assertTrustedMaintenanceRunner(input.env);
+  if(input.policy.repositoryId!==runtime.repositoryId||
+    input.policy.expectedMainSha!==runtime.sha||
+    input.policy.issuer!==OIDC_ISSUER||
+    input.policy.audience!==OIDC_AUDIENCE)
+    deny("runner_trust_policy_mismatch");
+  const fetcher=input.fetcher??fetch;
+  // Trust comes from the authenticated issuer (not an unverified JWT header).
+  const jwks=await fetchTrustedGithubIssuerKeys(fetcher);
+  const signedJwt=await requestGithubRunnerOidcToken(input.env,fetcher);
+  const trustedPolicy={...input.policy,oidcJwks:jwks};
+  const identity=verifyGithubMaintenanceJwt(
+    signedJwt,trustedPolicy,input.nowMs);
+  return verifySignedMaintenanceApproval(
+    input.signedApproval,identity,trustedPolicy,input.nowMs);
 }

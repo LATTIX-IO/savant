@@ -17,7 +17,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const fail=(code:string):never=>{throw new MaintenanceAuthorizationError(code);};
 const safeId=(v:unknown):string=>{
   if(typeof v!=="string"||!UUID.test(v))fail("maintenance_operation_invalid");
-  return v;
+  return v as string;
 };
 type AuditAction="crypto_maintenance_admitted"|"crypto_maintenance_started"|
   "crypto_maintenance_completed"|"crypto_maintenance_uncertain";

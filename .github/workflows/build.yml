@@ -29,6 +29,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -62,6 +64,7 @@ jobs:
         if: steps.mesh_node_access.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: LATTIX-IO/mesh-node
           path: mesh-node
           token: ${{ steps.mesh_node_access.outputs.token }}
@@ -198,6 +201,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -231,6 +236,7 @@ jobs:
         if: steps.mesh_node_access.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: LATTIX-IO/mesh-node
           path: mesh-node
           token: ${{ steps.mesh_node_access.outputs.token }}
@@ -310,6 +316,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Detect mesh-node checkout access
         id: mesh_node_access
@@ -343,6 +351,7 @@ jobs:
         if: steps.mesh_node_access.outputs.enabled == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           repository: LATTIX-IO/mesh-node
           path: mesh-node
           token: ${{ steps.mesh_node_access.outputs.token }}

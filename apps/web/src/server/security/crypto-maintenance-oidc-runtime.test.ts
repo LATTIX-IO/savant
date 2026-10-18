@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {generateKeyPairSync,createPublicKey,sign} from "node:crypto";
-import {verifyGithubMaintenanceJwt} from "./crypto-maintenance-authorization.ts";
+import {
+  verifyGithubMaintenanceJwt,canonicalApprovalBytes
+} from "./crypto-maintenance-authorization.ts";
 import {
   MaintenanceIssuerError,OIDC_ISSUER,OIDC_DISCOVERY,OIDC_JWKS,
   OIDC_AUDIENCE,fetchTrustedGithubIssuerKeys,
-  assertTrustedMaintenanceRunner,requestGithubRunnerOidcToken
+  assertTrustedMaintenanceRunner,requestGithubRunnerOidcToken,
+  verifyProtectedMaintenanceAdmission
 } from "./crypto-maintenance-oidc-runtime.ts";
 
 const rsa=generateKeyPairSync("rsa",{modulusLength:2048});
@@ -195,4 +198,79 @@ test("PER-1562: blocked/failing token endpoint and malformed JWT response deny w
     ...env,ACTIONS_ID_TOKEN_REQUEST_TOKEN:"x"
   },async()=>{throw Error("no read expected");}),
     error("runner_oidc_credentials_unavailable"));
+});
+
+test("PER-1562: complete read-only protected issuer + runner + independent reviewer attestation",async()=>{
+  const at=Date.now();
+  const claims={
+    iss:OIDC_ISSUER,aud:OIDC_AUDIENCE,
+    sub:"repo:LATTIX-IO/savant:environment:savant-crypto-maintenance",
+    repository:"LATTIX-IO/savant",repository_id:env.GITHUB_REPOSITORY_ID,
+    workflow_ref:env.GITHUB_WORKFLOW_REF,ref:"refs/heads/main",
+    sha:env.GITHUB_SHA,event_name:"workflow_dispatch",
+    actor_id:"900",run_id:"118800",run_attempt:"1",
+    iat:Math.floor(at/1000)-10,nbf:Math.floor(at/1000)-10,
+    exp:Math.floor(at/1000)+180
+  };
+  const encode=(x:unknown)=>Buffer.from(JSON.stringify(x)).toString("base64url");
+  const header=encode({typ:"JWT",alg:"RS256",kid:key.kid,
+    x5t:Buffer.alloc(20,9).toString("base64url")});
+  const data=header+"."+encode(claims);
+  const jwt=data+"."+sign("RSA-SHA256",Buffer.from(data),
+    rsa.privateKey).toString("base64url");
+  const payload={
+    schema:"savant.crypto-maintenance-approval.v1" as const,
+    approvalId:"11111111-1111-4111-8111-111111111111",
+    organizationId:"22222222-2222-4222-8222-222222222222",
+    target:"ai-secrets" as const,maxRows:1,activeKeyId:"oct2026",
+    backupId:"independently-verified-restore",
+    backupSha256:"a".repeat(64),changeTicket:"PER-1562",
+    reviewerId:"901",runnerActorId:"900",githubRunId:"118800",
+    githubRunAttempt:"1",mainSha:env.GITHUB_SHA,
+    notBeforeMs:at-30000,expiresAtMs:at+180000
+  };
+  const signedApproval={
+    payload,
+    signature:sign(null,canonicalApprovalBytes(payload),
+      ed.privateKey).toString("base64url")
+  };
+  const policy={
+    repositoryId:env.GITHUB_REPOSITORY_ID,
+    expectedMainSha:env.GITHUB_SHA,
+    issuer:OIDC_ISSUER,audience:OIDC_AUDIENCE,subject:claims.sub,
+    workflowRef:env.GITHUB_WORKFLOW_REF,
+    approvalPublicKey:ed.publicKey,approvalReviewerId:"901"
+  };
+  const seen:string[]=[];
+  const fetcher=async(url:string)=>{
+    seen.push(url);
+    if(url===OIDC_DISCOVERY)return respond(metadata);
+    if(url===OIDC_JWKS)return respond({keys:[key]});
+    if(url.startsWith(env.ACTIONS_ID_TOKEN_REQUEST_URL!))
+      return respond({value:jwt});
+    throw Error("untrusted endpoint");
+  };
+  const verified=await verifyProtectedMaintenanceAdmission({
+    env,policy,signedApproval,fetcher,nowMs:at
+  });
+  assert.equal(verified.organizationId,payload.organizationId);
+  assert.equal(verified.reviewerId,"901");
+  assert.equal(verified.actorId,"900");
+  assert.equal(verified.maxRows,1);
+  assert.equal(Object.isFrozen(verified),true);
+  assert.equal(seen.length,3);
+  const noFetch=async()=>{throw Error("must reject before any network call");};
+  await assert.rejects(()=>verifyProtectedMaintenanceAdmission({
+    env,policy:{...policy,repositoryId:"999"},signedApproval,
+    fetcher:noFetch,nowMs:at
+  }),error("runner_trust_policy_mismatch"));
+  await assert.rejects(()=>verifyProtectedMaintenanceAdmission({
+    env,policy:{...policy,expectedMainSha:"f".repeat(40)},signedApproval,
+    fetcher:noFetch,nowMs:at
+  }),error("runner_trust_policy_mismatch"));
+  await assert.rejects(()=>verifyProtectedMaintenanceAdmission({
+    env,policy,signedApproval:{
+      ...signedApproval,payload:{...payload,target:"definitions"}
+    },fetcher,nowMs:at
+  }));
 });

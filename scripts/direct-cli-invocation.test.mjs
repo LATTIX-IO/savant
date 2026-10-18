@@ -49,3 +49,47 @@ for(const [name,args] of [
     assert.doesNotMatch(output,/token|secret|Authorization:\s*Bearer/i);
   });
 }
+
+
+test("PER-1455: native dry run emits a canonical plan with distinct fictitious actors",()=>{
+  const env={
+    PATH:process.env.PATH??"",SystemRoot:process.env.SystemRoot??"",
+    GITHUB_REPOSITORY:"LATTIX-IO/savant",
+    SAVANT_RELEASE_OPERATOR_ID:"12345",SAVANT_RELEASE_REVIEWER_ID:"67890",
+    SAVANT_RELEASE_REVIEWER_TYPE:"User"
+  };
+  const result=spawnSync(process.execPath,[join(directory,"release-governance-bootstrap.mjs")],{
+    env,cwd:resolve(directory,".."),encoding:"utf8",timeout:10000
+  });
+  assert.equal(result.status,0);
+  assert.equal(result.stderr.trim(),"");
+  const plan=JSON.parse(result.stdout.trim());
+  assert.equal(plan.schema,"savant.github-governance-bootstrap.v1");
+  assert.equal(plan.publicationEnabled,false);
+  assert.equal(plan.operations.length,5);
+});
+
+test("PER-1455: native apply and governance audit deny valid actors with absent tokens",()=>{
+  const env={
+    PATH:process.env.PATH??"",SystemRoot:process.env.SystemRoot??"",
+    GITHUB_REPOSITORY:"LATTIX-IO/savant",
+    SAVANT_RELEASE_OPERATOR_ID:"12345",SAVANT_RELEASE_REVIEWER_ID:"67890",
+    SAVANT_RELEASE_REVIEWER_TYPE:"User"
+  };
+  const apply=spawnSync(process.execPath,[
+    join(directory,"release-governance-bootstrap.mjs"),
+    "--apply","--confirm=PROTECT-LATTIX-IO-savant"
+  ],{env,cwd:resolve(directory,".."),encoding:"utf8",timeout:10000});
+  assert.equal(apply.status,1);
+  assert.deepEqual(JSON.parse(apply.stderr.trim()),{
+    ready:false,code:"missing_admin_token"
+  });
+  assert.equal(apply.stdout.trim(),"");
+  const audit=spawnSync(process.execPath,[
+    join(directory,"release-controls-audit.mjs")
+  ],{env,cwd:resolve(directory,".."),encoding:"utf8",timeout:10000});
+  assert.equal(audit.status,1);
+  const report=JSON.parse(audit.stdout.trim());
+  assert.equal(report.ready,false);
+  assert.ok(report.problems.includes("missing_read_token"));
+});

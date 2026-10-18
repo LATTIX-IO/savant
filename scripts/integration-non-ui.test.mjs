@@ -8,11 +8,12 @@ const root=resolve(dirname(fileURLToPath(import.meta.url)),"..");
 const workflow=readFileSync(join(root,".github/workflows/savant-typescript.yml"),"utf8");
 const schemaPath=join(root,"db/schema");
 
-test("INTEGRATION: all 35 staged schema revisions exist in strict order",()=>{
+test("INTEGRATION: first 35 schema revisions and future additions remain contiguous",()=>{
  const sql=readdirSync(schemaPath).filter(s=>/^\d{4}_.*\.sql$/.test(s)).sort();
- assert.equal(sql.length,35);
+ assert.ok(sql.length>=35,"Must preserve all 35 independently developed migrations");
  const seq=sql.map(s=>Number(s.slice(0,4)));
- assert.deepEqual(seq,Array.from({length:35},(_,i)=>i+1));
+ assert.deepEqual(seq,Array.from({length:sql.length},(_,i)=>i+1),
+   "Forward-only migration additions must not alter IDs, duplicate numbers, or create gaps");
 });
 
 test("INTEGRATION: actual isolated PostgreSQL workflow executes all four product domains",()=>{

@@ -64,7 +64,7 @@ async function boundedJSON(
   try{
     for(;;){
       let value:ReadableStreamReadResult<Uint8Array>;
-      try{value=await Promise.race([reader.read(),boundary.expired]);}
+      try{value=await Promise.race([reader!.read(),boundary.expired]);}
       catch{return deny("oidc_transport_unavailable");}
       if(value.done)break;
       total+=value.value.byteLength;
@@ -74,8 +74,8 @@ async function boundedJSON(
   }finally{
     // Never await cancellation after an adversarial stream ignores abort;
     // a pending reader must not outlive the caller's strict deadline.
-    try{void reader.cancel().catch(()=>{});}catch{/* sanitized */}
-    try{reader.releaseLock();}catch{/* pending reads are already timed out */}
+    try{void reader!.cancel().catch(()=>{});}catch{/* sanitized */}
+    try{reader!.releaseLock();}catch{/* pending reads are already timed out */}
   }
   if(!total)deny("oidc_response_invalid");
   let json:unknown;
@@ -101,7 +101,7 @@ export async function fetchTrustedGithubIssuerKeys(
     if(!Array.isArray(keys.keys)||keys.keys.length<1||keys.keys.length>10)
       deny("oidc_jwks_untrusted");
     const seen=new Set<string>(),safe:TrustedIssuerJwk[]=[];
-    for(const candidate of keys.keys){
+    for(const candidate of keys.keys as unknown[]){
       if(!candidate||typeof candidate!=="object"||Array.isArray(candidate))
         deny("oidc_jwks_untrusted");
       const key=candidate as Record<string,unknown>;
@@ -115,7 +115,7 @@ export async function fetchTrustedGithubIssuerKeys(
         if((publicKey.asymmetricKeyDetails?.modulusLength??0)<2048)
           deny("oidc_jwks_untrusted");
       }catch{return deny("oidc_jwks_untrusted");}
-      seen.add(key.kid);
+      seen.add(key.kid as string);
       safe.push(Object.freeze({
         kty:"RSA",alg:"RS256",use:"sig",kid:key.kid,
         n:key.n,e:key.e
@@ -157,7 +157,7 @@ export async function requestGithubRunnerOidcToken(
     /[\r\n]/.test(token))
     deny("runner_oidc_credentials_unavailable");
   let u:URL;
-  try{u=new URL(raw);}catch{return deny("runner_oidc_url_invalid");}
+  try{u=new URL(raw as string);}catch{return deny("runner_oidc_url_invalid");}
   if(u.protocol!=="https:"||u.port||u.username||u.password||u.hash||
     !/^[a-z0-9-]+\.actions\.githubusercontent\.com$/.test(u.hostname)||
     !u.pathname.startsWith("/")||u.pathname.length<2)
@@ -171,6 +171,6 @@ export async function requestGithubRunnerOidcToken(
       deny("runner_oidc_response_invalid");
     // No JWT claims are trusted until the issuer-signed token is separately
     // verified with the pinned repository, workflow, environment and audience.
-    return body.value;
+    return body.value as string;
   }finally{boundary.close();}
 }

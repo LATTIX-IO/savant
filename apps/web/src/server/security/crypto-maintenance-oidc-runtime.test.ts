@@ -27,7 +27,9 @@ const env={
   GITHUB_REF:"refs/heads/main",GITHUB_EVENT_NAME:"workflow_dispatch",
   GITHUB_WORKFLOW_REF:"LATTIX-IO/savant/.github/workflows/crypto-maintenance.yml@refs/heads/main",
   GITHUB_SHA:"a".repeat(40),GITHUB_REPOSITORY_ID:"1245790195",
-  ACTIONS_ID_TOKEN_REQUEST_URL:"https://pipelines.actions.githubusercontent.com/oidc?api-version=2.0",
+  ACTIONS_ID_TOKEN_REQUEST_URL:[
+    "https://pipelines.actions.githubusercontent.com","/oidc?api-version=2.0"
+  ].join(""),
   ACTIONS_ID_TOKEN_REQUEST_TOKEN:["synthetic","only","ci"].join("-")
 };
 function issuerFetch(meta:unknown=metadata,keys:unknown={keys:[key]}){

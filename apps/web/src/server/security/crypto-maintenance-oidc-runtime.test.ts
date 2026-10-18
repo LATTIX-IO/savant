@@ -148,7 +148,7 @@ test("PER-1562: protected main runtime context is mandatory before any OIDC requ
     {...env,...delta}),error("runner_not_protected_main_dispatch"));
 });
 test("PER-1562: request token only from trusted Actions runtime endpoint with fixed audience",async()=>{
-  const calls:{url:string;auth?:string;redirect?:RequestRedirect}[]=[];
+  const calls:{url:string;auth:string|undefined;redirect:RequestRedirect|undefined}[]=[];
   const fetcher=async(url:string,init:RequestInit)=>{
     calls.push({url,auth:new Headers(init.headers).get("authorization")??undefined,
       redirect:init.redirect});

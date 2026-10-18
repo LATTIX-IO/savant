@@ -57,10 +57,20 @@ export function inspectAgentStandardsBoundary(content){
   if(!preview||preview.includes("LATTIX_BOT_PAT")||
     !/token:\s*\$\{\{\s*github\.token\s*\}\}/.test(preview))
     fail("agent_sync_preview_bot_token");
+  // The old sync script and .gitmodules do not exist in this repository.
+  // Never claim drift was checked, or issue child writes before finding them.
+  if(!preview.includes("Require checked-in preview implementation")||
+    !preview.includes("scripts/sync-agent-standards.ps1")||
+    !preview.includes(".gitmodules")||
+    !preview.includes("exit 1"))
+    fail("agent_sync_preview_prerequisite_unverified");
   const ifLine=apply?.split("\n").find(x=>/^    if: /.test(x));
   if(!apply||ifLine?.slice(8).trim()!==AGENT_SYNC_GUARD||
     !/^\s{4}environment:\s*savant-release\s*$/m.test(apply)||
-    /^\s+contents:\s*write\s*$/m.test(apply))
+    /^\s+contents:\s*write\s*$/m.test(apply)||
+    !apply.includes("Refuse unsafe cross-repository mutation")||
+    !/^\s{10}exit 1\s*$/m.test(apply)||
+    /LATTIX_BOT_PAT|CHILD_REPO_PUSH_TOKEN|git push|sync-agent-standards\.ps1\s+-Write/.test(apply))
     fail("agent_sync_unreviewed_apply");
   return issues;
 }

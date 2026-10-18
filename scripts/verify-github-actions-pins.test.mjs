@@ -39,3 +39,41 @@ test("PER-1557: shell text, plain comments and non-workflow output cannot grant 
   assert.equal(inspectWorkflowPins("quoted.yml","    uses: 'actions/setup-node@v7'").findings.length,1);
   assert.equal(inspectWorkflowPins("empty.yml","    uses:").findings.length,1);
 });
+
+
+import {readFileSync} from "node:fs";
+import {inspectCheckoutCredentials,inspectAgentStandardsBoundary,inspectSeoOriginBoundary} from "./verify-github-actions-pins.mjs";
+const agentFixture=readFileSync(new URL("../.github/workflows/agent-standards-sync.yml",import.meta.url),"utf8");
+const seoFixture=readFileSync(new URL("../.github/workflows/seo-verify.yml",import.meta.url),"utf8");
+test("PER-1557: checkout must not retain even read-only git credentials",()=>{
+  const checkout="actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5";
+  const good="steps:\n  - uses: "+checkout+"\n    with:\n      persist-credentials: false\n  - run: pnpm install";
+  const bad=good.replace("persist-credentials: false","persist-credentials: true");
+  assert.deepEqual(inspectCheckoutCredentials("safe.yml",good),[]);
+  assert.equal(inspectCheckoutCredentials("leaky.yml",bad)[0].action,"checkout_persisted_credentials");
+  assert.equal(inspectCheckoutCredentials("missing.yml","steps:\n  - uses: "+checkout).length,1);
+});
+test("PER-1557: agent preview cannot receive bot credentials and apply is manually protected",()=>{
+  assert.deepEqual(inspectAgentStandardsBoundary(agentFixture),[]);
+  const replacements=[
+    ["token: \${{ github.token }}","token: \${{ secrets.LATTIX_BOT_PAT }}"],
+    ["permissions:\n  contents: read","permissions:\n  contents: write"],
+    ["github.ref == 'refs/heads/main'","github.ref != 'refs/heads/main'"],
+    ["github.repository == 'LATTIX-IO/savant'","github.repository == 'other/repository'"],
+    ["vars.SAVANT_AGENT_STANDARDS_SYNC_ENABLED == 'true'","vars.SAVANT_AGENT_STANDARDS_SYNC_ENABLED == 'false'"],
+    ["environment: savant-release","environment: unreviewed"],
+    ["default: 'false'","default: 'true'"],
+  ];
+  for(const [before,after] of replacements){
+    assert.ok(agentFixture.includes(before),"Fixture missing "+before);
+    assert.ok(inspectAgentStandardsBoundary(agentFixture.replace(before,after)).length>0,before);
+  }
+  assert.ok(inspectAgentStandardsBoundary(agentFixture.replace("  workflow_dispatch:","  push:\n    branches:\n      - main\n  workflow_dispatch:")).length>0);
+});
+test("PER-1557: caller-provided SEO origin cannot be interpolated into shell code",()=>{
+  assert.deepEqual(inspectSeoOriginBoundary(seoFixture),[]);
+  const bad=seoFixture.replace(
+    'run: node ./scripts/seo/verify-live.mjs --origin "$SEO_VERIFY_ORIGIN"',
+    'run: node ./scripts/seo/verify-live.mjs --origin "\${{ inputs.origin }}"');
+  assert.equal(inspectSeoOriginBoundary(bad)[0].action,"seo_dispatch_shell_injection");
+});

@@ -48,6 +48,8 @@ export type MaintenanceTrustPolicy={
   oidcJwks:ReadonlyArray<JsonWebKey&{kid?:string;alg?:string;use?:string}>;
   /** Independent reviewer's pinned public Ed25519 signing key. */
   approvalPublicKey:KeyObject;
+  /** Verified numeric principal owning the pinned reviewer signing key. */
+  approvalReviewerId:string;
 };
 function object(value:unknown):Record<string,unknown>{
   try{
@@ -91,6 +93,7 @@ function policy(p:MaintenanceTrustPolicy){
     p.subject!=="repo:LATTIX-IO/savant:environment:savant-crypto-maintenance"||
     p.workflowRef!=="LATTIX-IO/savant/.github/workflows/crypto-maintenance.yml@refs/heads/main"||
     !Array.isArray(p.oidcJwks)||p.oidcJwks.length<1||p.oidcJwks.length>10||
+    !numberString(p.approvalReviewerId)||
     !p.approvalPublicKey||p.approvalPublicKey.type!=="public"||
     p.approvalPublicKey.asymmetricKeyType!=="ed25519")deny("untrusted_maintenance_policy");
 }
@@ -196,7 +199,8 @@ export function verifySignedMaintenanceApproval(
   if(!cryptoVerify(null,body,trust.approvalPublicKey,sig))
     deny("approval_signature_invalid");
   const p=object(record.payload);
-  if(p.runnerActorId!==identity.actorId||
+  if(p.reviewerId!==trust.approvalReviewerId||
+    p.runnerActorId!==identity.actorId||
     p.reviewerId===identity.actorId||
     p.githubRunId!==identity.runId||
     p.githubRunAttempt!==identity.runAttempt||

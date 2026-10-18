@@ -1,0 +1,68 @@
+name: Governance Windows CLI regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/release-governance-bootstrap.mjs'
+      - 'scripts/release-controls-audit.mjs'
+      - 'scripts/direct-cli-invocation.mjs'
+      - 'scripts/direct-cli-invocation.test.mjs'
+      - '.github/workflows/governance-windows-cli.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governance-windows:
+    name: Verify native PowerShell governance CLI
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout immutable source without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Exercise Windows path equivalence and fail-closed CLI tests
+        shell: pwsh
+        run: |
+          node --test scripts/direct-cli-invocation.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Windows regression suite failed" }
+      - name: Native direct CLI and read-only reviewed-main export must print a plan
+        shell: pwsh
+        env:
+          GITHUB_REPOSITORY: LATTIX-IO/savant
+          SAVANT_RELEASE_OPERATOR_ID: '12345'
+          SAVANT_RELEASE_REVIEWER_ID: '67890'
+          SAVANT_RELEASE_REVIEWER_TYPE: User
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = & node scripts/release-governance-bootstrap.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Direct Windows plan CLI failed" }
+          $plan = $output | ConvertFrom-Json
+          if ($plan.schema -ne 'savant.github-governance-bootstrap.v1') { throw "Direct Windows CLI silently skipped" }
+          $exported = & node --input-type=module -e 'import("./scripts/release-governance-bootstrap.mjs").then(async ({executeBootstrap}) => { const r=await executeBootstrap({argv:[]}); console.log(JSON.stringify(r.plan)); })'
+          if ($LASTEXITCODE -ne 0) { throw "Reviewed-main exported plan invocation failed" }
+          $fromExport = $exported | ConvertFrom-Json
+          if ($fromExport.schema -ne $plan.schema) { throw "Exported plan did not execute" }
+      - name: Explicit apply and audit fail closed with no credential
+        shell: pwsh
+        env:
+          GITHUB_REPOSITORY: LATTIX-IO/savant
+          SAVANT_RELEASE_OPERATOR_ID: '12345'
+          SAVANT_RELEASE_REVIEWER_ID: '67890'
+          SAVANT_RELEASE_REVIEWER_TYPE: User
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GH_TOKEN) { throw "Admin token must not be provided to Windows regression" }
+          $applyOutput = & node scripts/release-governance-bootstrap.mjs --apply --confirm=PROTECT-LATTIX-IO-savant 2>&1
+          if ($LASTEXITCODE -eq 0) { throw "Administrative apply silently returned success without token" }
+          $deny = ($applyOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          if ($deny.ready -ne $false -or $deny.code -ne 'missing_admin_token') { throw "Apply did not fail closed" }
+          $auditOutput = & node scripts/release-controls-audit.mjs 2>&1
+          if ($LASTEXITCODE -eq 0) { throw "Audit silently returned success without read token" }
+          $audit = ($auditOutput -join [Environment]::NewLine) | ConvertFrom-Json
+          if ($audit.ready -ne $false -or $audit.problems -notcontains 'missing_read_token') { throw "Audit did not fail closed" }

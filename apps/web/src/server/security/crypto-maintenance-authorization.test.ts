@@ -86,6 +86,18 @@ test("PER-1560: forged bearer, modified payload and bad signature deny",()=>{
     denied("oidc_signature_invalid"));
   assert.throws(()=>verifyGithubMaintenanceJwt("arbitrary",trust,now));
 });
+test("PER-1560: genuine-style GitHub JOSE x5t is accepted but never overrides issuer key",()=>{
+  const thumbprint=Buffer.alloc(20,7).toString("base64url");
+  assert.equal(verifyGithubMaintenanceJwt(token({}, {x5t:thumbprint}),trust,now).actorId,"900");
+  for(const extra of [
+    {x5t:"bad!"},{x5t:1},{x5t:thumbprint,jku:"https://attacker.example/jwks"},
+    {x5t:thumbprint,jwk:jwk},{x5t:thumbprint,crit:["x5t"]},
+    {"x5t#S256":thumbprint}
+  ]){
+    assert.throws(()=>verifyGithubMaintenanceJwt(token({},extra),trust,now),
+      denied("untrusted_oidc_algorithm"));
+  }
+});
 test("PER-1560: unsigned, injected algorithm and unsupported key IDs never select trust key",()=>{
   for(const header of [
     {alg:"none"},{alg:"HS256"},{kid:"attacker-key"},{jwk:jwk},

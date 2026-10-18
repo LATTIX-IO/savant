@@ -1,4 +1,6 @@
 import test from "node:test";
+import {spawnSync} from "node:child_process";
+import {fileURLToPath} from "node:url";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {compileGovernancePlan,REQUIRED_RELEASE_CHECKS}
@@ -259,3 +261,20 @@ test("PER-1558: test source never dispatches releases or adjusts main, tags, env
   assert.match(src,/required_check_not_verified/);
   assert.match(src,/admin_api_rejected/);
 });
+
+
+for(const argv of [[],["--apply","--confirm=ENFORCE-SAVANT-DEPENDENCY-AUDIT"]]){
+  test("PER-1558: phase-2 CLI "+(argv.length?"apply":"plan")+
+    " must execute and fail closed without GitHub operator context",()=>{
+    const binary=fileURLToPath(new URL("./release-governance-upgrade.mjs",import.meta.url));
+    const result=spawnSync(process.execPath,[binary,...argv],{
+      env:{PATH:process.env.PATH??"",SystemRoot:process.env.SystemRoot??""},
+      encoding:"utf8",timeout:10000
+    });
+    assert.equal(result.signal,null);
+    assert.equal(result.status,1);
+    assert.match(result.stderr,/"ready":false/);
+    assert.match(result.stderr,/repository_out_of_scope/);
+    assert.doesNotMatch(result.stdout+result.stderr,/Bearer\s+\S+|ghp_/);
+  });
+}

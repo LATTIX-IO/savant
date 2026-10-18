@@ -169,6 +169,11 @@ jobs:
         env:
           SAVANT_EPHEMERAL_RESTORE_TEST: "1"
           CI: "true"
+      - name: Verify signature-gated crypto maintenance DB admission, replay holds and immutable audit
+        run: pnpm --filter @savant/web exec node ./scripts/verify-crypto-maintenance-admission.mjs
+        env:
+          SAVANT_CRYPTO_MAINTENANCE_DB_TEST: "1"
+          CI: "true"
       - name: Verify UTC tenant daily admissions, idempotency, races and no-refund controls
         run: pnpm --filter @savant/web exec node ./scripts/verify-observed-daily-quota.mjs
         env:

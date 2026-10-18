@@ -20,7 +20,8 @@ const trust={
   audience:"api://savant-crypto-maintenance",
   subject:"repo:LATTIX-IO/savant:environment:savant-crypto-maintenance",
   workflowRef:"LATTIX-IO/savant/.github/workflows/crypto-maintenance.yml@refs/heads/main",
-  oidcJwks:[rsaKey],approvalPublicKey:ed.publicKey
+  oidcJwks:[rsaKey],approvalPublicKey:ed.publicKey,
+  approvalReviewerId:"901"
 };
 const enc=(x:unknown)=>Buffer.from(JSON.stringify(x)).toString("base64url");
 function jwt(change:Record<string,unknown>={}):string{

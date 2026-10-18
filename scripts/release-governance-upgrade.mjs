@@ -1,4 +1,6 @@
 import {auditGovernance} from "./release-controls-audit.mjs";
+import {resolve} from "node:path";
+import {fileURLToPath} from "node:url";
 import {REQUIRED_RELEASE_CHECKS,makeAdminAdapter} from "./release-governance-bootstrap.mjs";
 
 const REPOSITORY="LATTIX-IO/savant";
@@ -205,7 +207,14 @@ export async function runAuditUpgrade({
     mainSha:result.mainSha,required:result.required,writes:0
   }:result)};
 }
-if(process.argv[1]?.endsWith("/release-governance-upgrade.mjs")){
+// Compare the actual entry file, not a Unix slash-only suffix: PowerShell
+// otherwise silently skips --apply without checking operator identity.
+const calledFile=process.argv[1]?resolve(process.argv[1]):null;
+const moduleFile=fileURLToPath(import.meta.url);
+const entrypoint=calledFile!==null&&
+  (process.platform==="win32"?
+    calledFile.toLowerCase()===moduleFile.toLowerCase():calledFile===moduleFile);
+if(entrypoint){
   try{console.log(JSON.stringify(await runAuditUpgrade()));}
   catch(e){
     console.error(JSON.stringify({ready:false,

@@ -5,7 +5,7 @@ This runbook covers the gap between GitHub's nine legacy PER-1221 required check
 ## Verified state on 2026-10-17
 
 - `main` commit `80e75b3651afdc5666d60203d24655be390ad7de`: `protected=false`, repository rulesets `[]`; all nine legacy required GitHub Actions App contexts are present and successful.
-- PR #95 exact tested commit `c0c5821eceefd46096d130f7da0c0caa7d6d6a18` has 3/3 green workflow runs including a separate successful `Blocking production dependency audit (high/critical)` job; zero high/critical production package advisories. PR remains draft/unmerged. A later head invalidates this cached evidence.
+- PR #95 **current exact tested commit `096ef972fee7b0cae000bf6b4b27a1e4ae6df313`** has 3/3 green workflows (quality 39137653653, CI 39137653652, submodule 39137653682), including a separately successful `Blocking production dependency audit (high/critical)` job. The October 18 security correction disabled persisted checkout credentials, removed the bot token from pull-request preview, gated cross-repository standards sync to enabled/manual/protected-main execution, and prevented manual SEO origin shell injection. Zero high/critical production advisories at that head. PR remains draft/unmerged; any subsequent head requires new exact-head evidence.
 - Vercel `savant-web`: no custom staging environment, and required TEST_BENCH_ENCRYPTION_KEY/AI_CONNECTION_ENCRYPTION_KEY entries not provisioned. No production key write, KMS restore or authenticated provider acceptance occurred.
 - Connected GitHub App has **no Administration (write)** capability to apply rulesets. Real phases below require an independent authorized operator through a separate trusted administrative session.
 
@@ -27,6 +27,12 @@ This runbook covers the gap between GitHub's nine legacy PER-1221 required check
 ### Phase 1 limitation
 
 Main currently does **not** have a successful standalone production dependency audit check, so Phase 1's existing nine-context ruleset cannot include the new check while continuing the original script's exact-head verification. Leave the release/publish flag disabled, and do not treat Phase 1 alone as completed security convergence.
+
+## October 18 — stacked phase-two verification
+
+PR #96 was reconciled onto PR #95's new security-hardened head by a **non-production** two-parent integration commit `2314ef8e328e0e9b1cead998be53a0b339d2b348`. Its source diff remains the original three governance-upgrade files; unrelated #95 security changes are inherited as the base. All three GitHub Actions workflows passed on that exact reconciliation head (CI 39138264179, TypeScript quality 39138264188, Submodule Validation 39138264244), and the preview deployment was READY.
+
+This is a stacked feature-branch qualification only. Do **not** run the phase-two updater from this branch or use a feature-branch commit as `SAVANT_RELEASE_MAIN_SHA`. An independently reviewed protected merge of #95, then #96, must precede the phase-two administrator operation. Each protected merge creates a new actual `main` SHA that must be independently inspected.
 
 ## Controlled integration boundary
 

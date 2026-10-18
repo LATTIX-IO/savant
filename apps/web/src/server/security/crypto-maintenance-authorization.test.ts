@@ -16,7 +16,8 @@ const trust={
   audience:"api://savant-crypto-maintenance",
   subject:"repo:LATTIX-IO/savant:environment:savant-crypto-maintenance",
   workflowRef:"LATTIX-IO/savant/.github/workflows/crypto-maintenance.yml@refs/heads/main",
-  oidcJwks:[jwk],approvalPublicKey:reviewer.publicKey
+  oidcJwks:[jwk],approvalPublicKey:reviewer.publicKey,
+  approvalReviewerId:"901"
 };
 const baseClaims={
   iss:trust.issuer,aud:trust.audience,sub:trust.subject,
@@ -146,7 +147,7 @@ test("PER-1560: approval signature tampering and wrong reviewer key fail closed"
 test("PER-1560: approval cannot authorize another operator, run, attempt or commit",()=>{
   const i=identity();
   const mutations=[
-    {reviewerId:"900"},{runnerActorId:"901"},
+    {reviewerId:"900"},{reviewerId:"902"},{runnerActorId:"901"},
     {githubRunId:"118801"},{githubRunAttempt:"2"},{mainSha:"c".repeat(40)},
     {notBeforeMs:now+50000},{expiresAtMs:now-5000}
   ];

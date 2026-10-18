@@ -1,0 +1,19 @@
+# ADR-0017 — Azure Entra federated identity for customer-harness Key Vault access
+
+**Status:** Server-only token exchange increment for PER-1059. No production network egress or workload identity installation is claimed.
+
+Savant is a QA plane for customer-owned AI harnesses. The previous Azure Key Vault resolver accepted a trusted injected `accessToken` callback. This increment provides `createAzureFederatedWorkloadTokenProvider` to acquire a Key Vault-specific OAuth bearer token through the Microsoft Entra workload identity federation flow, without passwords, refresh tokens, managed client secrets or tenant-provided token endpoints.
+
+The provider has fixed, deployment-owned `tenantId` and `clientId` UUID values. It retrieves a short-lived JWT assertion from an injected **trusted workload runtime**, then posts OAuth `client_credentials` with `client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer`, `client_assertion`, `client_id`, and `scope=https://vault.azure.net/.default` to `https://login.microsoftonline.com/<tenant UUID>/oauth2/v2.0/token`. It accepts only HTTP 200 JSON with Bearer access token, no refresh token, and bounded expiration; returned value is the access token string only.
+
+One AbortController deadline covers **both** possibly hung assertion acquisition and token exchange, including a response body that never completes. Incorrect HTTP statuses abort and cancel the remote body, malformed responses fail closed, and all errors use stable codes without exposing assertion, bearer, error body, or endpoint details. Request redirects and caching are disabled. No tokens are stored in PostgreSQL or logs by this module.
+
+Production trust requirements (not satisfied by unit tests):
+- The injected `readFederatedAssertion` must obtain an assertion from the deployed Azure workload identity mechanism (e.g., the AKS projected service-account token), validate provenance through the runtime and enforce issuer, subject, and audience configured in the Entra federated credential. The function itself only performs syntactic checks; **JWT syntax is not cryptographic verification**.
+- Entra exchange transport must be TLS-validated and DNS/IP-egress-pinned strictly to the intended Microsoft Entra service. The static URL restriction alone is not an SSRF/network isolation guarantee.
+- The Entra app/service principal must have least-privilege **Key Vault secrets/get** RBAC for only intended credential material. Disable credential logging; bound concurrency and monitor throttling/outages.
+- The Key Vault resolver and signed customer-harness connector retain their separate tenant+adapter secret and egress checks, and provider status remains read-only evidence, never authorization for replay.
+
+Tests cover fixed issuer exchange URL, client and Key Vault-only scope, malformed client/tenant identity, malicious assertion, token-type/TTL errors, extraneous refresh grants, HTTP errors, oversized JSON, failure/hang of assertion supplier, failure/hang of token endpoint, and response-stream cancellation. The isolated PostgreSQL integration has been extended to exercise the complete chain: federated assertion → Entra token exchange → Azure Key Vault pinned HMAC → tenant-enabled connector → signed customer-harness status lookup → immutable reconciliation evidence. Re-run all inherited Node/Python, lint/typecheck/Next build, secret scanner, blocking dependency audit, and double-applied schema migrations on the exact PR head, and require independent security review.
+
+**Scope limitation:** This does not deploy AKS identity, establish live Entra federated credentials, implement DNS/IP egress gateway controls, production signed harness traffic, cancellation reconciliation, or persistent evaluation scorecards. PER-1059 and Savant MVP remain In Progress until these operational gates are verified.

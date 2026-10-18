@@ -57,7 +57,7 @@ function object(value:unknown):Record<string,unknown>{
       (Object.getPrototypeOf(value as object)!==Object.prototype&&Object.getPrototypeOf(value)!==null))
       deny("invalid_attestation_shape");
     const d=Object.getOwnPropertyDescriptors(value as object);
-    if(Reflect.ownKeys(value).length!==Object.keys(d).length ||
+    if(Reflect.ownKeys(value as object).length!==Object.keys(d).length ||
       Object.values(d).some(x=>!("value" in x)))deny("invalid_attestation_shape");
     return Object.fromEntries(Object.entries(d).map(([k,x])=>[k,x.value]));
   }catch{return deny("invalid_attestation_shape");}

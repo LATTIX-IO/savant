@@ -1,4 +1,6 @@
 import { auditGovernance } from "./release-controls-audit.mjs";
+import {fileURLToPath} from "node:url";
+import {isDirectCliInvocation} from "./direct-cli-invocation.mjs";
 
 // This operator tool is deliberately restricted to Savant and cannot publish.
 // Live repository modification requires --apply plus exact confirmation.
@@ -254,7 +256,7 @@ export async function executeBootstrap({env=process.env,argv=process.argv.slice(
   });
   return {mode,performedWrites:result.created,result};
 }
-if(process.argv[1]?.endsWith("/release-governance-bootstrap.mjs")){
+if(isDirectCliInvocation(process.argv[1],fileURLToPath(import.meta.url))){
   try{
     const result=await executeBootstrap();
     // Never serialize reviewer IDs, tokens, policy bodies, or full API responses in apply logs.

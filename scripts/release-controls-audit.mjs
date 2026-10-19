@@ -1,3 +1,6 @@
+import {fileURLToPath} from "node:url";
+import {isDirectCliInvocation} from "./direct-cli-invocation.mjs";
+
 const REPOSITORY = /^[A-Za-z0-9_-][A-Za-z0-9_.-]*\/[A-Za-z0-9_-][A-Za-z0-9_.-]*$/;
 const CHECK_NAMES = [
   "main_default_branch", "main_protected", "main_review_rules",
@@ -132,7 +135,7 @@ export async function runGovernanceAudit(env=process.env,{fetcher=fetch}={}) {
   const reader=makeGitHubReader({token:env.GH_TOKEN,fetcher});
   return auditGovernance(repository,reader,{mode:env.SAVANT_GOVERNANCE_MODE??"audit"});
 }
-if (process.argv[1]?.endsWith("/release-controls-audit.mjs")){
+if (isDirectCliInvocation(process.argv[1],fileURLToPath(import.meta.url))){
   let report;
   try { report=await runGovernanceAudit(); }
   catch(e) {

@@ -8,6 +8,40 @@ Use an operator account with GitHub permission to create repository rulesets, co
 
 The program refuses to apply if `main` is not the default branch, if the existing controls have already been configured, if any required CI context is absent or failed on the latest `main` commit, if the release flag is enabled, or if GitHub administration evidence is missing or paginated. This bootstrap refuses known existing rulesets or environments, but GitHub's `PUT /environments/savant-release` endpoint is a **create-or-update** operation, not an atomic create-only API. If another administrator creates the environment after preflight, the request could overwrite their configuration. The script rechecks the environment immediately before PUT and refuses any newly observed environment. **This does not eliminate the time-of-check/time-of-use race** between that recheck and PUT. Run administrative apply only in an explicitly coordinated maintenance window with exclusive governance change ownership and no competing administrators, bots, or Terraform workflows. Otherwise keep dry-run only and create the environment manually under change control.
 
+## Windows PowerShell CLI compatibility — PER-1455 (October 18, 2026)
+
+The October 18 PowerShell transcript shows three silent commands on current main at 80e75b3651afdc5666d60203d24655be390ad7de: dry-run, explicit --apply and controls audit. NONE executed its CLI body. The published entrypoint used a Unix-only forward-slash suffix check, which does not match Node's native backslash-separated Windows script path. A zero exit code with missing output was NOT governance evidence. Independent GitHub API inspection still shows zero rulesets and unprotected main.
+
+The isolated patch uses path-aware exact file identity on Windows and POSIX. It preserves numeric operator verification, independent reviewer, nine App-backed checks, explicit confirmation, no-write planning, publish disabled and existing admin API safety checks. Regression tests cover native Windows paths, suffix spoof attempts and missing-operator fail-close with nonzero process exit.
+
+### Temporary trusted-main invocation before this change is protected and merged
+
+The existing reviewed main modules export the same functions that their broken CLI guards should invoke. A separately authenticated operator can invoke those exports directly without changing or resetting the working tree, and without bypassing ANY authorization, preflight or review requirement. In PowerShell 7, set the real numeric administrator and distinct independent reviewer IDs. Provision GH_TOKEN through a credential manager, never in a shell command, transcript or ticket. Do not use a GitHub App installation credential instead of a user-scoped admin token.
+
+```powershell
+$env:GITHUB_REPOSITORY = 'LATTIX-IO/savant'
+$env:SAVANT_RELEASE_OPERATOR_ID = '<verified-admin-user-id>'
+$env:SAVANT_RELEASE_REVIEWER_ID = '<different-independent-reviewer-user-id>'
+$env:SAVANT_RELEASE_REVIEWER_TYPE = 'User'
+# GH_TOKEN: short-lived securely provisioned admin token from credential manager.
+# No writes — print the complete canonical plan:
+node --input-type=module -e 'import("./scripts/release-governance-bootstrap.mjs").then(async ({executeBootstrap}) => { try { const r=await executeBootstrap({argv:[]}); console.log(JSON.stringify(r.plan,null,2)); } catch(e) { console.error(JSON.stringify({ready:false,code:e.code??"bootstrap_plan_failed"})); process.exitCode=1; } })'
+```
+
+After reading and independently approving the complete plan, AND ONLY during an exclusive authorized administrative change window with reviewed rollback/deployment safety, the identical function can perform the explicit apply:
+
+```powershell
+node --input-type=module -e 'import("./scripts/release-governance-bootstrap.mjs").then(async ({executeBootstrap}) => { try { const r=await executeBootstrap({argv:["--apply","--confirm=PROTECT-LATTIX-IO-savant"]}); console.log(JSON.stringify({mode:"apply",...r.result})); } catch(e) { console.error(JSON.stringify({ready:false,code:e.code??"bootstrap_apply_failed"})); process.exitCode=1; } })'
+```
+
+Read-only post-apply audit invoking the identical previously reviewed module:
+
+```powershell
+node --input-type=module -e 'import("./scripts/release-controls-audit.mjs").then(async ({runGovernanceAudit}) => { try { const r=await runGovernanceAudit(); console.log(JSON.stringify(r,null,2)); if(!r.ready) process.exitCode=1; } catch(e) { console.error(JSON.stringify({ready:false,code:e.code??"audit_failed"})); process.exitCode=1; } })'
+```
+
+The dry-run wrapper needs no GH_TOKEN. Apply and audit do. Require nonempty structured JSON, successful exit code, independent live GitHub ruleset/environment/API readback, and negative enforcement tests. If an apply fails after some writes, stop and reconcile manually; do not retry, delete rulesets or weaken protection. The user's transcript also displays many uncommitted working-tree files: do not reset, clean or drop these files while activating governance.
+
 ## Dry run — no GitHub requests or credentials
 
 ```sh

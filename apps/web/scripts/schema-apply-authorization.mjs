@@ -9,6 +9,7 @@ const HEX64=/^[a-f0-9]{64}$/;
 const ID=/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/;
 const KEY_ID=/^[a-z][a-z0-9_-]{0,31}$/;
 const DB_NAME=/^[a-zA-Z][a-zA-Z0-9_-]{0,62}$/;
+const DB_ROLE=/^[a-z][a-z0-9_]{2,63}$/;
 const STAGING_CONFIRM="--confirm=APPLY-SAVANT-STAGING-SCHEMA";
 const CHECKS=[
   "encryptedFullPgRestore",
@@ -74,13 +75,14 @@ function verifySignedReceipt({receiptFile,publicKeyFile,nowMs}){
   const p=envelope.payload;
   if(!exactKeys(p,[
     "schema","issuer","stageProjectId","sourceCommitSha","targetDatabaseHost",
-    "targetDatabaseName","restoredDatabaseHost","restoredDatabaseName","backupId",
+    "targetDatabaseName","targetDatabaseRole","restoredDatabaseHost","restoredDatabaseName","backupId",
     "restoreId","testBenchKeyIds","aiConnectionKeyIds","evidenceDigest",
     "issuedAt","expiresAt","checks"
   ])||p.schema!==STAGING_RECEIPT_SCHEMA||p.issuer!=="savant-owner-staging-recovery"||
   p.stageProjectId!==STAGING_PROJECT_ID||!HEX40.test(p.sourceCommitSha)||
   !HEX64.test(p.evidenceDigest)||!ID.test(p.backupId)||!ID.test(p.restoreId)||
-  !DB_NAME.test(p.targetDatabaseName)||!DB_NAME.test(p.restoredDatabaseName)||
+  !DB_NAME.test(p.targetDatabaseName)||!DB_ROLE.test(p.targetDatabaseRole)||
+  !DB_NAME.test(p.restoredDatabaseName)||
   typeof p.targetDatabaseHost!=="string"||typeof p.restoredDatabaseHost!=="string"||
   p.targetDatabaseHost===p.restoredDatabaseHost&&p.targetDatabaseName===p.restoredDatabaseName||
   !exactKeys(p.testBenchKeyIds,["legacy","active"])||
@@ -122,7 +124,10 @@ export function authorizeSchemaApply({
     !HEX40.test(env.SAVANT_SCHEMA_EXACT_MAIN_SHA||""))
     deny("remote_schema_apply_not_authorized");
   const sslmode=db.uri.searchParams.get("sslmode");
-  if(!["require","verify-full","verify-ca"].includes(sslmode))
+  if(!["require","verify-full","verify-ca"].includes(sslmode)||
+    [...db.uri.searchParams.keys()].some(k=>!["sslmode","channel_binding"].includes(k))||
+    (db.uri.searchParams.has("channel_binding")&&
+      !["prefer","require"].includes(db.uri.searchParams.get("channel_binding"))))
     deny("staging_tls_required");
   const proof=verifySignedReceipt({
     receiptFile:env.SAVANT_STAGING_RECOVERY_RECEIPT_FILE,
@@ -131,6 +136,7 @@ export function authorizeSchemaApply({
   if(proof.sourceCommitSha!==env.SAVANT_SCHEMA_EXACT_MAIN_SHA||
     proof.targetDatabaseHost.toLowerCase()!==db.host||
     proof.targetDatabaseName!==db.name||
+    proof.targetDatabaseRole!==db.uri.username||
     proof.restoredDatabaseHost.toLowerCase()===db.host&&
       proof.restoredDatabaseName===db.name||
     env.SAVANT_SCHEMA_APPLY_TARGET!=="staging")

@@ -10,9 +10,9 @@ import {
  preflightOwnerGovernance,auditOwnerGovernance,applyOwnerGovernancePlan,
  parseOwnerArguments,executeOwnerBootstrap
 } from "./owner-operated-governance.mjs";
-import {executeBootstrap} from "./release-governance-bootstrap.mjs";
+import {executeBootstrap,makeAdminAdapter} from "./release-governance-bootstrap.mjs";
 import {auditGovernance,runGovernanceAudit} from "./release-controls-audit.mjs";
-import {runAuditUpgrade} from "./release-governance-upgrade.mjs";
+import {runAuditUpgrade,REQUIRED_POST_UPGRADE_CHECKS} from "./release-governance-upgrade.mjs";
 
 const REPO="LATTIX-IO/savant",BASE="/repos/"+REPO,SHA="a".repeat(40);
 const ownerId="300",ACK="SOLE-OWNER-CI-ENFORCED";
@@ -99,6 +99,7 @@ test("PER-1572: exactly 10 App-bound checks, no bypass, zero human reviews, prot
  assert.equal(p.profile,OWNER_PROFILE);
  assert.equal(p.expectedMainSha,SHA);
  assert.equal(p.requiredCheckCount,10);
+ assert.deepEqual(OWNER_REQUIRED_CHECKS,REQUIRED_POST_UPGRADE_CHECKS,"Owner profile must never drift from enforced dependency-audit baseline");
  assert.equal(p.operations.length,6);
  const main=p.operations[2].body,tag=p.operations[3].body;
  assert.deepEqual(main.bypass_actors,[]);
@@ -318,13 +319,13 @@ test("PER-1572: explicit sole-owner dry run makes no network call, tokenless app
  let calls=0;
  const fetcher=async()=>{calls++;throw Error("should not access network");};
  const env={GITHUB_REPOSITORY:REPO};
- const r=await executeOwnerBootstrap({env,argv:cli,fetcher});
+ const r=await executeOwnerBootstrap({env,argv:cli,fetcher,adminAdapterFactory:makeAdminAdapter});
  assert.equal(r.mode,"plan");
  assert.equal(r.performedWrites,0);
  assert.equal(calls,0);
  await assert.rejects(executeOwnerBootstrap({env,argv:[
   ...cli,"--apply","--confirm="+OWNER_CONFIRMATION
- ],fetcher}),/missing_admin_token/);
+ ],fetcher,adminAdapterFactory:makeAdminAdapter}),/missing_admin_token/);
  assert.equal(calls,0);
 });
 

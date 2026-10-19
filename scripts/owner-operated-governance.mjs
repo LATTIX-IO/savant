@@ -1,6 +1,18 @@
 import {createHash} from "node:crypto";
-import {makeAdminAdapter} from "./release-governance-bootstrap.mjs";
-import {REQUIRED_POST_UPGRADE_CHECKS} from "./release-governance-upgrade.mjs";
+// Intentionally dependency-free from bootstrap/upgrade: those CLIs await this
+// module at top level, so importing them back here would create an async ESM cycle.
+const REQUIRED_POST_UPGRADE_CHECKS=Object.freeze([
+  "Savant unit, type, lint, build and secrets",
+  "Workflow schema migration and tenant integrity",
+  "Security checks",
+  "Code quality and tests",
+  "validate-submodule-pointers",
+  "Build installer linux-amd64",
+  "Build installer windows-amd64",
+  "Build installer macos-amd64",
+  "Build installer macos-arm64",
+  "Blocking production dependency audit (high/critical)"
+]);
 
 const REPOSITORY="LATTIX-IO/savant";
 const BASE="/repos/"+REPOSITORY;
@@ -248,7 +260,7 @@ export function parseOwnerArguments(argv=[]){
   return {mode:argv.length===6?"apply":"plan",operatorId,mainSha,acknowledgement:ACK};
 }
 export async function executeOwnerBootstrap({
-  env=process.env,argv=process.argv.slice(2),fetcher=fetch
+  env=process.env,argv=process.argv.slice(2),fetcher=fetch,adminAdapterFactory
 }={}){
   const parsed=parseOwnerArguments(argv);
   const plan=compileOwnerGovernancePlan({
@@ -257,7 +269,8 @@ export async function executeOwnerBootstrap({
   });
   if(parsed.mode==="plan")return {mode:"plan",plan,performedWrites:0};
   // Owner identity is bound to the live authenticated /user response, never an env flag.
-  const request=makeAdminAdapter({token:env.GH_TOKEN,fetcher});
+  if(typeof adminAdapterFactory!=="function")deny("missing_admin_adapter_factory");
+  const request=adminAdapterFactory({token:env.GH_TOKEN,fetcher});
   const result=await applyOwnerGovernancePlan(plan,{
     read:path=>request("GET",path),
     write:(method,path,body,expected)=>request(method,path,body,expected),

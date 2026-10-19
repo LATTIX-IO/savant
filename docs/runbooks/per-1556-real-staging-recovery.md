@@ -18,7 +18,9 @@ The Vercel team has an existing Neon marketplace integration. The connected tool
 
 ## Real encrypted backup and isolated restore
 
-Populate the source staging database with synthetic v1 and v2 Test Bench definitions, archived revisions, queued/results receipts, BYO provider credential fixtures, tenant isolation fixtures and idempotency HMAC evidence.
+**Bootstrap order matters:** the new remote staging database is initially empty and schema application deliberately remains blocked pending recovery acceptance. Generate the initial Savant schema and synthetic v1/v2 fixture data on the explicitly isolated **loopback CI database**, using the dedicated staging KMS-generated test keys (not production keys). Produce its first authenticated encrypted archive and restore that archive directly into the empty, separately owned staging database. Do not run the remote db:migrate shortcut to bootstrap an empty database or bypass the signed staging gate. This bootstraps a real remote database through the recovery path itself, without a circular dependency on prior remote migrations.
+
+After the initial independent restore, populate and verify the source staging database with synthetic v1 and v2 Test Bench definitions, archived revisions, queued/results receipts, BYO provider credential fixtures, tenant isolation fixtures and idempotency HMAC evidence. Take a fresh encrypted full database backup for the second isolated restore-target exercise.
 
 Create a transactionally consistent PostgreSQL custom-format backup using a **direct/unpooled** connection and stream the bytes into an approved authenticated encryption utility (for example age with a protected recovery recipient). Do not persist a plaintext dump, include database URLs in logs, or generate any production backup here. Preserve backup object ID, ciphertext SHA-256, timestamp and protected recipient key ID.
 

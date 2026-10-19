@@ -132,6 +132,7 @@ jobs:
       - name: Fail closed unless release governance is still protected
         env:
           SAVANT_GOVERNANCE_MODE: publish
+          SAVANT_RELEASE_GOVERNANCE_PROFILE: ${{ vars.SAVANT_RELEASE_GOVERNANCE_PROFILE }}
           GH_TOKEN: ${{ steps.governance_evidence.outputs.token }}
         run: node scripts/release-controls-audit.mjs
       - name: Verify GitHub signed provenance for the exact archive

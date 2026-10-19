@@ -11,7 +11,9 @@ import { runHubEval, runHubHydrate, runHubSafety, runHubSync } from "../hub/jobs
 import { createJobQueue, type BackgroundJob, type JobQueue } from "./queue.ts";
 import { internalWorkerToken, selfBaseUrl } from "./worker-auth.ts";
 import { openRepositoryFiles } from "./repository-files.ts";
+import { requirePinnedEvaluationCommit } from "./eval-source-revision.ts";
 import { createEvalGenerationStore, createSafetyScanStore } from "./stores.ts";
+import {runObservedTestBenchJob} from "../test-bench/observed-run-worker.ts";
 
 /**
  * Background work after a sync: SkillSpector safety scans and LLM↔Jev
@@ -166,7 +168,18 @@ async function runEvalGeneration(ctx: Context, job: BackgroundJob): Promise<"don
   }
 
   const root = run.sourcePath;
-  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId);
+  // Legacy unpinned jobs fail deterministically; do not retry or read mutable HEAD.
+  let commitSha: string;
+  try {
+    commitSha = requirePinnedEvaluationCommit(run.commitSha);
+  } catch {
+    await store.update(organizationId, run.id, {
+      status: "failed", completed: true,
+      error: "Evaluation source revision is missing or invalid. Sync the repository and queue a new evaluation.",
+    });
+    return "done";
+  }
+  const repo = await openRepositoryFiles(ctx.runtime, organizationId, run.repositoryId, commitSha);
   const files = await repo.readMany([`${root}/SKILL.md`, `${root}/metadata.yaml`, `${root}/eval/dataset.yaml`, `${root}/eval/rubric.yaml`, `${root}/eval/baseline.json`]);
   const instructions = files[`${root}/SKILL.md`];
   if (!instructions) {
@@ -285,7 +298,8 @@ export async function runBackgroundJobs(options: { budgetMs?: number; workers?: 
       const job = await ctx.queue.claim();
       if (!job) return;
       try {
-        const outcome = job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
+        const outcome = job.kind === "test_bench_run" ? await runObservedTestBenchJob(ctx, job)
+          : job.kind === "safety_scan" ? await runSafetyScan(ctx, job)
           : job.kind === "eval_generation" ? await runEvalGeneration(ctx, job)
           : job.kind === "hub_sync" ? await runHubSync(ctx, job)
           : job.kind === "hub_hydrate" ? await runHubHydrate(ctx, job)

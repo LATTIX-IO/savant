@@ -11,6 +11,8 @@
     "./tenant-skill-repo-contract": "./src/tenant-skill-repo-contract.ts",
     "./skill-intelligence": "./src/skill-intelligence.ts",
     "./workflow-specification": "./src/workflow-specification.ts",
-    "./capability-reference": "./src/capability-reference.ts"
+    "./capability-reference": "./src/capability-reference.ts",
+    "./harness-adapter": "./src/harness-adapter.ts",
+    "./harness-telemetry": "./src/harness-telemetry.ts"
   }
 }

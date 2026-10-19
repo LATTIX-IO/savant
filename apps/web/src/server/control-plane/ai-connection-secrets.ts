@@ -1,8 +1,7 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import {readKeyring,selectV2Key,VersionedKeyringError, type DomainKeyring} from "../security/versioned-aead-keyring.ts";
 
-const AI_CONNECTION_ENCRYPTION_ENV_NAME = "AI_CONNECTION_ENCRYPTION_KEY";
 const AI_CONNECTION_CIPHER_ALGORITHM = "aes-256-gcm";
-const AI_CONNECTION_SECRET_KEY_BYTES = 32;
 const AI_CONNECTION_SECRET_IV_BYTES = 12;
 const AI_CONNECTION_SECRET_KEY_VERSION = 1;
 
@@ -31,54 +30,48 @@ export class AIConnectionSecretStoreError extends Error {
   }
 }
 
-function decodeConfiguredSecretKey(value: string): Buffer | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  if (/^[0-9a-fA-F]{64}$/.test(trimmed)) {
-    return Buffer.from(trimmed, "hex");
-  }
-
-  try {
-    const decoded = Buffer.from(trimmed, "base64");
-    return decoded.length === AI_CONNECTION_SECRET_KEY_BYTES ? decoded : null;
-  } catch {
-    return null;
+const keyringConfig={
+  activeEnv:"AI_CONNECTION_ENCRYPTION_KEY",
+  activeIdEnv:"AI_CONNECTION_ENCRYPTION_KEY_ID",
+  legacyEnv:"AI_CONNECTION_LEGACY_ENCRYPTION_KEY",
+  previousEnv:"AI_CONNECTION_PREVIOUS_ENCRYPTION_KEYS",
+  encoding:"base64" as const,
+};
+function configuredKeyring(env:Record<string,string|undefined>):DomainKeyring{
+  try{return readKeyring(env,keyringConfig);}
+  catch(error){
+    if(error instanceof VersionedKeyringError)
+      throw new AIConnectionSecretStoreError(
+        "ai_connection_secret_key_unconfigured",
+        "Managed AI connection key material is unavailable or malformed.",
+        503,
+      );
+    throw error;
   }
 }
-
-function buildSecretAdditionalData(context: AIConnectionSecretContext): Buffer {
-  return Buffer.from(JSON.stringify({
-    organizationId: context.organizationId,
-    aiConnectionId: context.aiConnectionId,
-    provider: context.provider,
-    version: AI_CONNECTION_SECRET_KEY_VERSION,
-  }), "utf8");
+function buildSecretAdditionalData(
+  context:AIConnectionSecretContext,version:1|2=1,keyId?:string,
+):Buffer{
+  const legacy={
+    organizationId:context.organizationId,
+    aiConnectionId:context.aiConnectionId,
+    provider:context.provider,
+    version:AI_CONNECTION_SECRET_KEY_VERSION,
+  };
+  return Buffer.from(JSON.stringify(version===1?legacy:{
+    ...legacy,version:2,keyId,
+  }),"utf8");
 }
-
-export function readAIConnectionEncryptionKey(env: Record<string, string | undefined> = process.env): Buffer | null {
-  const value = env[AI_CONNECTION_ENCRYPTION_ENV_NAME];
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  return decodeConfiguredSecretKey(value);
+export function readAIConnectionEncryptionKey(
+  env:Record<string,string|undefined>=process.env,
+):Buffer|null{
+  try{return configuredKeyring(env).activeKey;}
+  catch{return null;}
 }
-
-export function requireAIConnectionEncryptionKey(env: Record<string, string | undefined> = process.env): Buffer {
-  const key = readAIConnectionEncryptionKey(env);
-
-  if (!key) {
-    throw new AIConnectionSecretStoreError(
-      "ai_connection_secret_key_unconfigured",
-      `${AI_CONNECTION_ENCRYPTION_ENV_NAME} must be configured with a 32-byte base64 or 64-char hex key before BYO-AI credentials can be stored.`,
-      503,
-    );
-  }
-
-  return key;
+export function requireAIConnectionEncryptionKey(
+  env:Record<string,string|undefined>=process.env,
+):Buffer{
+  return configuredKeyring(env).activeKey;
 }
 
 export function buildAIConnectionSecretFingerprint(secretValue: string): string {
@@ -99,10 +92,11 @@ export function encryptAIConnectionSecret(
     );
   }
 
-  const key = requireAIConnectionEncryptionKey(env);
+  const ring=configuredKeyring(env);
   const iv = randomBytes(AI_CONNECTION_SECRET_IV_BYTES);
-  const cipher = createCipheriv(AI_CONNECTION_CIPHER_ALGORITHM, key, iv);
-  cipher.setAAD(buildSecretAdditionalData(context));
+  const cipher = createCipheriv(AI_CONNECTION_CIPHER_ALGORITHM, ring.activeKey, iv);
+  cipher.setAAD(buildSecretAdditionalData(context,ring.activeId?2:1,
+    ring.activeId??undefined));
 
   const ciphertext = Buffer.concat([
     cipher.update(trimmedSecret, "utf8"),
@@ -112,14 +106,15 @@ export function encryptAIConnectionSecret(
 
   return {
     encryptedSecret: [
-      `v${AI_CONNECTION_SECRET_KEY_VERSION}`,
+      ring.activeId?"v2":"v1",
+      ...(ring.activeId?[ring.activeId]:[]),
       iv.toString("base64"),
       authTag.toString("base64"),
       ciphertext.toString("base64"),
     ].join(":"),
     secretFingerprint: buildAIConnectionSecretFingerprint(trimmedSecret),
     algorithm: AI_CONNECTION_CIPHER_ALGORITHM,
-    keyVersion: AI_CONNECTION_SECRET_KEY_VERSION,
+    keyVersion: ring.activeId?2:1,
   };
 }
 
@@ -128,34 +123,35 @@ export function decryptAIConnectionSecret(
   context: AIConnectionSecretContext,
   env: Record<string, string | undefined> = process.env,
 ): string {
-  const key = requireAIConnectionEncryptionKey(env);
-  const [version, ivBase64, authTagBase64, ciphertextBase64] = encryptedSecret.split(":");
-
-  if (version !== `v${AI_CONNECTION_SECRET_KEY_VERSION}` || !ivBase64 || !authTagBase64 || !ciphertextBase64) {
-    throw new AIConnectionSecretStoreError(
-      "ai_connection_secret_invalid",
-      "Stored AI provider credentials could not be decoded.",
-      500,
-    );
-  }
-
-  try {
-    const decipher = createDecipheriv(
-      AI_CONNECTION_CIPHER_ALGORITHM,
-      key,
-      Buffer.from(ivBase64, "base64"),
-    );
-    decipher.setAAD(buildSecretAdditionalData(context));
-    decipher.setAuthTag(Buffer.from(authTagBase64, "base64"));
-
-    return Buffer.concat([
-      decipher.update(Buffer.from(ciphertextBase64, "base64")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
+  const ring=configuredKeyring(env);
+  try{
+    if(typeof encryptedSecret!=="string"||encryptedSecret.length>8192)
+      throw Error("envelope");
+    const parts=encryptedSecret.split(":");
+    const isV2=parts[0]==="v2"&&parts.length===5;
+    if(!isV2&&(parts[0]!=="v1"||parts.length!==4))
+      throw Error("version");
+    const start=isV2?2:1;
+    const key=isV2?selectV2Key(ring,parts[1]!):ring.legacyKey;
+    const ivText=parts[start]!,tagText=parts[start+1]!,cipherText=parts[start+2]!;
+    // All newly written and historical v1 strings use standard base64.
+    const canonical=/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/;
+    if(![ivText,tagText,cipherText].every(x=>x&&canonical.test(x)))
+      throw Error("base64");
+    const iv=Buffer.from(ivText,"base64"),tag=Buffer.from(tagText,"base64");
+    const data=Buffer.from(cipherText,"base64");
+    if(iv.length!==12||tag.length!==16||
+      iv.toString("base64")!==ivText||tag.toString("base64")!==tagText||
+      data.toString("base64")!==cipherText)throw Error("length");
+    const decipher=createDecipheriv(AI_CONNECTION_CIPHER_ALGORITHM,key,iv);
+    decipher.setAAD(buildSecretAdditionalData(context,isV2?2:1,
+      isV2?parts[1]:undefined));
+    decipher.setAuthTag(tag);
+    return Buffer.concat([decipher.update(data),decipher.final()]).toString("utf8");
+  }catch{
     throw new AIConnectionSecretStoreError(
       "ai_connection_secret_decrypt_failed",
-      "Stored AI provider credentials could not be decrypted with the active server key.",
+      "Stored AI provider credentials could not be decrypted with the configured key version.",
       500,
     );
   }

@@ -192,6 +192,23 @@ function createAdapter({token,fetcher=fetch}={}){
 export async function runAuditUpgrade({
   env=process.env,argv=process.argv.slice(2),fetcher=fetch
 }={}){
+  // Owner-operated baseline installs all ten checks at bootstrap. Phase-two PUT
+  // is only valid for the existing independent-reviewer profile.
+  if(env.SAVANT_RELEASE_GOVERNANCE_PROFILE==="owner_operated"){
+    if(argv.length!==0)fail("owner_profile_has_no_phase_two_mutation");
+    if(env.GITHUB_REPOSITORY!==REPOSITORY)fail("repository_out_of_scope");
+    const request=makeAdminAdapter({token:env.GH_TOKEN,fetcher});
+    const {auditOwnerGovernance}=await import("./owner-operated-governance.mjs");
+    const report=await auditOwnerGovernance(REPOSITORY,path=>request("GET",path),{
+      mode:"audit",expectedMainSha:env.SAVANT_RELEASE_MAIN_SHA
+    });
+    if(!report.ready)fail("owner_governance_not_verified");
+    return {mode:"plan",state:"already_verified",mainSha:env.SAVANT_RELEASE_MAIN_SHA,
+      required:REQUIRED.length,writes:0,profile:"owner_operated"};
+  }
+  if(env.SAVANT_RELEASE_GOVERNANCE_PROFILE&&
+     env.SAVANT_RELEASE_GOVERNANCE_PROFILE!=="independent_reviewer")
+    fail("unknown_release_governance_profile");
   const mode=validateUpgradeArgs(argv);
   if(env.GITHUB_REPOSITORY!==REPOSITORY)fail("repository_out_of_scope");
   const {read,write}=createAdapter({token:env.GH_TOKEN,fetcher});

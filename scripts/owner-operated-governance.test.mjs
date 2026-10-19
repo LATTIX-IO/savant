@@ -299,8 +299,10 @@ test("PER-1572: no blind retry after partial write or concurrent environment cha
   }
  }),denied("partial_apply_requires_manual_reconciliation"));
  assert.equal(f.state.rulesets.length,1);
+ // Once the first active branch rule is written, protected=true may be the
+ // first observed rejection; either way the partial state must never retry.
  await assert.rejects(preflightOwnerGovernance(build(),f.read),
-  denied("existing_rulesets_require_manual_reconciliation"));
+  denied("stale_main_or_existing_protection"));
  const competing=fixture();
  let envWrites=0;
  await assert.rejects(applyOwnerGovernancePlan(build(),{

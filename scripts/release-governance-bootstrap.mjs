@@ -242,6 +242,11 @@ export function makeAdminAdapter({token,fetcher=fetch}={}) {
   };
 }
 export async function executeBootstrap({env=process.env,argv=process.argv.slice(2),fetcher=fetch}={}) {
+  // Solo-maintainer mode requires an explicit CLI opt-in, not an inherited env flag.
+  if(Array.isArray(argv)&&argv[0]==="--profile=owner_operated"){
+    const {executeOwnerBootstrap}=await import("./owner-operated-governance.mjs");
+    return executeOwnerBootstrap({env,argv,fetcher});
+  }
   const mode=validateApproval(argv);
   const plan=compileGovernancePlan({
     repository:env.GITHUB_REPOSITORY,reviewerId:env.SAVANT_RELEASE_REVIEWER_ID,
@@ -263,7 +268,7 @@ if(isDirectCliInvocation(process.argv[1],fileURLToPath(import.meta.url))){
     if(result.mode==="plan")console.log(JSON.stringify(result.plan,null,2));
     else console.log(JSON.stringify({mode:"apply",...result.result}));
   }catch(e){
-    console.error(JSON.stringify({ready:false,code:e instanceof BootstrapError?e.code:"governance_bootstrap_failed"}));
+    console.error(JSON.stringify({ready:false,code:e instanceof BootstrapError || e?.name==="OwnerGovernanceError"?e.code:"governance_bootstrap_failed"}));
     process.exitCode=1;
   }
 }

@@ -11,7 +11,7 @@ import {
 
 const sha="a".repeat(40),digest="b".repeat(64),now=1792420000000;
 const localUrl="postgresql://savant@127.0.0.1:5432/savant";
-const stageUrl="postgresql://db-staging.example.neon.tech/savant_stage?sslmode=require";
+const stageUrl="postgresql://stage_operator@db-staging.example.neon.tech/savant_stage?sslmode=require";
 const confirm="--confirm=APPLY-SAVANT-STAGING-SCHEMA";
 const allChecks={
   encryptedFullPgRestore:true,
@@ -35,7 +35,7 @@ function fixture(){
     schema:STAGING_RECEIPT_SCHEMA,
     issuer:"savant-owner-staging-recovery",stageProjectId:STAGING_PROJECT_ID,
     sourceCommitSha:sha,targetDatabaseHost:"db-staging.example.neon.tech",
-    targetDatabaseName:"savant_stage",
+    targetDatabaseName:"savant_stage",targetDatabaseRole:"stage_operator",
     restoredDatabaseHost:"restore-staging.example.neon.tech",
     restoredDatabaseName:"savant_restore",
     backupId:"encrypted-backup-20261019",
@@ -107,14 +107,18 @@ test("PER-1556: remote DDL requires exact staging project, operator intent and T
       {SAVANT_SCHEMA_EXACT_MAIN_SHA:"f".repeat(40)}
     ])assert.throws(()=>f.authorize(overrides),e=>e instanceof SchemaAuthorizationError);
     for(const url of [
-      "postgresql://db-staging.example.neon.tech/savant_stage",
-      "postgresql://db-staging.example.neon.tech/savant_stage?sslmode=disable",
-      "postgresql://db-staging.example.neon.tech/savant_stage?sslmode=prefer"
+      "postgresql://stage_operator@db-staging.example.neon.tech/savant_stage",
+      "postgresql://stage_operator@db-staging.example.neon.tech/savant_stage?sslmode=disable",
+      "postgresql://stage_operator@db-staging.example.neon.tech/savant_stage?sslmode=prefer",
+      "postgresql://stage_operator@db-staging.example.neon.tech/savant_stage?sslmode=require&options=-c_search_path%3Dpublic"
     ])assert.throws(()=>authorizeSchemaApply({
       env:f.env,argv:[confirm],databaseUrl:url,nowMs:now
     }),expectedErr("staging_tls_required"));
     assert.throws(()=>authorizeSchemaApply({
-      env:f.env,argv:[confirm],databaseUrl:"postgresql://different.neon.tech/savant_stage?sslmode=require",nowMs:now
+      env:f.env,argv:[confirm],databaseUrl:"postgresql://stage_operator@different.neon.tech/savant_stage?sslmode=require",nowMs:now
+    }),expectedErr("staging_receipt_target_mismatch"));
+    assert.throws(()=>authorizeSchemaApply({
+      env:f.env,argv:[confirm],databaseUrl:"postgresql://different_role@db-staging.example.neon.tech/savant_stage?sslmode=require",nowMs:now
     }),expectedErr("staging_receipt_target_mismatch"));
   }finally{f.close();}
 });
@@ -129,6 +133,7 @@ test("PER-1556: signed owner receipt binds exact target and old/new key custody 
     for(const change of [
       x=>{x.targetDatabaseHost="different.neon.tech";},
       x=>{x.sourceCommitSha="f".repeat(40);},
+      x=>{x.targetDatabaseRole="admin";},
       x=>{x.backupId="";},
       x=>{x.restoreId="";},
       x=>{x.stageProjectId=PRODUCTION_PROJECT_ID;},

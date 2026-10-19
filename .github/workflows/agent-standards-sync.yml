@@ -10,17 +10,6 @@ on:
       - .github/agent-standards/**
       - scripts/sync-agent-standards.ps1
       - scripts/sync-agent-standards.sh
-  push:
-    branches:
-      - main
-    paths:
-      - AGENTS.md
-      - .github/copilot-instructions.md
-      - .github/instructions/**
-      - .github/prompts/**
-      - .github/agent-standards/**
-      - scripts/sync-agent-standards.ps1
-      - scripts/sync-agent-standards.sh
   workflow_dispatch:
     inputs:
       apply:
@@ -29,7 +18,7 @@ on:
         default: 'false'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: agent-standards-sync-${{ github.ref }}
@@ -44,9 +33,19 @@ jobs:
       - name: Checkout repository with submodules
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
           submodules: recursive
-          token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
+          token: ${{ github.token }}
+
+      - name: Require checked-in preview implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f scripts/sync-agent-standards.ps1 ] || [ ! -f .gitmodules ]; then
+            echo "::error::Agent standards sync preview is unavailable: checked-in sync script and submodule manifest are required."
+            exit 1
+          fi
 
       - name: Preview drift
         id: preview
@@ -65,58 +64,19 @@ jobs:
             else
               echo "Generated child-repo standards would change after this PR lands."
               echo
-              echo "The push-to-main job applies and pushes those generated updates automatically using the configured bot token."
+              echo "Applying drift requires protected-main manual dispatch, independent environment approval, and explicit enablement."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   apply:
-    name: Apply and push generated standards
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.apply == 'true')
+    name: Apply generated standards (disabled pending PR-based design)
+    if: github.event_name == 'workflow_dispatch' && inputs.apply == 'true' && github.ref == 'refs/heads/main' && github.repository == 'LATTIX-IO/savant' && vars.SAVANT_AGENT_STANDARDS_SYNC_ENABLED == 'true'
     runs-on: ubuntu-latest
-    env:
-      CHILD_REPO_PUSH_TOKEN: ${{ secrets.LATTIX_BOT_PAT }}
+    environment: savant-release
     steps:
-      - name: Checkout repository with submodules
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          submodules: recursive
-          token: ${{ secrets.LATTIX_BOT_PAT || github.token }}
-          persist-credentials: true
-
-      - name: Verify child repository push token
-        shell: bash
-        run: |
-          if [ -z "${CHILD_REPO_PUSH_TOKEN}" ]; then
-            echo "::error::Missing required secret LATTIX_BOT_PAT. This workflow needs a bot token with contents:write access to every child repository it syncs."
-            exit 1
-          fi
-
-      - name: Configure git identity and authenticated remotes
-        shell: bash
-        run: |
-          git config --global user.name "lattix-agent-standards-bot"
-          git config --global user.email "lattix-agent-standards-bot@users.noreply.github.com"
-          git config --global url."https://x-access-token:${CHILD_REPO_PUSH_TOKEN}@github.com/".insteadOf "https://github.com/"
-          git config --global url."https://x-access-token:${CHILD_REPO_PUSH_TOKEN}@github.com/".insteadOf "git@github.com:"
-
-      - name: Apply, commit, and push child repository updates
-        shell: pwsh
-        run: ./scripts/sync-agent-standards.ps1 -Write -All -Push
-
-      - name: Commit and push updated submodule pointers
+      - name: Refuse unsafe cross-repository mutation
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t submodule_paths < <(git config --file .gitmodules --get-regexp '^submodule\..*\.path$' | awk '{print $2}')
-          if [ "${#submodule_paths[@]}" -gt 0 ]; then
-            git add -- "${submodule_paths[@]}"
-          fi
-
-          if git diff --cached --quiet; then
-            echo "No submodule pointer updates to commit."
-            exit 0
-          fi
-
-          git commit -m "chore(agent-standards): update generated standards pointers"
-          git push origin HEAD:${GITHUB_REF_NAME}
+          echo "::error::Agent standards apply is disabled until the missing sync tools exist and a reviewer-protected branch/PR promotion flow replaces direct push to protected main."
+          exit 1

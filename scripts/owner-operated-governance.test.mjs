@@ -24,7 +24,7 @@ const cli=[
 ];
 function fixture(){
  const state={
-  owner:300,sha:SHA,protected:false,publication:null,profile:null,
+  owner:300,repoId:1245790195,sha:SHA,protected:false,publication:null,profile:null,
   environment:null,branchPolicies:null,rulesets:[],writes:[],
   checkRuns:OWNER_REQUIRED_CHECKS.map(name=>({
    name,status:"completed",conclusion:"success",app:{id:15368,slug:"github-actions"}
@@ -32,7 +32,7 @@ function fixture(){
  };
  async function read(path){
   if(path==="/user")return {id:state.owner,login:"sole-maintainer"};
-  if(path===BASE)return {full_name:REPO,default_branch:"main"};
+  if(path===BASE)return {id:state.repoId,full_name:REPO,default_branch:"main"};
   if(path===BASE+"/branches/main")
     return {name:"main",protected:state.protected,commit:{sha:state.sha}};
   if(path===BASE+"/commits/"+SHA+"/check-runs?per_page=100")
@@ -97,6 +97,7 @@ test("PER-1572: exactly 10 App-bound checks, no bypass, zero human reviews, prot
  const p=build();
  assert.equal(p.schema,"savant.github-owner-governance.v1");
  assert.equal(p.profile,OWNER_PROFILE);
+ assert.equal(p.repositoryId,1245790195);
  assert.equal(p.expectedMainSha,SHA);
  assert.equal(p.requiredCheckCount,10);
  assert.deepEqual(OWNER_REQUIRED_CHECKS,REQUIRED_POST_UPGRADE_CHECKS,"Owner profile must never drift from enforced dependency-audit baseline");
@@ -161,6 +162,8 @@ test("PER-1572: read-only preflight checks actual owner, exact main SHA and all 
  assert.equal(f.state.writes.length,0);
  f.state.publication="false";
  assert.equal((await preflightOwnerGovernance(build(),f.read)).createPublication,false);
+ const wrongRepo=fixture();wrongRepo.state.repoId=888;
+ await assert.rejects(preflightOwnerGovernance(build(),wrongRepo.read),denied("repository_identity_mismatch"));
  const wrongOwner=fixture();wrongOwner.state.owner=301;
  await assert.rejects(preflightOwnerGovernance(build(),wrongOwner.read),denied("owner_identity_mismatch"));
  const stale=fixture();stale.state.sha="b".repeat(40);
@@ -215,6 +218,7 @@ test("PER-1572: canonical plan fingerprint and operations cannot be forged to en
   x=>x.operations[4].body.reviewers.push({type:"User",id:300}),
   x=>x.operations[5].body.name="*",
   x=>x.planSha256="0".repeat(64),
+  x=>x.repositoryId=888,
   x=>x.expectedMainSha="b".repeat(40),
   x=>x.profile="independent_reviewer",
   x=>x.operations.push({method:"DELETE",path:"/repos/evil",body:{}})

@@ -245,7 +245,7 @@ export async function executeBootstrap({env=process.env,argv=process.argv.slice(
   // Solo-maintainer mode requires an explicit CLI opt-in, not an inherited env flag.
   if(Array.isArray(argv)&&argv[0]==="--profile=owner_operated"){
     const {executeOwnerBootstrap}=await import("./owner-operated-governance.mjs");
-    return executeOwnerBootstrap({env,argv,fetcher});
+    return executeOwnerBootstrap({env,argv,fetcher,adminAdapterFactory:makeAdminAdapter});
   }
   const mode=validateApproval(argv);
   const plan=compileGovernancePlan({

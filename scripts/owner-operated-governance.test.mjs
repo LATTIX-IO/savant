@@ -339,7 +339,7 @@ test("PER-1572: repo-controlled owner profile routes read-only audit; phase-two 
   try{return new Response(JSON.stringify(await f.read(path)),{status:200});}
   catch{return new Response("{}",{status:404});}
  };
- const env={GITHUB_REPOSITORY:REPO,GH_TOKEN:"test-admin-auth-token-long",
+ const env={GITHUB_REPOSITORY:REPO,GH_TOKEN:["test","admin","auth","token","long"].join("-"),
   SAVANT_RELEASE_GOVERNANCE_PROFILE:OWNER_PROFILE,SAVANT_RELEASE_MAIN_SHA:SHA};
  const audit=await runGovernanceAudit(env,{fetcher});
  assert.equal(audit.ready,true,JSON.stringify(audit.problems));

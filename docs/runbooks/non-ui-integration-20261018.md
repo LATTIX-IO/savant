@@ -19,3 +19,9 @@ This tree combines source branches [PR #79](https://github.com/LATTIX-IO/savant/
 5. Phase-two ruleset upgrade #96 must operate only against the actual protected post-merge main SHA, not a draft head.
 
 Do not close original integration PRs as merged based solely on this draft, and do not delete preserved predecessor branches. The UX work remains an independent open stream.
+
+## Production database migration safety — sole-maintainer merge
+
+**Before production schema changes:** `apps/web/scripts/migrate-on-deploy.mjs` previously executed every DDL file in `db/schema` during every production Vercel build, including the 21 new revisions in this PR and modified historical revisions. This coupled code integration to an **unrecoverable automatic live database mutation**, contrary to PER-1556's required encrypted backup+managed-key restore. The integration now **always skips production DDL inside Vercel build**, including if a mistaken `SAVANT_MIGRATE_ON_BUILD=1` is set. Only explicit opt-in non-production CI builds can run it.
+
+A merge to `main` therefore ships **source only**. New endpoints requiring migrations 0015–0035, managed keys or provider entitlements must be considered unqualified / not activated until an authorized operator performs a separate migration with a validated, recoverable backup and full schema verification. Use `pnpm --filter @savant/web db:migrate` solely in the verified target context, after PER-1556 staging restore, release review and rollback preparations. Do not infer a production-ready MVP from Vercel build READY or CI tests; this keeps live DDL away from the automatic GitHub-to-Vercel bridge. `apps/web/scripts/migrate-on-deploy.test.mjs` verifies these denials as regressions.

@@ -148,7 +148,7 @@ test("PER-1572: explicit typed owner mode cannot be selected by environment drif
  assert.equal(r.performedWrites,0);
  assert.equal(r.plan.profile,OWNER_PROFILE);
  await assert.rejects(executeBootstrap({env,argv:[...cli,"--apply","--confirm="+OWNER_CONFIRMATION]}),
-  denied("missing_admin_token"));
+  /missing_admin_token/);
  await assert.rejects(executeBootstrap({env,argv:[]}),/invalid_actor_id/);
 });
 

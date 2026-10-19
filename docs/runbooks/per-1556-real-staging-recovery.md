@@ -36,7 +36,7 @@ After physical recovery has been witnessed, create a JSON envelope with exactly 
 
 Payload schema: savant.staging-recovery-acceptance.v1.
 Issuer: savant-owner-staging-recovery.
-Required values: stageProjectId, sourceCommitSha (40-character pinned source commit), targetDatabaseHost, targetDatabaseName, restoredDatabaseHost, restoredDatabaseName (distinct target), backupId, restoreId, testBenchKeyIds {legacy,active}, aiConnectionKeyIds {legacy,active}, evidenceDigest (64-character SHA-256 of actual provider/backup acceptance evidence), issuedAt and expiresAt as epoch milliseconds. Receipt validity is at most 24 hours.
+Required values: stageProjectId, sourceCommitSha (40-character pinned source commit), targetDatabaseHost, targetDatabaseName, targetDatabaseRole (distinct least-privileged stage SQL principal), restoredDatabaseHost, restoredDatabaseName (distinct target), backupId, restoreId, testBenchKeyIds {legacy,active}, aiConnectionKeyIds {legacy,active}, evidenceDigest (64-character SHA-256 of actual provider/backup acceptance evidence), issuedAt and expiresAt as epoch milliseconds. Receipt validity is at most 24 hours.
 
 The payload checks object has precisely these nine booleans, all true **only after actual tests**:
 
@@ -69,7 +69,7 @@ Then run:
 
     pnpm --filter @savant/web exec node ./scripts/apply-db-schema.mjs --confirm=APPLY-SAVANT-STAGING-SCHEMA
 
-The target URL must identify the DB host/name in the signed receipt and use TLS with sslmode=require, verify-ca or verify-full. The receipt must identify a separate restored DB, key version IDs for both domains, all nine recovery results and the exact code SHA. No staging database, managed keys or signed restoration receipt currently exist, so this command must **fail closed** in the present infrastructure. No production DDL is authorized by this procedure.
+The target URL must identify the exact DB host/name/role in the signed receipt and use TLS with sslmode=require, verify-ca or verify-full. Only the PostgreSQL sslmode and channel_binding connection URL parameters are allowed; query parameters that override roles, host targeting or session execution are refused. The receipt must identify a separate restored DB, key version IDs for both domains, all nine recovery results and the exact code SHA. No staging database, managed keys or signed restoration receipt currently exist, so this command must **fail closed** in the present infrastructure. No production DDL is authorized by this procedure.
 
 ## PER-1421 acceptance after staging
 

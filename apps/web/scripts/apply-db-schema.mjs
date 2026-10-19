@@ -4,6 +4,7 @@ import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 import postgres from "postgres";
+import {authorizeSchemaApply,SchemaAuthorizationError} from "./schema-apply-authorization.mjs";
 
 function readConfiguredDatabaseUrl(env = process.env) {
   const value = env.DATABASE_URL;
@@ -45,9 +46,25 @@ async function loadSchemaFiles() {
     .sort((left, right) => left.localeCompare(right));
 }
 
-const databaseUrl = readConfiguredDatabaseUrl();
+// DDL always uses the direct, non-pooler connection in staging; a Vercel
+// deployment and the general pooled DATABASE_URL are never an authorization.
+const env = process.env;
+const databaseUrl = readConfiguredDatabaseUrl(
+  env.SAVANT_SCHEMA_APPLY_TARGET === "staging"
+    ? {...env,DATABASE_URL:env.DATABASE_URL_UNPOOLED}
+    : env
+);
 if (!databaseUrl) {
   console.error("DATABASE_URL is not configured with a real value.");
+  process.exit(1);
+}
+try {
+  const grant=authorizeSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
+  console.log("[db:migrate] Authorized "+grant.scope+" schema target.");
+}catch(error){
+  console.error("[db:migrate] "+(
+    error instanceof SchemaAuthorizationError?error.code:"schema_authorization_failed"
+  ));
   process.exit(1);
 }
 

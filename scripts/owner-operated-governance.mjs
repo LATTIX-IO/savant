@@ -15,6 +15,7 @@ const REQUIRED_POST_UPGRADE_CHECKS=Object.freeze([
 ]);
 
 const REPOSITORY="LATTIX-IO/savant";
+const REPOSITORY_ID=1245790195; // Exact verified GitHub repo ID, not merely a reusable name.
 const BASE="/repos/"+REPOSITORY;
 const APP_ID=15368;
 const SHA=/^[a-f0-9]{40}$/;
@@ -84,7 +85,7 @@ export function compileOwnerGovernancePlan({
     {method:"POST",path:BASE+"/environments/savant-release/deployment-branch-policies",
       body:{name:"main",type:"branch"},expected:200}
   ];
-  const core={schema:SCHEMA,profile:PROFILE,repository:REPOSITORY,
+  const core={schema:SCHEMA,profile:PROFILE,repository:REPOSITORY,repositoryId:REPOSITORY_ID,
     operatorId:ownerId,expectedMainSha:mainSha,acknowledgement:ACK,
     requiredCheckCount:REQUIRED.length,publicationEnabled:false,operations};
   return {...core,planSha256:createHash("sha256").update(JSON.stringify(core)).digest("hex")};
@@ -120,7 +121,7 @@ export async function preflightOwnerGovernance(plan,read){
   if(user?.id!==canonical.operatorId||typeof user?.login!=="string"||!user.login)
     deny("owner_identity_mismatch");
   const repo=await read(BASE);
-  if(repo?.default_branch!=="main"||repo?.full_name!==REPOSITORY)
+  if(repo?.default_branch!=="main"||repo?.full_name!==REPOSITORY||repo?.id!==REPOSITORY_ID)
     deny("repository_identity_mismatch");
   const branch=await read(BASE+"/branches/main");
   if(branch?.name!=="main"||branch.protected!==false||
@@ -176,7 +177,7 @@ export async function auditOwnerGovernance(repository,read,{mode="audit",expecte
   };
   try{
     const rep=await read(BASE),branch=await read(BASE+"/branches/main");
-    checks.repository_and_main=rep?.full_name===REPOSITORY&&rep.default_branch==="main"&&
+    checks.repository_and_main=rep?.full_name===REPOSITORY&&rep?.id===REPOSITORY_ID&&rep.default_branch==="main"&&
       branch?.name==="main"&&branch.protected===true&&
       SHA.test(branch?.commit?.sha||"")&&
       (expectedMainSha===undefined||branch.commit.sha===expectedMainSha);

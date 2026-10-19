@@ -133,6 +133,12 @@ export function makeGitHubReader({token,fetcher=fetch,timeoutMs=15000}={}){
 export async function runGovernanceAudit(env=process.env,{fetcher=fetch}={}) {
   const repository=assertRepository(env.GITHUB_REPOSITORY);
   const reader=makeGitHubReader({token:env.GH_TOKEN,fetcher});
+  const profile=env.SAVANT_RELEASE_GOVERNANCE_PROFILE||"independent_reviewer";
+  if(profile==="owner_operated"){
+    const {auditOwnerGovernance}=await import("./owner-operated-governance.mjs");
+    return auditOwnerGovernance(repository,reader,{mode:env.SAVANT_GOVERNANCE_MODE??"audit"});
+  }
+  if(profile!=="independent_reviewer")fail("unknown_release_governance_profile");
   return auditGovernance(repository,reader,{mode:env.SAVANT_GOVERNANCE_MODE??"audit"});
 }
 if (isDirectCliInvocation(process.argv[1],fileURLToPath(import.meta.url))){

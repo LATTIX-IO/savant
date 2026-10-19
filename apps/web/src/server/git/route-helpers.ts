@@ -7,6 +7,7 @@ import type { ControlPlaneResponseMeta } from "@savant/types";
 import { createApiErrorResponse, createControlPlaneMeta } from "../control-plane/control-plane-response.ts";
 import { MutationRequestSecurityError } from "../control-plane/request-security.ts";
 import { TenantContextError } from "../control-plane/tenant-context.ts";
+import { isStagedTestBenchSchemaMissing } from "../test-bench/schema-readiness.ts";
 import { GitProviderError } from "./errors.ts";
 import { logGitEvent, redactString } from "./redaction.ts";
 
@@ -20,6 +21,17 @@ export function gitMeta(): ControlPlaneResponseMeta {
  * returned as a generic 500 so internals and credentials never reach clients.
  */
 export function gitErrorResponse(error: unknown): NextResponse {
+  // Staging recovery deliberately withholds Test Bench schema from production.
+  // Known PostgreSQL 42P01 errors must be a sanitized service-unavailable state,
+  // not unhandled 500s that expose table names or imply provider execution.
+  if (isStagedTestBenchSchemaMissing(error)) {
+    logGitEvent("warn", "test_bench_schema_unavailable", { error_code: "42P01" });
+    return NextResponse.json(
+      createApiErrorResponse("test_bench_schema_unavailable",
+        "Test Bench is unavailable until its database schema is activated."),
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
+  }
   if (error instanceof GitProviderError) {
     return NextResponse.json(createApiErrorResponse(error.code, redactString(error.message)), { status: error.status });
   }

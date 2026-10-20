@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import postgres from "postgres";
 import {authorizeSchemaApply,SchemaAuthorizationError} from "./schema-apply-authorization.mjs";
+import {authorizeProductionMvpSchemaApply,ProductionSchemaAuthorizationError} from "./production-schema-authorization.mjs";
 import {assertStagingRoleReadiness,STAGING_ROLE_QUERY} from "./staging-role-preflight.mjs";
 
 function readConfiguredDatabaseUrl(env = process.env) {
@@ -51,7 +52,7 @@ async function loadSchemaFiles() {
 // deployment and the general pooled DATABASE_URL are never an authorization.
 const env = process.env;
 const databaseUrl = readConfiguredDatabaseUrl(
-  env.SAVANT_SCHEMA_APPLY_TARGET === "staging"
+  ["staging", "production-mvp"].includes(env.SAVANT_SCHEMA_APPLY_TARGET)
     ? {...env,DATABASE_URL:env.DATABASE_URL_UNPOOLED}
     : env
 );
@@ -61,11 +62,18 @@ if (!databaseUrl) {
 }
 let grant;
 try {
-  grant=authorizeSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
+  // Production MVP is an explicit offline operator path. It never changes
+  // the Vercel build migration restriction or introduces a remote DDL endpoint.
+  if (env.SAVANT_SCHEMA_APPLY_TARGET === "production-mvp") {
+    grant=authorizeProductionMvpSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
+  } else {
+    grant=authorizeSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
+  }
   console.log("[db:migrate] Authorized "+grant.scope+" schema target.");
 }catch(error){
   console.error("[db:migrate] "+(
-    error instanceof SchemaAuthorizationError?error.code:"schema_authorization_failed"
+    error instanceof SchemaAuthorizationError || error instanceof ProductionSchemaAuthorizationError
+      ?error.code:"schema_authorization_failed"
   ));
   process.exit(1);
 }
@@ -96,7 +104,7 @@ const sql = postgres(databaseUrl, {
 });
 
 try {
-  if (grant.scope === "signed-staging-only") {
+  if (grant.scope === "signed-staging-only" || grant.scope === "signed-production-mvp") {
     try {
       const expected = new URL(databaseUrl);
       const rows = await sql.unsafe(STAGING_ROLE_QUERY);

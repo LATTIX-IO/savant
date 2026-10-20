@@ -53,3 +53,20 @@ test("v2 primitives are pure presentation components, with no storage, network, 
   assert.match(css, /\.surface\s*\{/);
   assert.doesNotMatch(css, /^\s*(?:html|body|:root)\s*\{/m);
 });
+
+test("single operational palette is scoped to the v2 surface, not classic or marketing pages", () => {
+  const tokens = readFileSync(fileURLToPath(new URL("./operational-tokens.module.css", import.meta.url)), "utf8");
+  const layout = readFileSync(fileURLToPath(new URL("./ui-v2.module.css", import.meta.url)), "utf8");
+  const components = readFileSync(fileURLToPath(new URL("./index.tsx", import.meta.url)), "utf8");
+  assert.match(tokens, /--sv2-accent:\s*#1f5fd6;/);
+  assert.match(tokens, /--sv2-bg:\s*#f4f4f1;/);
+  assert.match(tokens, /html\[data-theme="dark"\]/);
+  assert.doesNotMatch(tokens, /^\s*(?:html|body|:root)\s*\{/m);
+  assert.doesNotMatch(layout, /--sv2-accent:\s*#/);
+  assert.match(components, /tokenStyles\.tokens/);
+  for (const name of ["UiV2PageHeader", "UiV2Breadcrumbs", "UiV2StateBanner",
+    "UiV2Dialog", "UiV2InspectorDrawer", "UiV2SplitPane", "UiV2CanvasRegion"]) {
+    assert.ok(components.includes(`export function ${name}`), name);
+  }
+  assert.match(components, /dialog\.showModal\(\)/);
+});

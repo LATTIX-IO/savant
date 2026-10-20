@@ -3,7 +3,7 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
-import type { ButtonHTMLAttributes, HTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { useEffect, useRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from "react";
 
 import {
   isSafeUiV2InternalHref,
@@ -14,6 +14,7 @@ import {
   type UiV2Status as UiV2StatusKind,
 } from "./contracts";
 import styles from "./ui-v2.module.css";
+import tokenStyles from "./operational-tokens.module.css";
 
 const plexSans = IBM_Plex_Sans({
   subsets: ["latin"], weight: ["400", "500", "600"], display: "swap",
@@ -29,7 +30,7 @@ export function UiV2Surface({
 }: HTMLAttributes<HTMLDivElement> & { density?: UiV2Density; children: ReactNode }) {
   return (
     <div {...props} data-savant-ui="v2" data-density={normalizeUiV2Density(density)}
-      className={`${styles.surface} ${plexSans.variable} ${plexMono.variable} ${className}`.trim()}>
+      className={`${tokenStyles.tokens} ${styles.surface} ${plexSans.variable} ${plexMono.variable} ${className}`.trim()}>
       {children}
     </div>
   );
@@ -128,4 +129,82 @@ export function UiV2Disclosure({
   return <details className={styles.disclosure}><summary>{label}</summary>
     <div className={styles.disclosureContent}>{children}</div>
   </details>;
+}
+
+/** Shared UX-00 workbench header with optional, permission-backed actions. */
+export function UiV2PageHeader({ title, eyebrow, description, actions }: {
+  title: string; eyebrow?: string; description?: string; actions?: ReactNode;
+}) {
+  return <header className={styles.pageHeader}>
+    <div>{eyebrow ? <div className={styles.pageEyebrow}>{eyebrow}</div> : null}
+      <h1>{title}</h1>{description ? <p>{description}</p> : null}</div>
+    {actions ? <div className={styles.pageActions}>{actions}</div> : null}
+  </header>;
+}
+
+export function UiV2Breadcrumbs({ items }: {
+  items: readonly { label: string; href?: string | null }[];
+}) {
+  return <nav className={styles.crumbs} aria-label="Breadcrumbs">
+    {items.map((item, index) => <span key={index}>
+      {index > 0 ? <span aria-hidden="true"> / </span> : null}
+      {item.href && isSafeUiV2InternalHref(item.href)
+        ? <Link href={item.href as Route}>{item.label}</Link>
+        : <span aria-current={index === items.length - 1 ? "page" : undefined}>{item.label}</span>}
+    </span>)}
+  </nav>;
+}
+
+export function UiV2StateBanner({ state, label, children }: {
+  state: UiV2StatusKind; label: string; children?: ReactNode;
+}) {
+  return <div className={styles.banner} role={state === "failed" ? "alert" : "status"}>
+    <UiV2Status state={state} label={label} />{children ? <span>{children}</span> : null}
+  </div>;
+}
+
+/** Native modal owns focus trapping; Escape requests a controlled close. */
+export function UiV2Dialog({ id, title, open, onClose, children, actions, drawer = false }: {
+  id: string; title: string; open: boolean; onClose: () => void; children: ReactNode;
+  actions?: ReactNode; drawer?: boolean;
+}) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = ref.current;
+    if (!dialog) return;
+    if (open && !dialog.open) dialog.showModal();
+    if (!open && dialog.open) dialog.close();
+  }, [open]);
+  return <dialog ref={ref} aria-labelledby={`${id}-title`}
+    className={`${styles.dialog} ${drawer ? styles.drawer : ""}`}
+    onClose={onClose} onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className={styles.dialogHead}>
+      <h2 id={`${id}-title`}>{title}</h2>
+      <UiV2Button size="small" aria-label="Close" onClick={onClose}>Close</UiV2Button>
+    </header>
+    <div className={styles.dialogBody}>{children}</div>
+    {actions ? <footer className={styles.dialogActions}>{actions}</footer> : null}
+  </dialog>;
+}
+
+export function UiV2InspectorDrawer(props: Omit<Parameters<typeof UiV2Dialog>[0], "drawer">) {
+  return <UiV2Dialog {...props} drawer />;
+}
+
+export function UiV2SplitPane({ children, inspector }: {
+  children: ReactNode; inspector: ReactNode;
+}) {
+  return <div className={styles.splitPane}>
+    <section className={styles.splitMain}>{children}</section>
+    <aside className={styles.splitInspector} aria-label="Inspector">{inspector}</aside>
+  </div>;
+}
+
+/** Canvas presence never asserts executable workflow capability. */
+export function UiV2CanvasRegion({ label, children, unavailable }: {
+  label: string; children: ReactNode; unavailable?: string;
+}) {
+  return <div role="region" aria-label={label} tabIndex={0} className={styles.canvasRegion}>
+    {unavailable ? <UiV2StateBanner state="unavailable" label={unavailable} /> : children}
+  </div>;
 }

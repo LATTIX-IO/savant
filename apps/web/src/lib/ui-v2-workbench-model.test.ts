@@ -47,6 +47,14 @@ test("workbench provenance and comparison never substitute an invented source re
   assert.deepEqual(workbenchChangeStats("a\nb","a\nb\nc"),
     {originalLines:2,proposedLines:3,changed:true});
 });
+test("Workbench mode buttons expose pressed states and reload protects invalid unsent drafts", () => {
+  const src = readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.tsx", import.meta.url)), "utf8");
+  for (const mode of ["edit", "preview", "review"]) {
+    assert.ok(src.includes('aria-pressed={mode === "' + mode + '"}'));
+  }
+  assert.match(src, /comparison\?\.changed && !window\.confirm/);
+});
+
 test("workbench has no direct commit, fake success or unsafe HTML rendering", () => {
   const src = readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.tsx", import.meta.url)), "utf8");
   assert.match(src,/proposeFileEdits/);

@@ -7,7 +7,7 @@ import { buildTenantScopedControlPlanePath } from "./control-plane-client.ts";
 
 import {
   filterUiV2Repositories, filterUiV2Skills, getUiV2Kpi, getUiV2RepositoryHealth,
-  safeUiV2Count, uiV2ProvenanceNote,
+  nextUiV2LibrarySection, safeUiV2Count, uiV2ProvenanceNote,
 } from "./ui-v2-library-model.ts";
 
 const baseSkill = {
@@ -29,6 +29,17 @@ test("filtering handles names, owners, repositories and status without modifying
   assert.deepEqual(filterUiV2Skills(originals, "repo-a", "candidate"), [b]);
   assert.deepEqual(filterUiV2Skills(originals, "no such record", "all"), []);
   assert.equal(originals.length, 2);
+});
+
+test("Library tabs implement accessible arrow/Home/End navigation without browser-driven data", () => {
+  assert.equal(nextUiV2LibrarySection("skills", "ArrowRight"), "repositories");
+  assert.equal(nextUiV2LibrarySection("repositories", "ArrowLeft"), "skills");
+  assert.equal(nextUiV2LibrarySection("skills", "ArrowLeft"), "repositories");
+  assert.equal(nextUiV2LibrarySection("repositories", "ArrowRight"), "skills");
+  assert.equal(nextUiV2LibrarySection("repositories", "Home"), "skills");
+  assert.equal(nextUiV2LibrarySection("skills", "End"), "repositories");
+  assert.equal(nextUiV2LibrarySection("skills", "Escape"), null);
+  assert.equal(nextUiV2LibrarySection("skills", "Tab"), null);
 });
 
 test("repository list is filtered without modifying tenant source data", () => {

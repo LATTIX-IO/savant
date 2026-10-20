@@ -17,7 +17,7 @@ import { fetchRepositoryList, fetchSkillList } from "@/lib/control-plane-client"
 import { buildSkillDetailPath } from "@/lib/skill-paths";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
-  filterUiV2Repositories, filterUiV2Skills, getUiV2RepositoryHealth,
+  filterUiV2Repositories, filterUiV2Skills, getUiV2RepositoryHealth, nextUiV2LibrarySection,
   safeUiV2Count, uiV2ProvenanceNote, type LibrarySection, type LibraryStage,
 } from "@/lib/ui-v2-library-model";
 import styles from "./ui-v2-pages.module.css";
@@ -116,11 +116,21 @@ export function LibraryV2() {
       </div>
 
       <div className={styles.toolbar}>
-        <div className={styles.tabs} role="tablist" aria-label="Library sections">
+        <div className={styles.tabs} role="tablist" aria-label="Library sections"
+          onKeyDown={event => {
+            const next = nextUiV2LibrarySection(section, event.key);
+            if (next === null) return;
+            event.preventDefault();
+            setSection(next);
+            const id = next === "skills" ? "#sv2-skills-tab" : "#sv2-repos-tab";
+            event.currentTarget.querySelector<HTMLButtonElement>(id)?.focus();
+          }}>
           <button id="sv2-skills-tab" type="button" role="tab" aria-controls="sv2-library-list"
-            aria-selected={section === "skills"} onClick={() => setSection("skills")}>Skills</button>
+            aria-selected={section === "skills"} tabIndex={section === "skills" ? 0 : -1}
+            onClick={() => setSection("skills")}>Skills</button>
           <button id="sv2-repos-tab" type="button" role="tab" aria-controls="sv2-library-list"
-            aria-selected={section === "repositories"} onClick={() => setSection("repositories")}>Repositories</button>
+            aria-selected={section === "repositories"} tabIndex={section === "repositories" ? 0 : -1}
+            onClick={() => setSection("repositories")}>Repositories</button>
         </div>
         <label className={styles.search}>
           <span className={styles.visuallyHidden}>Search {section}</span>

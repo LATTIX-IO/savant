@@ -3,6 +3,18 @@ import type { OverviewKpi, OverviewPayload, RepositoryListItem, SkillListItem } 
 export type LibrarySection = "skills" | "repositories";
 export type LibraryStage = "all" | "production" | "staging" | "draft" | "candidate";
 
+// Accessible tabs: arrow keys activate the adjacent tab and Home/End choose the first/last.
+export function nextUiV2LibrarySection(current: LibrarySection, key: string): LibrarySection | null {
+  switch (key) {
+    case "ArrowLeft":
+    case "ArrowRight":
+      return current === "skills" ? "repositories" : "skills";
+    case "Home": return "skills";
+    case "End": return "repositories";
+    default: return null;
+  }
+}
+
 export function filterUiV2Skills(
   skills: readonly SkillListItem[],
   term: string,

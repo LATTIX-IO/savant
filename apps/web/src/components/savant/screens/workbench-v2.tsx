@@ -170,7 +170,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
           <Link className={styles.linkButton} href={evaluationDetailHref}>Evaluations</Link>
           <UiV2Button variant="tertiary" disabled={saveBusy}
             onClick={() => {
-              if (gate.kind === "ready" && !window.confirm("Discard the unsent draft and reload the current repository source?")) return;
+              if (comparison?.changed && !window.confirm("Discard the unsent draft and reload the current repository source?")) return;
               setRetry(value => value + 1);
             }}>
             <Ic.Refresh className={styles.icon} aria-hidden="true" />Reload source
@@ -203,11 +203,11 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
         <section className={styles.editorPanel} aria-label="SKILL.md source editor">
           <div className={styles.editorToolbar}>
             <div className={styles.tabs} role="group" aria-label="Workbench viewing mode">
-              <UiV2Button size="small" variant={mode === "edit" ? "primary" : "default"}
+              <UiV2Button size="small" variant={mode === "edit" ? "primary" : "default"} aria-pressed={mode === "edit"}
                 onClick={() => setMode("edit")}>Edit</UiV2Button>
-              <UiV2Button size="small" variant={mode === "preview" ? "primary" : "default"}
+              <UiV2Button size="small" variant={mode === "preview" ? "primary" : "default"} aria-pressed={mode === "preview"}
                 onClick={() => setMode("preview")}>Preview</UiV2Button>
-              <UiV2Button size="small" variant={mode === "review" ? "primary" : "default"}
+              <UiV2Button size="small" variant={mode === "review" ? "primary" : "default"} aria-pressed={mode === "review"}
                 onClick={() => setMode("review")}>Compare</UiV2Button>
             </div>
             {comparison ? <span className={styles.muted}>Original {comparison.originalLines} lines · Draft {comparison.proposedLines} lines</span> : null}

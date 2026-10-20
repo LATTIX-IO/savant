@@ -2,8 +2,9 @@
 "use strict";
 
 // Real authenticated Savant UI v2 browser acceptance. No mock sessions and no
-// write-side effects. Must be run against an isolated, explicitly authorized
-// staging origin with an existing genuine Auth0 browser storage-state file.
+// write-side effects. Isolated staging remains the default. An owner-only
+// synthetic-data production pilot is possible with an exact local opt-in.
+// Neither path stores Auth0 browser credentials in source control.
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
@@ -17,6 +18,7 @@ const REQUIRED = [
   "SAVANT_UAT_WORKSPACE_DENIED",
   "SAVANT_UAT_SKILL_UUID",
 ];
+const OWNER_PRODUCTION_ACK = "OWNER-READONLY-PRODUCTION-SYNTHETIC-UX";
 const PRODUCTION_HOSTS = new Set([
   "savantskills.app", "www.savantskills.app", "savantrepo.com",
   "www.savantrepo.com", "savant-web-jmsbooths-projects.vercel.app",
@@ -41,9 +43,18 @@ function parseConfiguration(env) {
     throw new Error("Staging URL must be an HTTPS origin without credentials, path, port or query.");
   }
   const hostname = url.hostname.toLowerCase();
-  if (PRODUCTION_HOSTS.has(hostname) || hostname.endsWith(".savantskills.app") ||
-      hostname.endsWith(".savantrepo.com")) {
-    throw new Error("Production-origin browser acceptance is prohibited.");
+  const productionReadOnly = PRODUCTION_HOSTS.has(hostname);
+  // Full staging is deferred for the sole-owner, no-customer pilot, but the
+  // production read-only exception must never admit arbitrary subdomains or
+  // accidentally accept a production origin in the normal staging mode.
+  if (productionReadOnly && (
+      env.SAVANT_UAT_OWNER_PRODUCTION_ACK !== OWNER_PRODUCTION_ACK ||
+      env.SAVANT_UAT_SYNTHETIC_TENANTS !== "true")) {
+    throw new Error("Production-origin browser acceptance requires an explicit owner read-only synthetic-tenant acknowledgment.");
+  }
+  if (!productionReadOnly && (hostname.endsWith(".savantskills.app") ||
+      hostname.endsWith(".savantrepo.com"))) {
+    throw new Error("Unrecognized production-domain subdomains are not authorized for browser acceptance.");
   }
   const workspaces = [
     env.SAVANT_UAT_WORKSPACE_A, env.SAVANT_UAT_WORKSPACE_B,
@@ -74,7 +85,7 @@ function parseConfiguration(env) {
     throw new Error("Browser state has no cookies scoped to the authorized staging origin.");
   }
   return Object.freeze({
-    origin: url.origin, hostname, statePath,
+    origin: url.origin, hostname, statePath, productionReadOnly,
     workspaceA: workspaces[0], workspaceB: workspaces[1],
     workspaceDenied: workspaces[2], skillId: env.SAVANT_UAT_SKILL_UUID,
   });
@@ -203,7 +214,8 @@ async function run(env = process.env) {
       } finally { await context.close(); }
     }
     process.stdout.write("PASS " + completed + "/" + CASES.length +
-      " authenticated viewport/theme journeys; local-only screenshots: " + output + "\n");
+      " authenticated " + (config.productionReadOnly ? "owner production read-only" : "staging") +
+      " viewport/theme journeys; local-only screenshots: " + output + "\n");
   } finally { await browser.close(); }
 }
 

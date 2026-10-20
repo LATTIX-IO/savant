@@ -1,5 +1,5 @@
 import { buildTenantAppPath } from "./tenant-paths.ts";
-import { buildSavantShellBreadcrumbs, type SavantShellCounts, type SavantShellCrumb } from "./shell-state";
+import { buildSavantShellBreadcrumbs, type SavantShellCounts, type SavantShellCrumb } from "./shell-state.ts";
 
 export type UiV2NavGroup = "workspace" | "library" | "quality" | "integrations" | "governance" | "system";
 export type UiV2NavId = "overview" | "skills" | "repositories" | "catalog" | "evaluations" |

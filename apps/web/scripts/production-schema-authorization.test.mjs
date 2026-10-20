@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {generateKeyPairSync, sign} from "node:crypto";
+import {generateKeyPairSync, randomBytes, sign} from "node:crypto";
 import {mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {tmpdir} from "node:os";
@@ -13,7 +13,7 @@ import {
 const sha="a".repeat(40),digest="b".repeat(64),now=1792512000000;
 const sourceUrl=new URL("postgresql://ep-prod.us-east-1.aws.neon.tech/savant?sslmode=require");
 sourceUrl.username="owner";
-sourceUrl.password="synthetic-only";
+sourceUrl.password=randomBytes(16).toString("hex");
 const url=sourceUrl.toString();
 const deny=code=>error=>error instanceof ProductionSchemaAuthorizationError && error.code===code;
 function fixture() {
@@ -115,7 +115,7 @@ test("PER-1592: reject pooled, unencrypted, wrong host/db/role and URL injection
       url.replace("/savant?","/main?"),
       url.replace("//owner:","//superuser:"),
       url.replace("neon.tech","attacker.example"),
-      url.replace("synthetic-only","synthetic-only%0Ainjected")
+      url.replace(sourceUrl.password,sourceUrl.password+"%0Ainjected")
     ])assert.throws(()=>f.run({databaseUrl}),e=>e instanceof ProductionSchemaAuthorizationError,databaseUrl.includes("password")?"invalid URL":"invalid");
   }finally{f.close();}
 });

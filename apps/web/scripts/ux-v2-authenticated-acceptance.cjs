@@ -154,6 +154,9 @@ async function performMainJourney(page, config, label, output) {
   // Do not submit: this is a read-only browser acceptance, not a Git mutation.
   await assertNoOuterOverflow(page);
   await page.screenshot({ path: path.join(output, label + "-workbench.png") });
+  // Discard the synthetic unsent draft before exercising browser history so a
+  // genuine beforeunload guard cannot interrupt navigation or mutate Git.
+  await page.getByRole("button", { name: "Discard draft" }).click();
 
   // Same-tenant deep links and client-side browser history must remain stable.
   // No writes: the draft above is reviewed but never submitted.

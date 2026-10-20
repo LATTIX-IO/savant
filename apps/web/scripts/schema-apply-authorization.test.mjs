@@ -141,6 +141,8 @@ test("PER-1556: signed owner receipt binds exact target and old/new key custody 
       x=>{x.aiConnectionKeyIds.legacy="";},
       x=>{x.restoredDatabaseHost=x.targetDatabaseHost;
         x.restoredDatabaseName=x.targetDatabaseName;},
+      x=>{x.restoredDatabaseHost=x.targetDatabaseHost.toUpperCase();
+        x.restoredDatabaseName="distinct_restore_db";},
       x=>{x.checks.wrongKeyDenied=false;},
       x=>{x.checks.encryptedFullPgRestore=false;},
       x=>{x.evidenceDigest="bad";},

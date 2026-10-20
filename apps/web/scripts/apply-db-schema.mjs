@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import postgres from "postgres";
 import {authorizeSchemaApply,SchemaAuthorizationError} from "./schema-apply-authorization.mjs";
+import {assertStagingRoleReadiness,STAGING_ROLE_QUERY} from "./staging-role-preflight.mjs";
 
 function readConfiguredDatabaseUrl(env = process.env) {
   const value = env.DATABASE_URL;
@@ -58,8 +59,9 @@ if (!databaseUrl) {
   console.error("DATABASE_URL is not configured with a real value.");
   process.exit(1);
 }
+let grant;
 try {
-  const grant=authorizeSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
+  grant=authorizeSchemaApply({env,argv:process.argv.slice(2),databaseUrl});
   console.log("[db:migrate] Authorized "+grant.scope+" schema target.");
 }catch(error){
   console.error("[db:migrate] "+(
@@ -94,6 +96,19 @@ const sql = postgres(databaseUrl, {
 });
 
 try {
+  if (grant.scope === "signed-staging-only") {
+    try {
+      const expected = new URL(databaseUrl);
+      const rows = await sql.unsafe(STAGING_ROLE_QUERY);
+      assertStagingRoleReadiness(rows, {
+        expectedRole: decodeURIComponent(expected.username),
+        expectedDatabase: decodeURIComponent(expected.pathname.slice(1)),
+      });
+    } catch {
+      console.error("[db:migrate] staging_role_preflight_unavailable");
+      process.exit(1);
+    }
+  }
   for (const schemaFile of schemaFiles) {
     const schemaPath = path.join(SCHEMA_DIR, schemaFile);
     const schemaSql = await readFile(schemaPath, "utf8");

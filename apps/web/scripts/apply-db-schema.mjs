@@ -106,7 +106,8 @@ try {
       });
     } catch {
       console.error("[db:migrate] staging_role_preflight_unavailable");
-      process.exit(1);
+      process.exitCode = 1;
+      throw new Error("staging_role_preflight_unavailable");
     }
   }
   for (const schemaFile of schemaFiles) {

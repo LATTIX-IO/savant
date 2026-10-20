@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- self-contained Node CommonJS operational test, using an operator-injected Playwright installation */
 "use strict";
 const assert = require("node:assert/strict");
 const fs = require("node:fs");

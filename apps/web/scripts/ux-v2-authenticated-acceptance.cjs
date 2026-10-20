@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- self-contained Node CommonJS operational test, using an operator-injected Playwright installation */
 "use strict";
 
 // Real authenticated Savant UI v2 browser acceptance. No mock sessions and no

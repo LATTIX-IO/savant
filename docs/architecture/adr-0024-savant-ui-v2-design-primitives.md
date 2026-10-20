@@ -1,4 +1,4 @@
-# ADR-0022: Scope the UX-P1 design system to the application
+# ADR-0024: Scope the UX-P1 design system to the application
 
 **Status:** Proposed (UX-P1)
 

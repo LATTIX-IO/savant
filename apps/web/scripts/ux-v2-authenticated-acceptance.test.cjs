@@ -55,7 +55,15 @@ test("cross-viewport UAT declares both themes at every supported responsive widt
 
 test("owner production read-only UAT needs exact two-part opt-in and a known production domain", () => {
   const ack = "OWNER-READONLY-PRODUCTION-SYNTHETIC-UX";
-  const production = { ...valid, SAVANT_UAT_BASE_URL: "https://savantskills.app/" };
+  // The positive production test must use a production-origin cookie fixture,
+  // not the intentionally staging-scoped cookie used by default negative tests.
+  const prodState = path.join(dir, "production-auth.json");
+  fs.writeFileSync(prodState, JSON.stringify({cookies: [
+    "savantskills.app", "www.savantskills.app", "savantrepo.com",
+    "savant-web-jmsbooths-projects.vercel.app",
+  ].map(domain => ({name:"test",value:"fake",domain,path:"/",expires:-1})), origins: []}));
+  const production = { ...valid, SAVANT_UAT_BASE_URL: "https://savantskills.app/",
+    SAVANT_UAT_STORAGE_STATE: prodState };
   assert.throws(() => parseConfiguration({ ...production,
     SAVANT_UAT_OWNER_PRODUCTION_ACK: ack }),
     /requires an explicit owner read-only synthetic-tenant acknowledgment/);

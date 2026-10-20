@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { EMPTY_SAVANT_SHELL_DATA } from "./shell-state.ts";
 import {
-  buildUiV2Crumbs, buildUiV2WorkspaceSwitchPath, getUiV2Navigation,
+  buildUiV2Crumbs, buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath,
+  getUiV2Navigation, resolveUiV2Route,
   isUiV2EnabledForWorkspace, UI_V2_NAV_GROUPS,
 } from "./ui-v2-shell-model.ts";
 
@@ -75,4 +76,83 @@ test("rollout remains server-owned and the new client shell cannot grant entitle
   assert.doesNotMatch(shell,/process\.env|localStorage|sessionStorage|dangerouslySetInnerHTML|\.innerHTML\s*=/);
   assert.match(shell,/isGovernanceFeatureEnabled/);
   assert.doesNotMatch(shell, /href=\{[^}]*(?:user|input)/i);
+});
+
+test("UX-02 canonical navigation is backed by existing tenant page files, never prototype-only routes", () => {
+  const routes = getUiV2Navigation("workspace", "/dashboard", EMPTY_SAVANT_SHELL_DATA.counts, true);
+  for (const route of routes) {
+    const appPath = route.href.slice("/o/workspace".length);
+    assert.equal(resolveUiV2Route(appPath).kind, "collection", route.id);
+    const file = fileURLToPath(new URL("../app/o/[workspaceSlug]" + appPath + "/page.tsx", import.meta.url));
+    assert.equal(existsSync(file), true, route.id + " must resolve to an implemented Next.js page");
+  }
+  assert.deepEqual(["/skills/[id]", "/evaluations/[uuid]", "/catalog/[id]"].map(path => {
+    const file = fileURLToPath(new URL("../app/o/[workspaceSlug]" + path + "/page.tsx", import.meta.url));
+    return existsSync(file);
+  }), [true,true,true]);
+  assert.equal(routes.some(route => route.href.endsWith("/runs") ||
+    route.href.endsWith("/workflows") || route.href.endsWith("/discovery")), false);
+});
+
+test("UX-02 detail routes remain associated with their parent destination and preserve server-owned IDs", () => {
+  for (const [url,navId,id] of [
+    ["/skills/skill-123", "skills", "skill-123"],
+    ["/evaluations/123e4567-e89b-12d3-a456-426614174000", "evaluations", "123e4567-e89b-12d3-a456-426614174000"],
+    ["/catalog/portable-tool", "catalog", "portable-tool"],
+  ] as const) {
+    assert.deepEqual(resolveUiV2Route(url), {kind:"detail",navId,appPath:url,resourceId:id});
+    const items=getUiV2Navigation("authorized",url,EMPTY_SAVANT_SHELL_DATA.counts,false);
+    assert.deepEqual(items.filter(item=>item.active).map(item=>item.id),[navId]);
+    assert.equal(buildUiV2WorkspaceSwitchPath("other",url),"/o/other/dashboard");
+  }
+  assert.equal(resolveUiV2Route("/").navId, "overview");
+  assert.equal(buildUiV2WorkspaceSwitchPath("other","/"),"/o/other/dashboard");
+});
+
+test("UX-02 unknown and hostile tenant paths never spoof an active section or redirect breadcrumbs", () => {
+  for(const path of [
+    "/skills/a/b", "/evaluations/a/edit", "/catalog/../audit", "/skills/.",
+    "/skills/..", "/skills/%2e%2e", "/skills/%2Fsecret", "/skills/a%00b",
+    "/skills/one?tab=private", "/settings#secret", "/settings/../skills",
+    "//evil.test/x", "https://evil.test/skills", "/\\evil.test/skills",
+    "/runs", "/workflows", "/discovery", "/reports", "/not-real",
+  ]) {
+    assert.equal(resolveUiV2Route(path).kind, "unavailable", path);
+    assert.equal(getUiV2Navigation("a",path,EMPTY_SAVANT_SHELL_DATA.counts,true)
+      .some(item=>item.active),false,path);
+    assert.equal(buildUiV2WorkspaceSwitchPath("b",path),"/o/b/dashboard",path);
+    assert.deepEqual(buildUiV2RouteCrumbs("a",path),[
+      {label:"Workspace",href:null,current:false},
+      {label:"Page unavailable",href:null,current:true},
+    ]);
+  }
+  assert.deepEqual(buildUiV2Crumbs("mine",[
+    ["Workspace",null],["untrusted","//other.example/evil" as never],["bad-query","/skills?foreign=1" as never],
+  ]).map(x=>x.href),[null,null,null]);
+});
+
+test("UX-02 detail breadcrumbs remain tenant-owned and never mislabel marketplace as Overview", () => {
+  assert.deepEqual(buildUiV2RouteCrumbs("org-a","/catalog/demo"),[
+    {label:"Workspace",href:null,current:false},
+    {label:"Marketplace",href:"/o/org-a/catalog",current:false},
+    {label:"Skill",href:null,current:true},
+  ]);
+  assert.deepEqual(buildUiV2RouteCrumbs("org-a","/skills/skill-id",{skillTitle:"Verified skill"}),[
+    {label:"Workspace",href:null,current:false},
+    {label:"Skills",href:"/o/org-a/skills",current:false},
+    {label:"Verified skill",href:null,current:true},
+  ]);
+  const evalCrumbs=buildUiV2RouteCrumbs("org-b","/evaluations/uuid-1");
+  assert.equal(evalCrumbs[1]?.href,"/o/org-b/evaluations");
+  assert.equal(evalCrumbs[2]?.label,"uuid-1");
+});
+
+test("UX-02 route changes restore content focus, with keyboard-closable workspace switch and no authority client-side",()=>{
+  const source=readFileSync(fileURLToPath(new URL("../components/savant/app-shell-v2.tsx",import.meta.url)),"utf8");
+  assert.match(source,/buildUiV2RouteCrumbs/);
+  assert.match(source,/mainRef\.current\?\.focus\(\{ preventScroll: true \}\)/);
+  assert.match(source,/previousLocation\.current/);
+  assert.match(source,/event\.key === "Escape"/);
+  assert.match(source,/aria-current=\{it\.active \? "page" : undefined\}/);
+  assert.doesNotMatch(source,/router\.push\(|history\.replaceState\(|dangerouslySetInnerHTML|sessionStorage|localStorage/);
 });

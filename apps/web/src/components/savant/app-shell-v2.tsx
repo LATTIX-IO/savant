@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { Fragment, type ReactNode, useEffect, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
 import { useTweaks } from "@/components/savant/tweaks-context";
@@ -14,13 +14,13 @@ import type { WorkspaceMembershipSummary, WorkspaceSummary } from "@/components/
 import type { AuthViewer } from "@/lib/auth0-session";
 import { fetchSkillDetail } from "@/lib/control-plane-client";
 import {
-  buildSavantShellBreadcrumbs, EMPTY_SAVANT_SHELL_DATA, type SavantShellData,
+  EMPTY_SAVANT_SHELL_DATA, type SavantShellData,
 } from "@/lib/shell-state";
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
 import { stripTenantPathPrefix } from "@/lib/tenant-paths";
 import {
-  buildUiV2Crumbs, buildUiV2WorkspaceSwitchPath, getUiV2Navigation,
-  UI_V2_NAV_GROUPS, type UiV2NavGroup, type UiV2NavId,
+  buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath, getUiV2Navigation,
+  resolveUiV2Route, UI_V2_NAV_GROUPS, type UiV2NavGroup, type UiV2NavId,
 } from "@/lib/ui-v2-shell-model";
 import { isGovernanceFeatureEnabled } from "@/lib/workspace-features";
 
@@ -59,7 +59,20 @@ export function SavantShellV2({
   const toggle = buildBinaryThemeToggleState(resolvedTheme);
   const dashboardHref = buildUiV2WorkspaceSwitchPath(workspace.slug, "/dashboard") as Route;
   const [resolvedTitle, setResolvedTitle] = useState<{ context: string; title: string | null } | null>(null);
-  const activeSkill = appPath.startsWith("/skills/") ? appPath.split("/")[2] ?? "" : "";
+  const route = resolveUiV2Route(appPath);
+  const activeSkill = route.kind === "detail" && route.navId === "skills" ? route.resourceId : "";
+  const mainRef = useRef<HTMLElement>(null);
+  const previousLocation = useRef(`${workspace.slug}:${pathname}`);
+
+  // Keep tab order and screen-reader location aligned after actual client-side
+  // route changes. Do not steal focus on initial hydration or override scroll
+  // restoration on Back/Forward; query-only state stays in the destination page.
+  useEffect(() => {
+    const current = `${workspace.slug}:${pathname}`;
+    if (previousLocation.current === current) return;
+    previousLocation.current = current;
+    mainRef.current?.focus({ preventScroll: true });
+  }, [pathname, workspace.slug]);
   const skillContext = `${workspace.slug}/${activeSkill}`;
 
   useEffect(() => {
@@ -83,7 +96,7 @@ export function SavantShellV2({
   }, [activeSkill, skillContext, workspace.slug]);
 
   const skillTitle = resolvedTitle?.context === skillContext ? resolvedTitle.title : null;
-  const crumbs = buildUiV2Crumbs(workspace.slug, buildSavantShellBreadcrumbs(appPath, { skillTitle }));
+  const crumbs = buildUiV2RouteCrumbs(workspace.slug, appPath, { skillTitle });
   const density = values.density === "compact" ? "compact" : "comfortable";
 
   return (
@@ -99,7 +112,14 @@ export function SavantShellV2({
         </Link>
         <div className={styles.workspaceMenu}>
           {memberships.length > 1 ? (
-            <details className={styles.switcher}>
+            <details key={workspace.slug} className={styles.switcher}
+              onKeyDown={event => {
+                if (event.key === "Escape" && event.currentTarget.open) {
+                  event.stopPropagation();
+                  event.currentTarget.open = false;
+                  event.currentTarget.querySelector("summary")?.focus();
+                }
+              }}>
               <summary className={styles.workspaceButton} aria-label={`Workspace: ${workspace.name}. Switch workspace`}>
                 <span className={styles.workspaceBadge} aria-hidden="true">{workspace.short}</span>
                 <span className={styles.workspaceName}>{workspace.name}</span>
@@ -110,7 +130,8 @@ export function SavantShellV2({
                 {memberships.map(member => (
                   <Link key={member.slug} className={styles.workspaceOption}
                     href={buildUiV2WorkspaceSwitchPath(member.slug, appPath) as Route}
-                    aria-current={member.slug === workspace.slug ? "page" : undefined}>
+                    aria-current={member.slug === workspace.slug ? "page" : undefined}
+                    onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); }}>
                     <span className={styles.workspaceBadge} aria-hidden="true">{member.short}</span>
                     <span className={styles.workspaceOptionText}>
                       <strong>{member.name}</strong>
@@ -185,7 +206,7 @@ export function SavantShellV2({
           <div className={styles.profileText}><strong>{viewer.displayName}</strong><small>{viewer.subtitle}</small></div>
         </div>
       </aside>
-      <main id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
+      <main ref={mainRef} id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
         <UiV2ModeProvider workspaceSlug={workspace.slug}>{children}</UiV2ModeProvider>
       </main>
     </UiV2Surface>

@@ -84,7 +84,7 @@ function verifySignedReceipt({receiptFile,publicKeyFile,nowMs}){
   !DB_NAME.test(p.targetDatabaseName)||!DB_ROLE.test(p.targetDatabaseRole)||
   !DB_NAME.test(p.restoredDatabaseName)||
   typeof p.targetDatabaseHost!=="string"||typeof p.restoredDatabaseHost!=="string"||
-  p.targetDatabaseHost===p.restoredDatabaseHost&&p.targetDatabaseName===p.restoredDatabaseName||
+  p.targetDatabaseHost.toLowerCase()===p.restoredDatabaseHost.toLowerCase()||
   !exactKeys(p.testBenchKeyIds,["legacy","active"])||
   !exactKeys(p.aiConnectionKeyIds,["legacy","active"])||
   ![p.testBenchKeyIds,p.aiConnectionKeyIds].every(k=>
@@ -137,8 +137,7 @@ export function authorizeSchemaApply({
     proof.targetDatabaseHost.toLowerCase()!==db.host||
     proof.targetDatabaseName!==db.name||
     proof.targetDatabaseRole!==db.uri.username||
-    proof.restoredDatabaseHost.toLowerCase()===db.host&&
-      proof.restoredDatabaseName===db.name||
+    proof.restoredDatabaseHost.toLowerCase()===db.host||
     env.SAVANT_SCHEMA_APPLY_TARGET!=="staging")
     deny("staging_receipt_target_mismatch");
   return Object.freeze({scope:"signed-staging-only",authorized:true,

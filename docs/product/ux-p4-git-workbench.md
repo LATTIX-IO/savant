@@ -1,6 +1,6 @@
 # UX-P4 — Git-backed skill Workbench
 
-Status: **draft stacked increment**. Depends on UX-P3 PR #71, then UX-P2 #69, UX-P1 #67, prototype baseline UX-P0 #66.
+Status: **draft consolidated implementation PR #73**. The old P1/P2/P3 branches are incorporated into the current PR's ancestry and closed as superseded, not separately merged. UX-P0 reference remains PR #66. The current source integration preserves the merged backend and is **not** an activated production UX.
 
 ## Scope
 Adapt the selected UX prototype's editor / source inspector into an operational, responsive skill workbench at the existing authenticated `/o/[workspaceSlug]/skills/[id]` route.
@@ -13,6 +13,10 @@ Legacy direct-commit source editing is **read-only** in v2 because its server AP
 
 ## No simulated behavior
 The static prototype's graph nodes, file tree, evaluator preview and tool/dependency links are not represented as real if the API cannot provide them. The UI shows a single SKILL.md with markdown preview and read-only source metadata; other files/workflow planning stay labeled unavailable or absent. Existing evaluation and improvement routes remain real deep links. The classic skill detail is retained when v2 is off.
+
+## Authenticated release acceptance
+
+Run the controlled, real-Auth0 Overview → Library → Workbench acceptance defined in `docs/product/ux-p1-p4-authenticated-acceptance.md`; it requires two permitted tenants, a denied tenant and a proposal-capable staging Git source. Node/TS/DB/CI and Vercel preview success cannot substitute for that evidence. Retain server-side flag-off rollback until approved. A separate source-ready branch merge must not be described as production rollout.
 
 ## Definition of done
 - [ ] Pure unit tests: editability matrix, blank/oversize checks, concurrent source snapshot detection, provenance labels.

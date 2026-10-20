@@ -6,7 +6,7 @@ Feature-flagged UI implementation, not a new authorization boundary. Built on UX
 
 ## Activation (server side only)
 
-After PR #66 (UX-P0), PR #67 (UX-P1), and UX-P2 have passed their own quality/review gates and landed in that order, enable *only* a small production cohort:
+After PR #66 (UX-00) and the **consolidated** implementation PR #73 (UX-01) have passed current-head code/security and authenticated staging acceptance, and safely landed on `main` with v2 initially **disabled**, enable only a small production cohort under the separate UX-08 release gate. Historical PRs #67/#69/#71 are superseded by #73, not additional merge steps:
 
 ```dotenv
 SAVANT_UI_V2_ENABLED=true

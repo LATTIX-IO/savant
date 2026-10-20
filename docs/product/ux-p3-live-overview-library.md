@@ -1,7 +1,8 @@
 # UX-P3 — Live Overview and Library
 
-**Implementation branch:** `feature/ux-p3-live-overview-library`  
-**Stack base:** UX-P2 `feature/ux-p2-tenant-aware-shell` (PR #69), which depends on UX-P1 (PR #67). UX-P0 prototype reference is PR #66.
+**Implementation:** consolidated draft PR #73 (`feature/ux-p4-git-workbench`), which preserves the complete original UX-P1/P2/P3/P4 source ancestry. Historical PRs #67/#69/#71 are superseded and must **not** be independently remerged. The UX-P0 reference remains draft PR #66. The unified UI source is not yet on `main` or enabled in production.
+
+**Current release evidence:** The integrated PR head is tested on top of merged Test Bench, billing, crypto and governance source. Actual authorized staging, visual/keyboard acceptance and GitHub branch protection remain blockers; see `docs/product/ux-p1-p4-authenticated-acceptance.md`.
 
 ## Scope and live-data contract
 

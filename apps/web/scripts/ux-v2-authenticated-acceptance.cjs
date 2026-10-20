@@ -154,6 +154,21 @@ async function performMainJourney(page, config, label, output) {
   // Do not submit: this is a read-only browser acceptance, not a Git mutation.
   await assertNoOuterOverflow(page);
   await page.screenshot({ path: path.join(output, label + "-workbench.png") });
+
+  // Same-tenant deep links and client-side browser history must remain stable.
+  // No writes: the draft above is reviewed but never submitted.
+  const active = page.locator('aside[aria-label="Application navigation"] a[aria-current="page"]');
+  assert.equal(await active.count(), 1, "Workbench must keep Skills as the active section.");
+  assert.equal(await active.getAttribute("href"), root + "/skills");
+
+  await page.goBack({ waitUntil: "domcontentloaded" });
+  await waitForV2(page);
+  await page.getByRole("heading", { name: "Library", exact: true }).waitFor({ state: "visible" });
+  await page.goForward({ waitUntil: "domcontentloaded" });
+  await waitForV2(page);
+  await page.getByRole("textbox", { name: "SKILL.md Markdown source" })
+    .waitFor({ state: "visible" });
+  await assertNoOuterOverflow(page);
 }
 
 async function verifyTenantBoundaries(page, config) {

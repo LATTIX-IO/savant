@@ -75,6 +75,32 @@ export function readAiServiceConfig(env: Env = process.env): AiServiceConfig {
   };
 }
 
+/** Official NVIDIA terms restrict Developer Program catalog endpoints to
+ * evaluation/prototyping. A user-set flag cannot self-attest a production
+ * contract. Until vendor account evidence is separately approved, all
+ * commercial use of the catalog origin is blocked before provider egress.
+ */
+export function assertNimCatalogUseAuthorized(
+  baseUrl:string,env:Record<string,string|undefined>=process.env,
+):void{
+  let hostname:string;
+  try{
+    const url=new URL(baseUrl);
+    if(url.protocol!=="https:")throw Error("invalid protocol");
+    hostname=url.hostname.toLowerCase();
+  }catch{
+    throw new AiServiceError("nim","Invalid NIM service origin.",422);
+  }
+  const commercial=env.VERCEL_ENV==="production"||
+    env.SAVANT_DEPLOYMENT_ENV==="production";
+  if(commercial&&hostname==="integrate.api.nvidia.com")
+    throw new AiServiceError(
+      "nim",
+      "NVIDIA Developer Program catalog use is unavailable for production. A verified enterprise entitlement and approved deployment are required.",
+      403,
+    );
+}
+
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function postJson(
@@ -93,6 +119,7 @@ async function postJson(
     try {
       const response = await fetchImpl(url, {
         method: "POST",
+        redirect: "error", credentials: "omit", cache: "no-store",
         headers: { authorization: `Bearer ${apiKey}`, "content-type": "application/json", accept: "application/json" },
         body: JSON.stringify(body),
         signal: controller.signal,
@@ -117,7 +144,9 @@ async function postJson(
     } finally {
       clearTimeout(timer);
     }
-    await sleep(Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250));
+    if (attempt + 1 < attempts) {
+      await sleep(Math.min(8000, 500 * 2 ** attempt) + Math.floor(Math.random() * 250));
+    }
   }
   throw lastError instanceof Error ? lastError : new AiServiceError(service, "Request failed.");
 }
@@ -137,7 +166,7 @@ export type ChatResult = {
 
 export type ChatClient = {
   readonly model: string;
-  complete(messages: ChatMessage[], options?: { maxTokens?: number; temperature?: number; timeoutMs?: number; extraBody?: Record<string, unknown> }): Promise<ChatResult>;
+  complete(messages: ChatMessage[], options?: { maxTokens?: number; temperature?: number; timeoutMs?: number; extraBody?: Record<string, unknown>; usageEvidenceMode?: boolean }): Promise<ChatResult>;
 };
 
 /** Removes reasoning traces some NIM models emit before the answer. */
@@ -149,10 +178,12 @@ export function createNimChatClient(
   config: NonNullable<AiServiceConfig["nim"]>,
   model: string,
   fetchImpl: FetchLike = fetch,
+  policy: { singleAttempt?: boolean } = {},
 ): ChatClient {
   return {
     model,
     async complete(messages, options = {}) {
+      assertNimCatalogUseAuthorized(config.baseUrl);
       const started = Date.now();
       const data = await postJson("nim", fetchImpl, `${config.baseUrl}/chat/completions`, config.apiKey, {
         model,
@@ -163,15 +194,22 @@ export function createNimChatClient(
         stream: false,
         ...config.extraBody,
         ...options.extraBody,
-      }, options.timeoutMs ?? 120_000) as {
+      }, options.timeoutMs ?? 120_000, policy.singleAttempt ? 1 : 4) as {
         model?: string;
         choices?: Array<{ finish_reason?: string | null; message?: { content?: string | null; reasoning_content?: string | null } }>;
         usage?: { prompt_tokens?: number; completion_tokens?: number };
       };
       const choice = data.choices?.[0];
       const message = choice?.message;
-      const content = stripReasoning(message?.content ?? "");
-      if (!content) {
+      // Preserve genuine usage metadata even if the provider's content is
+      // malformed or over the Test Bench grading bound. Never feed the
+      // unusable body into durable evidence or downstream scoring.
+      const parsedContent = stripReasoning(
+        typeof message?.content === "string" ? message.content : "",
+      );
+      const content = options.usageEvidenceMode && parsedContent.length > 3_000
+        ? "" : parsedContent;
+      if (!content && !options.usageEvidenceMode) {
         throw new AiServiceError("nim", `NVIDIA NIM returned an empty completion (finish reason: ${choice?.finish_reason ?? "unknown"}${message?.reasoning_content ? `, ${message.reasoning_content.length} characters of reasoning` : ""}).`, 422);
       }
       return {
@@ -238,10 +276,11 @@ export type JevResult = {
 
 export type JudgeClient = {
   readonly model: string;
-  ask(state: unknown, questions: Record<string, JevQuestion>, options?: { timeoutMs?: number }): Promise<JevResult>;
+  ask(state: unknown, questions: Record<string, JevQuestion>, options?: { timeoutMs?: number; usageEvidenceMode?: boolean }): Promise<JevResult>;
 };
 
-export function createJevClient(config: NonNullable<AiServiceConfig["jev"]>, fetchImpl: FetchLike = fetch): JudgeClient {
+export function createJevClient(config: NonNullable<AiServiceConfig["jev"]>, fetchImpl: FetchLike = fetch,
+  policy: { singleAttempt?: boolean } = {}): JudgeClient {
   return {
     model: config.model,
     async ask(state, questions, options = {}) {
@@ -250,10 +289,11 @@ export function createJevClient(config: NonNullable<AiServiceConfig["jev"]>, fet
         model: config.model,
         state,
         questions,
-      }, options.timeoutMs ?? 60_000) as { model?: string; answers?: Record<string, JevAnswer>; usage?: { input_tokens?: number; output_tokens?: number } };
-      const answers = data.answers ?? {};
+      }, options.timeoutMs ?? 60_000, policy.singleAttempt ? 1 : 4) as { model?: string; answers?: Record<string, JevAnswer>; usage?: { input_tokens?: number; output_tokens?: number } };
+      const answers: Record<string, JevAnswer> = data.answers && typeof data.answers === "object" &&
+        !Array.isArray(data.answers) ? data.answers : {};
       for (const id of Object.keys(questions)) {
-        if (!answers[id]) {
+        if (!answers[id] && !options.usageEvidenceMode) {
           throw new AiServiceError("jev", `Jev did not answer "${id}".`);
         }
       }

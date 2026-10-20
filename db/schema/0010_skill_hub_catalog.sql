@@ -87,7 +87,7 @@ alter table background_jobs alter column organization_id drop not null;
 -- (a narrower list would reject rows created by later migrations' job kinds).
 alter table background_jobs drop constraint if exists background_jobs_kind_check;
 alter table background_jobs add constraint background_jobs_kind_check
-  check (kind in ('eval_generation', 'safety_scan', 'hub_sync', 'hub_hydrate', 'hub_safety', 'hub_eval'));
+  check (kind in ('eval_generation', 'safety_scan', 'hub_sync', 'hub_hydrate', 'hub_safety', 'hub_eval', 'test_bench_run'));
 create unique index if not exists background_jobs_platform_live_key
   on background_jobs (kind, dedupe_key)
   where organization_id is null and status in ('queued', 'running');

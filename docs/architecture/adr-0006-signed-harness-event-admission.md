@@ -1,0 +1,11 @@
+# PER-1059 signed harness event admission — reference increment
+
+This is a **private, testable ingress boundary**, not a deployed public webhook. It verifies HMAC-SHA256 signatures over an exact byte framing containing the v1 domain separator, timestamp, tenant ID, adapter ID, run ID, delivery ID, and raw bytes. Keys are resolved only through a trusted injected tenant-and-adapter credential resolver. Current and previous keys can overlap for rotation. Signature comparison is constant-time.
+
+Admission rejects malformed identities, absent/revoked or undersized credentials, oversized data (8 KiB maximum), time skew greater than five minutes, invalid UTF-8, malformed JSON, unknown event properties and cross-tenant, adapter, run or trace mismatches. Only validated metadata is passed to the durable reservation store's `applyEvent`, which enforces monotonic sequence IDs, duplicate rejection, terminal immutability and cancellation races. Error responses contain safe codes without reflecting user content or credentials.
+
+**Operational prerequisites:** The caller that wires an HTTP endpoint must authenticate trusted connector configuration, provide active versioned secrets from a vault, restrict network ingress and throttling, enforce a raw-body parser, ensure durable delivery ID replay receipts (eventId dedupe alone does not prove deliveryId uniqueness), quarantine signature-verified invalid callbacks, preserve actor permission boundaries, and run full DB integration and real external harness smoke. Do not enable production access before those gates. Sender clock synchronization and rotating-key rollback must be monitored.
+
+**Tests:** `apps/web/src/server/harness/signed-event-admission.test.ts` covers signature tampering, time skew, rotation, absent/revoked key, tenant adapter/run binding, extra prompt fields, malformed UTF-8, large body, and safe error codes. Existing full unit, Python, typecheck, build, secret scan, production dependency audit and PostgreSQL tenant tests remain required.
+
+**Versioning:** Wire v1 only. Unknown schema/signature version fails closed. The receiver's scope is to authorize event admission, not to execute a provider, generate evaluation scorecards, or make production observation completeness claims.

@@ -3,16 +3,20 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
-// Runs as part of the Vercel production build (`vercel-build`), so schema
-// migrations ship with the code that needs them and the database connection
-// string never leaves the deployment environment. Every file in db/schema is
-// idempotent, so re-running them on each deploy is safe. A failure fails the
-// build instead of deploying code against a mismatched schema.
-
+// Production schema changes must not originate from the Vercel build worker.
+// Vercel automatically builds merged main. Auto-DDL before an independent
+// database+key restore would turn a normal PR merge into an irreversible live
+// mutation. Migrations are a separate operator action via db:migrate after
+// protected staging, verified backup/restore and an approved release window.
+// Even an inherited/mistaken SAVANT_MIGRATE_ON_BUILD=1 cannot override this.
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-if (process.env.VERCEL_ENV !== "production" && process.env.SAVANT_MIGRATE_ON_BUILD !== "1") {
-  console.log(`[migrate-on-deploy] Skipping schema migration (VERCEL_ENV=${process.env.VERCEL_ENV ?? "unset"}).`);
+if (process.env.VERCEL_ENV === "production") {
+  console.log("[migrate-on-deploy] Production schema migration is disabled during builds; use the separately authorized db:migrate operation after recovery acceptance.");
+  process.exit(0);
+}
+if (process.env.SAVANT_MIGRATE_ON_BUILD !== "1") {
+  console.log(`[migrate-on-deploy] Skipping schema migration (VERCEL_ENV=${process.env.VERCEL_ENV ?? "unset"}; explicit nonproduction opt-in absent).`);
   process.exit(0);
 }
 

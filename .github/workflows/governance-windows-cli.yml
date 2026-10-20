@@ -1,0 +1,60 @@
+name: Governance Windows CLI regression
+on:
+  pull_request:
+    paths:
+      - 'scripts/release-governance-bootstrap.mjs'
+      - 'scripts/release-controls-audit.mjs'
+      - 'scripts/owner-operated-governance.mjs'
+      - 'scripts/owner-operated-governance.test.mjs'
+      - 'scripts/release-governance-upgrade.mjs'
+      - 'scripts/direct-cli-invocation.mjs'
+      - 'scripts/direct-cli-invocation.test.mjs'
+      - '.github/workflows/governance-windows-cli.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  governance-windows:
+    name: Verify native PowerShell governance CLI
+    runs-on: windows-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout immutable source without persisted credentials
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Exercise Windows path equivalence and fail-closed CLI tests
+        shell: pwsh
+        run: |
+          node --test scripts/direct-cli-invocation.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Windows direct CLI regression failed" }
+          node --test scripts/owner-operated-governance.test.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Windows regression suite failed" }
+      - name: Native direct CLI and read-only reviewed-main export must print a plan
+        shell: pwsh
+        env:
+          GITHUB_REPOSITORY: LATTIX-IO/savant
+          SAVANT_RELEASE_OPERATOR_ID: '12345'
+          SAVANT_RELEASE_REVIEWER_ID: '67890'
+          SAVANT_RELEASE_REVIEWER_TYPE: User
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = & node scripts/release-governance-bootstrap.mjs
+          if ($LASTEXITCODE -ne 0) { throw "Direct Windows plan CLI failed" }
+          $plan = $output | ConvertFrom-Json
+          if ($plan.schema -ne 'savant.github-governance-bootstrap.v1') { throw "Direct Windows CLI silently skipped" }
+          $exported = & node --input-type=module -e 'import("./scripts/release-governance-bootstrap.mjs").then(async ({executeBootstrap}) => { const r=await executeBootstrap({argv:[]}); console.log(JSON.stringify(r.plan)); })'
+          if ($LASTEXITCODE -ne 0) { throw "Reviewed-main exported plan invocation failed" }
+          $fromExport = $exported | ConvertFrom-Json
+          if ($fromExport.schema -ne $plan.schema) { throw "Exported plan did not execute" }
+          # A separate, explicitly selected sole-owner plan must also execute on Windows.
+          $ownerPlan = & node scripts/release-governance-bootstrap.mjs --profile=owner_operated --owner-id=12345 --main-sha=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --acknowledge=SOLE-OWNER-CI-ENFORCED
+          if ($LASTEXITCODE -ne 0) { throw "Owner-operated CLI plan failed on Windows" }
+          $ownerObj = $ownerPlan | ConvertFrom-Json
+          if ($ownerObj.profile -ne 'owner_operated' -or $ownerObj.requiredCheckCount -ne 10) { throw "Owner-operated plan was silently downgraded" }

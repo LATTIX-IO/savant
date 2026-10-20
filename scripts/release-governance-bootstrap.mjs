@@ -1,4 +1,6 @@
 import { auditGovernance } from "./release-controls-audit.mjs";
+import {fileURLToPath} from "node:url";
+import {isDirectCliInvocation} from "./direct-cli-invocation.mjs";
 
 // This operator tool is deliberately restricted to Savant and cannot publish.
 // Live repository modification requires --apply plus exact confirmation.
@@ -240,6 +242,11 @@ export function makeAdminAdapter({token,fetcher=fetch}={}) {
   };
 }
 export async function executeBootstrap({env=process.env,argv=process.argv.slice(2),fetcher=fetch}={}) {
+  // Solo-maintainer mode requires an explicit CLI opt-in, not an inherited env flag.
+  if(Array.isArray(argv)&&argv[0]==="--profile=owner_operated"){
+    const {executeOwnerBootstrap}=await import("./owner-operated-governance.mjs");
+    return executeOwnerBootstrap({env,argv,fetcher,adminAdapterFactory:makeAdminAdapter});
+  }
   const mode=validateApproval(argv);
   const plan=compileGovernancePlan({
     repository:env.GITHUB_REPOSITORY,reviewerId:env.SAVANT_RELEASE_REVIEWER_ID,
@@ -254,14 +261,14 @@ export async function executeBootstrap({env=process.env,argv=process.argv.slice(
   });
   return {mode,performedWrites:result.created,result};
 }
-if(process.argv[1]?.endsWith("/release-governance-bootstrap.mjs")){
+if(isDirectCliInvocation(process.argv[1],fileURLToPath(import.meta.url))){
   try{
     const result=await executeBootstrap();
     // Never serialize reviewer IDs, tokens, policy bodies, or full API responses in apply logs.
     if(result.mode==="plan")console.log(JSON.stringify(result.plan,null,2));
     else console.log(JSON.stringify({mode:"apply",...result.result}));
   }catch(e){
-    console.error(JSON.stringify({ready:false,code:e instanceof BootstrapError?e.code:"governance_bootstrap_failed"}));
+    console.error(JSON.stringify({ready:false,code:e instanceof BootstrapError || e?.name==="OwnerGovernanceError"?e.code:"governance_bootstrap_failed"}));
     process.exitCode=1;
   }
 }

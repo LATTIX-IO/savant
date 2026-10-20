@@ -51,12 +51,14 @@ function parseTarget(raw) {
         !["require", "prefer"].includes(uri.searchParams.get("channel_binding")))) {
     deny("production_database_target_invalid");
   }
-  let database, role;
+  let database, role, password;
   try {
     database = decodeURIComponent(uri.pathname.slice(1));
     role = decodeURIComponent(uri.username);
+    password = decodeURIComponent(uri.password);
   } catch {deny("production_database_target_invalid");}
-  if (!DB_NAME.test(database) || !DB_ROLE.test(role))
+  if (!password || /[\x00-\x1f\x7f]/.test(password) ||
+      !DB_NAME.test(database) || !DB_ROLE.test(role))
     deny("production_database_target_invalid");
   return {host: uri.hostname.toLowerCase(), database, role};
 }
@@ -74,10 +76,13 @@ function requireReceipt({receiptFile, trustFile, nowMs}) {
       typeof receipt.signature !== "string" ||
       !/^[A-Za-z0-9_-]{86}$/.test(receipt.signature))
     deny("production_recovery_proof_invalid");
-  const signature = Buffer.from(receipt.signature, "base64url");
-  if (signature.length !== 64 || signature.toString("base64url") !== receipt.signature ||
-      !verify(null, Buffer.from(JSON.stringify(receipt.payload), "utf8"), key, signature))
-    deny("production_recovery_proof_invalid");
+  let signed=false;
+  try {
+    const signature = Buffer.from(receipt.signature, "base64url");
+    signed = signature.length === 64 && signature.toString("base64url") === receipt.signature &&
+      verify(null, Buffer.from(JSON.stringify(receipt.payload), "utf8"), key, signature);
+  } catch {signed=false;}
+  if (!signed) deny("production_recovery_proof_invalid");
   const p = receipt.payload;
   if (!exactKeys(p, [
     "schema", "issuer", "repository", "vercelProjectId", "neonProjectId",

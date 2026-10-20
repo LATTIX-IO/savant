@@ -23,11 +23,11 @@ const valid = {
 };
 test.after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-test("authenticated UAT fails closed with absent secrets and cannot run on the production site", () => {
+test("authenticated UAT fails closed without a real browser session and defaults to staging-only", () => {
   assert.throws(() => parseConfiguration({}), /Missing authenticated staging inputs/);
   for (const hostname of ["savantskills.app", "www.savantskills.app", "savantrepo.com"]) {
     assert.throws(() => parseConfiguration({ ...valid, SAVANT_UAT_BASE_URL: "https://" + hostname + "/" }),
-      /Production-origin browser acceptance is prohibited/);
+      /requires an explicit owner read-only synthetic-tenant acknowledgment/);
   }
   assert.throws(() => parseConfiguration({ ...valid, SAVANT_UAT_BASE_URL: "http://savant-stage.example.org/" }), /HTTPS origin/);
   assert.throws(() => parseConfiguration({ ...valid, SAVANT_UAT_BASE_URL: "https://savant-stage.example.org/scope" }), /HTTPS origin/);
@@ -51,4 +51,46 @@ test("browser state must exist, be stored outside Git, and belong to the staging
 test("cross-viewport UAT declares both themes at every supported responsive width", () => {
   assert.deepEqual(CASES.map(v => v.width), [390, 390, 768, 768, 1280, 1280, 1440, 1440]);
   assert.equal(CASES.filter(v => v.theme === "dark").length, 4);
+});
+
+test("owner production read-only UAT needs exact two-part opt-in and a known production domain", () => {
+  const ack = "OWNER-READONLY-PRODUCTION-SYNTHETIC-UX";
+  const production = { ...valid, SAVANT_UAT_BASE_URL: "https://savantskills.app/" };
+  assert.throws(() => parseConfiguration({ ...production,
+    SAVANT_UAT_OWNER_PRODUCTION_ACK: ack }),
+    /requires an explicit owner read-only synthetic-tenant acknowledgment/);
+  assert.throws(() => parseConfiguration({ ...production,
+    SAVANT_UAT_SYNTHETIC_TENANTS: "true" }),
+    /requires an explicit owner read-only synthetic-tenant acknowledgment/);
+  assert.throws(() => parseConfiguration({ ...production,
+    SAVANT_UAT_OWNER_PRODUCTION_ACK: "OWNER-WRITE-PRODUCTION-SYNTHETIC-UX",
+    SAVANT_UAT_SYNTHETIC_TENANTS: "true" }),
+    /requires an explicit owner read-only synthetic-tenant acknowledgment/);
+  assert.throws(() => parseConfiguration({ ...production,
+    SAVANT_UAT_OWNER_PRODUCTION_ACK: ack,
+    SAVANT_UAT_SYNTHETIC_TENANTS: "TRUE" }),
+    /requires an explicit owner read-only synthetic-tenant acknowledgment/);
+  for (const hostname of ["savantskills.app", "www.savantskills.app",
+    "savantrepo.com", "savant-web-jmsbooths-projects.vercel.app"]) {
+    const cfg = { ...production, SAVANT_UAT_BASE_URL: "https://" + hostname + "/",
+      SAVANT_UAT_OWNER_PRODUCTION_ACK: ack,
+      SAVANT_UAT_SYNTHETIC_TENANTS: "true" };
+    assert.equal(parseConfiguration(cfg).productionReadOnly, true);
+  }
+  for (const hostname of ["staging.savantskills.app", "example.savantrepo.com"]) {
+    assert.throws(() => parseConfiguration({ ...production,
+      SAVANT_UAT_BASE_URL: "https://" + hostname + "/",
+      SAVANT_UAT_OWNER_PRODUCTION_ACK: ack,
+      SAVANT_UAT_SYNTHETIC_TENANTS: "true" }), /Unrecognized production-domain subdomains/);
+  }
+  assert.equal(parseConfiguration(valid).productionReadOnly, false);
+});
+
+test("owner-only UAT script is explicitly read-only and stores screenshots locally", () => {
+  const source = fs.readFileSync(path.join(__dirname,
+    "ux-v2-authenticated-acceptance.cjs"), "utf8");
+  assert.match(source, /Acceptance draft \(not submitted\)/);
+  assert.match(source, /Do not submit: this is a read-only browser acceptance/);
+  assert.match(source, /os\.tmpdir\(\)/);
+  assert.doesNotMatch(source, /createProposal\(|\.post\(|\.put\(|\.delete\(/);
 });

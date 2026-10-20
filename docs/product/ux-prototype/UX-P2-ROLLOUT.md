@@ -6,7 +6,7 @@ Feature-flagged UI implementation, not a new authorization boundary. Built on UX
 
 ## Activation (server side only)
 
-After PR #66 (UX-00) and the **consolidated** implementation PR #73 (UX-01) have passed current-head code/security and authenticated staging acceptance, and safely landed on `main` with v2 initially **disabled**, enable only a small production cohort under the separate UX-08 release gate. Historical PRs #67/#69/#71 are superseded by #73, not additional merge steps:
+After PR #66 (UX-00) and **consolidated** implementation PR #73 (UX-01) pass exact-head CI/security, merge source with v2 **disabled**. The single owner may then enable only one or two **verified synthetic production workspaces** under a separate, reversible canary gate, and run authenticated read-only production UX acceptance. Full staging is deferred, not silently counted as complete. Historical PRs #67/#69/#71 are superseded by #73, not additional merge steps:
 
 ```dotenv
 SAVANT_UI_V2_ENABLED=true
@@ -30,8 +30,12 @@ Workspace switching keeps only safe collection routes and otherwise navigates to
 - Node tests: default-off and explicit allowlist, safe navigation, real zero-vs-unavailable counts, feature gating, safe cross-workspace switching, tenant-aware breadcrumbs, negative source checks.
 - Existing full `pnpm test`, `pnpm lint`, `pnpm typecheck`, `pnpm build`, secret-scan and PostgreSQL tenant-integrity CI must be green at the exact PR head.
 - Security review: no query/localStorage override of rollout, no authorization changes, no injection of untrusted strings into route destinations.
-- Before launch: authenticated Playwright journeys at 390, 768, 1280, 1440 in both themes; keyboard navigation, focus management, mobile menu, switching between *two authorized tenants* and denial of a third, archived deep links, zero-data empty states, screen reader labels, and WCAG 2.2 AA.
+- Before enabling the pilot: real Auth0 Playwright journeys at 390, 768, 1280, 1440 in both themes with explicit owner-only read-only production acknowledgment, keyboard/focus/mobile navigation, switching between *two authorized synthetic tenants* and denial of a third, deep links, empty states and screen-reader checks. This evidence is not implied by a successful source merge.
 - The prototype screenshot artifact is a visual reference only; it does not validate the Next.js production shell.
+
+## Owner-operated production pilot
+
+Use `docs/product/ux-p1-p4-authenticated-acceptance.md` for the explicit read-only production opt-in and genuine session requirements. A source merge changes no runtime exposure when the two server variables are absent. Do not claim that Vercel READY, static prototype screenshot tests or local browser mocks qualify the live experience. Do not enable `SAVANT_UI_V2_WORKSPACES=*` during owner testing. Record production exact SHA, applied allowlist, negative tenant checks and rollback before increasing exposure.
 
 ## Rollback
 

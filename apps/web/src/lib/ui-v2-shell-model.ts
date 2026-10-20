@@ -1,5 +1,5 @@
 import { buildTenantAppPath } from "./tenant-paths.ts";
-import type { SavantShellCounts, SavantShellCrumb } from "./shell-state";
+import { buildSavantShellBreadcrumbs, type SavantShellCounts, type SavantShellCrumb } from "./shell-state";
 
 export type UiV2NavGroup = "workspace" | "library" | "quality" | "integrations" | "governance" | "system";
 export type UiV2NavId = "overview" | "skills" | "repositories" | "catalog" | "evaluations" |
@@ -34,6 +34,60 @@ export const UI_V2_NAV_GROUPS: Readonly<Record<UiV2NavGroup, string>> = {
   integrations: "Integrations", governance: "Governance", system: "Administration",
 };
 
+/** Canonical destinations are the actual Next.js tenant routes, never prototype-only URLs. */
+export type UiV2RouteResolution =
+  | { kind: "collection"; navId: UiV2NavId; appPath: string; resourceId: null }
+  | { kind: "detail"; navId: "skills" | "evaluations" | "catalog"; appPath: string; resourceId: string }
+  | { kind: "unavailable"; navId: null; appPath: string; resourceId: null };
+
+const DETAIL_ROOTS = new Set(["skills", "evaluations", "catalog"]);
+const SAFE_RESOURCE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** Fail closed for encoded traversal/redirects, malformed IDs and undeclared nested routes.
+ * Next's routing and BFF still own the actual resource authorization and 403/404.
+ */
+export function resolveUiV2Route(appPath: string): UiV2RouteResolution {
+  const unavailable = { kind: "unavailable" as const, navId: null,
+    appPath, resourceId: null };
+  if (typeof appPath !== "string" || appPath.length > 2048 ||
+      !appPath.startsWith("/") || appPath.includes("//") ||
+      /[%?#\\\\]/.test(appPath) || /[\x00-\x1f\x7f]/.test(appPath)) {
+    return unavailable;
+  }
+  const normalized = appPath === "/" ? "/dashboard" : appPath;
+  const route = NAVIGATION.find(item => item.appPath === normalized);
+  if (route) return { kind: "collection", navId: route.id,
+    appPath: normalized, resourceId: null };
+
+  const parts = normalized.split("/");
+  if (parts.length !== 3 || !DETAIL_ROOTS.has(parts[1] ?? "")) return unavailable;
+  const resourceId = parts[2] ?? "";
+  if (!SAFE_RESOURCE_ID.test(resourceId) || resourceId === "." || resourceId === "..") {
+    return unavailable;
+  }
+  return { kind: "detail", navId: parts[1] as "skills" | "evaluations" | "catalog",
+    appPath: normalized, resourceId };
+}
+
+/** Server-owned breadcrumb data; never route arbitrary user-supplied targets. */
+export function buildUiV2RouteCrumbs(
+  workspaceSlug: string, appPath: string, options: { skillTitle?: string | null } = {},
+) {
+  const route = resolveUiV2Route(appPath);
+  if (route.kind === "unavailable") {
+    return buildUiV2Crumbs(workspaceSlug, [
+      ["Workspace", null], ["Page unavailable", "current"],
+    ]);
+  }
+  if (route.kind === "detail" && route.navId === "catalog") {
+    return buildUiV2Crumbs(workspaceSlug, [
+      ["Workspace", null], ["Marketplace", "/catalog"], ["Skill", "current"],
+    ]);
+  }
+  return buildUiV2Crumbs(workspaceSlug,
+    buildSavantShellBreadcrumbs(route.appPath, options));
+}
+
 export type UiV2NavItem = NavSpec & { href: string; active: boolean; count: number | null };
 
 export function getUiV2Navigation(
@@ -42,28 +96,29 @@ export function getUiV2Navigation(
   counts: SavantShellCounts,
   governanceEnabled: boolean,
 ): UiV2NavItem[] {
+  const activeId = resolveUiV2Route(appPath).navId;
   return NAVIGATION
     .filter(item => !item.governance || governanceEnabled)
     .map(item => ({
       ...item,
       href: buildTenantAppPath(workspaceSlug, item.appPath),
-      active: appPath === item.appPath || appPath.startsWith(item.appPath + "/"),
+      active: activeId === item.id,
       count: item.countKey ? counts[item.countKey] : null,
     }));
 }
 
 // On tenant switch, never carry an object ID (e.g. skill/evaluation UUID) across workspaces.
 // Even when an object happens to have the same ID, its authorization is tenant-specific.
-const SAFE_WORKSPACE_SWITCH_PATHS = new Set(NAVIGATION.map(item => item.appPath));
 export function buildUiV2WorkspaceSwitchPath(nextSlug: string, currentAppPath: string): string {
-  const safePath = SAFE_WORKSPACE_SWITCH_PATHS.has(currentAppPath) ? currentAppPath : "/dashboard";
+  const route = resolveUiV2Route(currentAppPath);
+  const safePath = route.kind === "collection" ? route.appPath : "/dashboard";
   return buildTenantAppPath(nextSlug, safePath);
 }
 
 export function buildUiV2Crumbs(workspaceSlug: string, crumbs: readonly SavantShellCrumb[]) {
   return crumbs.map(([label, target]) => ({
     label,
-    href: typeof target === "string" && target.startsWith("/") ?
+    href: typeof target === "string" && NAVIGATION.some(item => item.appPath === target) ?
       buildTenantAppPath(workspaceSlug, target) : null,
     current: target === "current",
   }));

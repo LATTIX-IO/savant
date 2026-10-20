@@ -49,10 +49,14 @@ To run the journey manually across Library, Workbench, Evaluations, Runs, Insigh
 CI (`.github/workflows/ux-prototype.yml`) runs on pull requests that touch this folder. It:
 
 1. runs the acceptance tests;
-2. runs `tests/browser.cjs` with Playwright at 390, 768, 1280 and 1440px in the light theme, plus 1280px in the dark theme;
+2. runs `tests/browser.cjs` with Playwright at 390, 768, 1280 and 1440px in the light theme, plus 390, 768, 1280 and 1440px in the dark theme;
 3. uploads the screenshots as the `ux-prototype-screenshots` artifact.
 
 ## Related documents
 
 - [CAPABILITIES.md](CAPABILITIES.md): which features are operational, partial, in review or planned in production
 - [MIGRATION.md](MIGRATION.md): the incremental plan for bringing this design into `apps/web`
+
+## Release qualification boundary (October 19, 2026)
+
+This screenshot workflow checks the **static reference** only. Its seeded data, browser storage, graph evaluator and visual save actions cannot authorize or replace production behavior. Current backend/UI status is detailed in [CAPABILITIES.md](CAPABILITIES.md) (post-PR #101 source baseline), and the revised [MIGRATION.md](MIGRATION.md) identifies UX-00..UX-10, including real tenant/provider E2E and protected staging gates. **Do not use a green prototype workflow as a claim that UI v2 is ready for production.**

@@ -1,75 +1,62 @@
-# Production UI modernization: migration plan
+# Production UI modernization — canonical migration contract
 
-**Reference:** `docs/product/ux-prototype` (approved visual and interaction reference)
-**Implementation:** `apps/web`, using Next.js 16, React 19 and TypeScript
-**Delivery:** incremental, behind the `savant-ui-v2` flag, on short-lived PR branches from `main`
+**Reference:** `docs/product/ux-prototype/`, UX-00 / PR #66. Selected design target, **not yet approved** at this snapshot.
+**Runtime:** `apps/web` (Next.js 16 / React 19 / TypeScript), server-authoritative existing APIs.
+**Implementation candidate:** consolidated UX-P1..P4 PR #73 (`feature/ux-p4-git-workbench`), initially feature-flag **off**.
+**Current main baseline:** `c00a2a2e254c23b2b1f78231bc70b97363492788` (after merged non-UI PR #101 and governance-code PR #102).
 
-## Architectural decision
+## Non-negotiable architecture
 
-Reimplement the prototype's patterns as React and TypeScript components in `apps/web`. Do not embed the prototype HTML or import its browser-state code. The production application stays authoritative for:
+- Reimplement visual patterns in React/TypeScript, never serve static prototype HTML/JS or transfer its browser-local state into production.
+- Git owns reproducible tenant-authored artifacts and immutable pinned source commits; PostgreSQL owns tenant-scoped indexes, case definitions, run receipts, approvals and metadata. Authorization and operational results are server controlled.
+- Savant provides AI **quality engineering** for bring-your-own model, inference router or harness. Workflow visualization/validation does **not** promise a production runtime, proxy, hosted model or scheduling service.
+- Maintain existing canonical `/o/[workspaceSlug]` paths and IDs, server-side membership checks, classic fallbacks and optional governance actions. Do not cross-load object IDs between tenants when switching workspace.
+- The UI exposure controls `SAVANT_UI_V2_ENABLED` and `SAVANT_UI_V2_WORKSPACES` default off and do not grant privileges. Their change requires a deployment/config refresh.
 
-- authentication and workspace membership
-- data ownership and repository indexing
-- source revisions and evaluation outcomes
-- workflow specifications
-- approvals and audit evidence
-- credentials
+## Navigation contract
 
-## Navigation
-
-| Destination | Responsibility | Reuse |
+| Intent | Current canonical tenant route / owned source | V2 behavior at this snapshot |
 | --- | --- | --- |
-| Overview | Operational health and attention queue | `screens/overview.tsx` |
-| Library | Skills, repositories, marketplace, opportunities | `catalog.tsx`, `repositories.tsx`, `skill-hub.tsx` |
-| Workbench | Authoring, dependencies, version review | `skill.tsx`, skill builder |
-| Evaluations | Suites, datasets, definitions, launch | `evaluations.tsx`, `evaluation-detail.tsx` |
-| Runs | Results, telemetry, traces | Evaluation detail, skill intelligence, run APIs |
-| Insights | Comparison, regressions, cost, releases | `intelligence.tsx`, `releases.tsx` |
-| Integrations | Source control, AI providers, router clients | `connectors.tsx`, `skill-router.tsx` |
-| Administration | Members, access, policies, audit, billing | `settings.tsx`, governance screens |
+| Overview | `/dashboard` · server overview | Draft #73 — live server metrics and provenance |
+| Library and marketplace | `/skills`, `/repositories`, `/catalog` | Draft #73 — live skill/repository lists, classic marketplace/repository management deep links |
+| Workbench | `/skills/[id]` | Draft #73 — single `SKILL.md` source and review-only Git proposal; no fabricated file tree/execution |
+| Evaluations and Test Bench | `/evaluations`, `/evaluations/[uuid]` | Classic operational screen; persisted suite and observed runner source merged via #101, operational staging and v2 migration still required |
+| Runs / case evidence | Existing evaluation and skill detail routes | No fake standalone `/runs`; real receipts/telemetry and provenance only |
+| Insights and releases | `/intelligence`, `/releases` | Classic routes retained pending v2 migration |
+| Integration, router and governance | `/router`, `/connectors`, `/policies`, `/audit` | Real RBAC/feature-gated routes; no simulated source/AI connection |
+| Administration | `/settings` | Preserve tenant admin, billing and approvals behind established permissions |
+| Discovery, reports triage, Workflow Studio | No generally authorized dedicated v2 routes | Planned/unavailable until corresponding source-backed flows ship |
 
-- Keep existing URLs and add redirects for legacy routes under `/o/[workspaceSlug]/…`.
-- Update deep links only after verifying they keep skill IDs, evaluation IDs, repository context and the selected tab.
-- Never hide mandatory governance actions.
+## Ordered increments — single bounded PR deliverable per step
 
-## Increments
-
-| Increment | Scope | Definition of done |
+| Increment | Objective | Definition of done |
 | --- | --- | --- |
-| **UX-P0** | Merge the reference; add prototype acceptance tests and browser journeys with screenshots to CI; document capability status | Reference on `main`, CI green, screenshots reviewed, no production code changed |
-| **UX-P1** | Design tokens and shared components, scoped to the app (not marketing), with light and dark themes and IBM Plex | Accessibility and visual-regression coverage; current screens unchanged |
-| **UX-P2** | App shell, navigation, breadcrumbs, workspace switcher and search, behind the flag | Every existing function reachable and permission-gated; legacy deep links valid |
-| **UX-P3** | Library and Overview on live repository and skill APIs | Connect or access a repository, see indexed skills and failures, open a skill with context preserved |
-| **UX-P4** | Workbench: split `skill.tsx` into shell, asset navigator, editor, dependencies, inspector | Open any authorized skill, edit through supported operations, reload safely |
-| **UX-P5** | Evaluations and Runs: definitions, execution and results separated; persisted gates | Results survive reload, are tenant-isolated, deep-link correctly; no synthetic scores |
-| **UX-P6** | Insights, Releases, Auto-Improve proposals | Every comparative claim traceable to evidence; release controls unchanged |
-| **UX-P7** | Integrations, Settings, Onboarding | State consistent across screens after reload; planned admin features labelled |
-| **UX-P8** | Workflow editor preview on `WorkflowSpecification` and Git-owned artifacts | Author, validate, save and reopen a spec; no implied runtime execution |
+| **UX-00** (PER-1577) | Qualify PR #66 static reference, screenshot and capability contract | Versioned reference, updated post-#101 inventory, browser assertions, reviewed screenshots, no runtime change |
+| **UX-01** (PER-1579) | Bring existing PR #73 source forward onto actual main | Exact current main ancestry, build and API contracts, real two-tenant browser gate, server flag off on main; old UX-P1..P4 code preserved |
+| **UX-02** (PER-1580) | Canonical shell/deep-link and navigation parity | No unreachable existing features or tenant-unsafe link state, keyboard/mobile, role-gated menus |
+| **UX-03** (PER-1581) | Persisted Evaluations/Test Bench UI | Authorized create/save/run/cancel/reopen with pinned provider/source and budget; no invented result |
+| **UX-04** (PER-1582) | Runs/evidence drilldown | Persisted per-case observed receipt, terminal/error, coverage, cost uncertainty, tenant isolation |
+| **UX-05** (PER-1583) | Insights, baseline/candidate comparison and releases | Compatible paired pinned runs only; human-reviewed optimization/release claims |
+| **UX-06** (PER-1584) | Integrations, onboarding and Settings | Existing provider/role/billing/governance actions retained and accurate |
+| **UX-07** (PER-1585) | Real authenticated cross-screen QA | Two-tenant positive, foreign-tenant denial, provider failures, WCAG 2.2 AA, responsive regression, staging receipts |
+| **UX-08** (PER-1586) | Controlled canary/default cutover | Protected main, isolated staging/DB+KMS restore, safe deployment and flag rollback demonstrated before default-on |
+| **UX-09/10** (PER-1587/1588) | Workflow Studio, discovery/reports and advanced optimization | **Not canonical-release blockers.** Source-backed only; split separate backend dependencies if required |
 
-## Execution order and dependencies
+**Consolidation note:** old UX-P1/P2/P3/P4 PR histories are already present in the single implementation branch #73; do not independently merge superseded #67/#69/#71. PRs #62–#65 and their older stack references are no longer an accurate dependency plan; source functionality was integrated via PR #101. The live managed-key/database and customer acceptance gates are **still open**.
 
-1. **UX-P0** comes first.
-2. **UX-P1** and **UX-P2** follow, on separate branches.
-3. **UX-P3 to UX-P7** can proceed in parallel once the token and shell contracts are stable.
-4. **UX-P5** integrates PRs #62–#65 only after they merge in dependency order.
-5. **UX-P8** comes last.
+## Test-driven acceptance for each change
 
-## Test gates for each increment
+- RED: deterministic unit, permission and contract failure/negative fixtures; GREEN: reuse existing server-backed API and components; REFACTOR: existing app and DB/security regressions remain intact.
+- Exact-current-head Node/TS tests, ESLint, TypeScript, Next build, no-secret scan, standalone high/critical dependency audit, tenant/PostgreSQL integration and Vercel preview.
+- Authenticated browser at 390, 768, 1280 and 1440 pixels in **light and dark** with keyboard and screen-reader semantics, all real 403/409/429/503 cases, slow/network failure and member revocation. Keep separate reports for prototype/static and production React.
+- Compare multi-page journeys: repository → skill → reviewed change proposal → saved suite → authorized observed run → per-case results → paired comparison → proposal/release review. Verify reload and workspace switching with actual server data. Record exact commit/preview/provenance, not screenshots alone.
+- Security: untrusted Markdown, CSRF/origin, hostile path encodings, optimistic concurrency, provider entitlement, tenant denial before provider I/O, cost/budget uncertainty and credential redaction.
 
-- Unit and contract tests
-- Integration tests against real APIs, including failure modes
-- Security tests: tenant boundaries, unsafe rendering, CSRF and origin checks, provenance
-- End-to-end journeys
-- Visual regression at 390, 768, 1280 and 1440px, in light and dark themes and both densities
-- WCAG 2.2 AA checks
-- Build, lint, typecheck, dependency scans, independent review, Vercel preview and rollback readiness
+## Source integration versus release
 
-Tests must distinguish mocked UI fixtures from tests against persistent services.
+1. Integrate/reference PR #66 and source PR #73 **only after current-head green checks**; the v2 flag stays off during initial source merge.
+2. Do not enable schema-dependent Test Bench execution until protected staging and real managed-key/database restore are evidenced (PER-1556), and actual provider/cross-session user test passes (PER-1421).
+3. Validate zero production migration on Next/Vercel build, route fallback under `SAVANT_UI_V2_ENABLED=false`, and actual GitHub ruleset enforcement. Merged governance *source* is not effective protection until admin activation/readback.
+4. Enable a small workspace allowlist canary, measure failed navigation/HTTP errors/user paths and security denials, exercise kill-switch via configuration/redeploy, then change default only with owner authorization and verifiable rollback artifacts.
 
-## Rollout
-
-1. Development, then staging, then a controlled production cohort, all behind `savant-ui-v2`.
-2. Keep old routes until each replacement passes operational acceptance.
-3. Rolling back the UI must not require reverting migrations or weakening authorization.
-
-**Cutover criterion:** all six primary journeys work against production services, unsupported states are represented truthfully, security and accessibility gates pass, and rollback has been exercised.
+**Cutover means** the redesigned interface is the default route and supported operational path **after** all six primary journeys, auth/security/visual quality gates and rollback have passed. It does not require a fully executable Workflow Studio or prototype-only features.

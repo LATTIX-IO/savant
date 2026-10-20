@@ -1,6 +1,6 @@
 /* Browser journeys for the UX prototype, with screenshot baselines.
    Library → Workbench → Evaluations → Runs → Insights → Workflows at 390, 768, 1280 and 1440px,
-   light theme at every width and dark theme at 1280px.
+   light and dark themes at every width.
 
    Run (CI does this):
      PLAYWRIGHT_MODULE=<path to playwright> PROTOTYPE_URL=http://127.0.0.1:4173 node tests/browser.cjs
@@ -34,7 +34,8 @@ const OWN_SCROLL = new Set(['workbench', 'workflows']);
 (async () => {
   const browser = await chromium.launch();
   const results = [];
-  const runs = [[390, 'light'], [768, 'light'], [1280, 'light'], [1440, 'light'], [1280, 'dark']];
+  const runs = [[390, 'light'], [768, 'light'], [1280, 'light'], [1440, 'light'],
+    [390, 'dark'], [768, 'dark'], [1280, 'dark'], [1440, 'dark']];
   for (const [width, theme] of runs) {
     const ctx = await browser.newContext({ viewport: { width, height: 900 } });
     await ctx.addInitScript(t => { try { if (!sessionStorage.getItem('sv-seeded')) { localStorage.clear(); localStorage.setItem('sv-ws', '"wh"'); localStorage.setItem('sv-theme', JSON.stringify(t)); sessionStorage.setItem('sv-seeded', '1'); } } catch (e) {} }, theme);

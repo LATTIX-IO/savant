@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Runs · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .rl { display: grid; grid-template-columns: 272px minmax(0, 1fr); height: 100%; }
+  .rlist { border-right: 1px solid var(--border); background: var(--surface); overflow: auto; }
+  .rlist .hd { padding: 12px; display: grid; gap: 8px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); z-index: 1; }
+  .ritem { display: grid; gap: 4px; width: 100%; padding: 10px 12px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; color: var(--fg); font: inherit; cursor: pointer; position: relative; }
+  .ritem:hover { background: color-mix(in oklch, var(--recess) 60%, var(--surface)); }
+  .ritem[aria-current="true"] { background: var(--selected); box-shadow: inset 3px 0 0 var(--accent); }
+  .ritem .row .num { margin-left: auto; }
+  .run-select { display: none; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .run-select .select { flex: 1; }
+  .insp { overflow: auto; padding: 16px 24px 40px; min-width: 0; }
+  .gates { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
+  .gate { display: grid; gap: 2px; padding: 8px 12px; border-radius: var(--r-ctl); background: var(--recess); }
+  .gate.p1 { background: var(--crit-bg); box-shadow: inset 3px 0 0 var(--crit); }
+  .gate.p2 { background: var(--warn-bg); }
+  .gate .m { font-size: 12px; color: var(--fg-2); }
+  .gate.p1 .m, .gate.p1 .v { color: var(--crit-fg); }
+  .gate.p2 .m, .gate.p2 .v { color: var(--warn-fg); }
+  .gate .v { font: 500 13px var(--font-mono); display: flex; align-items: center; gap: 6px; }
+  .matrix { display: grid; grid-template-columns: repeat(30, 1fr); gap: 3px; }
+  .cell { aspect-ratio: 1; border: 0; border-radius: 2px; background: color-mix(in oklch, var(--fg) 14%, var(--surface)); cursor: pointer; padding: 0; min-width: 0; }
+  .cell:hover { background: color-mix(in oklch, var(--fg) 34%, var(--surface)); }
+  .cell.f { background: var(--crit); }
+  .cell.f:hover { background: var(--crit-fg); }
+  .cell.flip { box-shadow: inset 0 0 0 2px var(--crit-fg); }
+  .cell.fix { box-shadow: inset 0 0 0 2px var(--fg-2); }
+  .cell.dim { opacity: .18; }
+  .cell.sel { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .cell.pend { background: var(--recess); }
+  .clusters { display: flex; flex-wrap: wrap; gap: 6px; }
+  .clusters button { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); background: var(--surface); color: var(--fg); font: 12px var(--font-body); cursor: pointer; }
+  .clusters button:hover { background: var(--recess); }
+  .clusters button[aria-pressed="true"] { background: var(--selected); border-color: var(--accent); }
+  .wf { display: grid; grid-template-columns: 250px minmax(0, 1fr) 64px; row-gap: 2px; align-items: center; }
+  .wf .s { display: contents; cursor: pointer; }
+  .wf .s > * { padding: 6px 8px; height: 34px; display: flex; align-items: center; gap: 8px; }
+  .wf .s:hover > * { background: color-mix(in oklch, var(--recess) 60%, var(--surface)); }
+  .wf .s[aria-selected="true"] > * { background: var(--selected); }
+  .wf .s[aria-selected="true"] > :first-child { box-shadow: inset 3px 0 0 var(--accent); }
+  .wf .nm { font: 12px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wf .tr { position: relative; padding: 0 !important; }
+  .wf .tr i { margin-left: 4px; }
+  .wf .tr i { position: absolute; height: 12px; top: 11px; border-radius: 2px; background: var(--fg-2); }
+  .wf .tr i.model { background: var(--fg); }
+  .wf .tr i.tool { background: var(--border-strong); }
+  .wf .tr i.err { background: var(--crit); }
+  .wf .d { justify-content: flex-end; font: 11px var(--font-mono); color: var(--muted); }
+  .axis { display: grid; grid-template-columns: 250px minmax(0, 1fr) 64px; font: 10px var(--font-mono); color: var(--muted); }
+  .axis div { display: flex; justify-content: space-between; padding: 0 8px; }
+  .diff { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .diff .code { white-space: pre-wrap; }
+  .mark-bad { background: var(--crit-bg); color: var(--crit-fg); border-radius: 2px; padding: 0 2px; }
+  @media (max-width: 1000px) { .rl { grid-template-columns: minmax(0, 1fr); } .rlist { display: none; } .run-select { display: flex !important; } .matrix { grid-template-columns: repeat(18, 1fr); } .wf, .axis { grid-template-columns: 140px minmax(0, 1fr) 56px; } }
+</style>
+</head>
+<body data-page="runs">
+<div class="app" id="app">
+<main class="main" id="main" style="overflow:hidden">
+<div class="rl">
+  <nav class="rlist" aria-label="Runs" data-od-id="run-list">
+    <div class="hd">
+      <div class="seg" role="group" aria-label="Run type" id="rtype"><button aria-pressed="true" data-v="eval">Evaluations</button><button aria-pressed="false" data-v="prod">Production</button><button aria-pressed="false" data-v="reports">Reports</button></div>
+      <label class="search"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input class="input" id="rq" placeholder="Filter runs" aria-label="Filter runs"></label>
+    </div>
+    <div id="rows"></div>
+  </nav>
+  <section class="insp" id="insp" data-od-id="execution-inspector"></section>
+</div>
+</main>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  let runs = S.db.runs();
+  const prod = S.db.ws !== 'wh' ? [] : [['run_8f21', 'incident-triage', 'Claude Code', 'succeeded', '4.8s', '12%', 'full'], ['run_8f1e', 'customer-email-tone-pass', 'Cursor', 'succeeded', '1.9s', '4%', 'io'], ['run_8f1a', 'incident-triage', 'Codex', 'failed', '8.3s', '—', 'full'], ['run_8f17', 'pr-summarizer', 'GitHub Copilot', 'unknown', '3.2s', '—', 'outcome'], ['run_8f12', 'engineering-rfc-reviewer', 'Claude Code', 'succeeded', '6.1s', '38%', 'full']];
+  const name = id => S.skills.find(s => s.id === id).name;
+  let cur = S.store.get('run', 'EV-2418'), mode = 'eval', selCase = null, selStep = null, cluster = null;
+  if (location.hash.length > 1 && runs.some(r => r.id === location.hash.slice(1))) cur = location.hash.slice(1);
+
+  const stBadge = r => ({ running: '<span class="st"><i class="mk idle"></i>Running</span>', regressed: '<span class="st p1"><i class="mk p1"></i>Regressed</span>', 'gate-failed': '<span class="st p1"><i class="mk p1"></i>Gate failed</span>', passed: '<span class="st"><i class="mk ok"></i>Passed</span>', baseline: '<span class="st"><i class="mk ok"></i>Baseline</span>', failed: '<span class="st p1"><i class="mk p1"></i>Failed</span>' })[r.st];
+  function go(id) { cur = id; S.store.set('run', cur); selCase = null; selStep = null; cluster = null; history.replaceState(null, '', '#' + cur); list(); render(); }
+  function list() {
+    const q = $('#rq').value.toLowerCase();
+    if (mode === 'prod') { $('#rows').innerHTML = prod.filter(p => !q || (p[0] + p[1]).includes(q)).map(p => `<button class="ritem" data-p="${p[0]}"><div class="row"><span class="mono small">${p[0]}</span><span class="small muted">${p[2]}</span></div><div>${name(p[1])}</div><div class="row small">${p[3] === 'failed' ? '<span class="st p1"><i class="mk p1"></i>Failed</span>' : p[3] === 'unknown' ? '<span class="st unk"><i class="mk unk"></i>Unknown</span>' : '<span class="st"><i class="mk ok"></i>Succeeded</span>'}<span class="num muted">${p[4]}</span></div></button>`).join(''); return; }
+    $('#rows').innerHTML = runs.filter(r => !q || (r.id + name(r.skill)).toLowerCase().includes(q)).map(r => `<button class="ritem" data-id="${r.id}" aria-current="${r.id === cur}"><div class="row"><span class="mono small">${r.id}</span><span class="small muted" style="margin-left:auto">${r.when}</span></div>
+      <div>${name(r.skill)} <span class="mono small muted">${r.v}</span>${r.sim ? ' <span class="tag sim">Simulated</span>' : ''}</div>
+      <div class="row small">${stBadge(r)}${r.st === 'running' ? `<span class="num muted">${r.done}/${r.n}</span>` : r.q ? `<span class="num">${r.q}</span>` : ''}</div>
+      ${r.st === 'running' ? `<div class="bar"><i style="width:${r.done / r.n * 100}%"></i></div>` : ''}</button>`).join('');
+  }
+  $('#rows').addEventListener('click', e => {
+    const b = e.target.closest('.ritem'); if (!b) return;
+    if (b.dataset.p) { const p = prod.find(x => x[0] === b.dataset.p); if (p[6] !== 'full') return S.toast(`${p[0]} reported ${p[6] === 'io' ? 'inputs and outputs only' : 'outcome only'} · step trace unavailable`); cur = 'EV-2418'; selCase = 44; mode = 'eval'; $$('#rtype button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'eval')); S.toast(`${p[0]} trace matches EV-2418 case 044 pattern · showing evaluation trace`); list(); render(); return; }
+    go(b.dataset.id);
+  });
+  $$('#rtype button').forEach(b => b.onclick = () => { if (b.dataset.v === 'reports') { location.href = 'reports.html'; return; } mode = b.dataset.v; $$('#rtype button').forEach(x => x.setAttribute('aria-pressed', x === b)); list(); });
+  $('#rq').oninput = list;
+
+  /* deterministic cases */
+  const clusters = [['sev', 'Severity under-classification', 9], ['rb', 'Runbook not found', 4], ['to', 'Tool timeout', 3], ['ug', 'Summary not grounded', 3]];
+  function cases(r) {
+    const R = S.rng(r.id.charCodeAt(5) * 97 + 3); const out = Array.from({ length: r.n }, (_, i) => ({ i: i + 1, f: false }));
+    if (r.st === 'failed') { out.forEach(c => { c.f = true; c.c = 'err'; }); return out; }
+    if (r.st === 'running') { out.forEach((c, i) => c.pend = i >= r.done); }
+    const idx = [...out.keys()].filter(i => r.id !== 'EV-2418' || i !== 43).sort(() => R() - 0.5);
+    if (r.id === 'EV-2418') Object.assign(out[43], { f: true, c: 'to', flip: true });
+    let k = 0; const pool = r.id === 'EV-2418' ? clusters.map(c => c[0] === 'to' ? [c[0], c[1], c[2] - 1] : c) : [['sev', '', r.fail || 0]];
+    pool.forEach(([c, , n]) => { for (let j = 0; j < n; j++) { const cs = out[idx[k++]]; if (!cs) break; cs.f = true; cs.c = c; cs.flip = r.id === 'EV-2418' && j < (c === 'sev' ? 6 : c === 'rb' ? 3 : c === 'to' ? 2 : 0); } });
+    if (r.id === 'EV-2418') for (let j = 0; j < 5; j++) out[idx[k++]].fix = true;
+    return out;
+  }
+  function steps(cs) {
+    const to = cs.c === 'to', rb = cs.c === 'rb', sev = cs.c === 'sev', ug = cs.c === 'ug';
+    return [
+      { n: 'load_skill incident-triage', k: 'sys', s: 0, d: 12 },
+      { n: 'scripts/parse_alert.py', k: 'sys', s: 12, d: 48 },
+      { n: 'model · classify severity', k: 'model', s: 60, d: 1820, tok: '3,104 in · 212 out', cost: 0.0061, bad: sev },
+      { n: 'tool · find_runbook', k: 'tool', s: 1880, d: rb ? 2400 : 1180, bad: rb, err: rb ? 'No runbook matched service "identity-gw"' : null },
+      { n: 'tool · query_pagerduty', k: 'tool', s: 1880, d: to ? 8000 : 2100, bad: to, err: to ? 'Timeout after 8000ms' : null },
+      { n: 'model · compose report', k: 'model', s: to ? 9880 : 4280, d: 2140, tok: '4,882 in · 391 out', cost: 0.0094, bad: ug },
+      { n: 'judge · rubric scoring', k: 'sys', s: to ? 12020 : 6420, d: 910, tok: '2,210 in · 140 out', cost: 0.0012, bad: cs.f }
+    ];
+  }
+  const caseInput = i => ['checkout-api 5xx > 4% for 6m', 'queue lag 40m on ledger-sync', 'TLS cert expires in 6d', 'auth latency p99 9s', 'disk 91% on search-03'][i % 5];
+  const explain = { sev: 'Classified SEV&#8209;3, expected SEV&#8209;2. The severity matrix lacks examples for partial-region degradation.', rb: 'find_runbook returned no match, so the report linked a generic escalation page.', to: 'query_pagerduty timed out at 8.0s. Incident history was missing when severity was decided, producing SEV&#8209;2 instead of SEV&#8209;1.', ug: 'Summary cites a deploy that is not present in the service context.', err: 'Run aborted before this case executed.' };
+
+  function render() {
+    if (!runs.length) { $('#insp').innerHTML = '<div class="empty" style="padding:80px 16px"><h2>No runs yet</h2><p>Start an evaluation to see its cases and steps here.</p><a class="btn primary" href="library.html">Choose a skill</a></div>'; return; }
+    if (!runs.some(x => x.id === cur)) cur = runs[0].id;
+    const r = runs.find(x => x.id === cur); const sk = S.skills.find(s => s.id === r.skill); const cs = cases(r);
+    const OPS = { '>=': '≥', '<=': '≤', '>': '>', '<': '<' };
+    const gate = (r.gateResults || []).map(g => [g.na ? 'unk' : g.pass ? 'ok' : g.block ? 'p1' : 'p2', `${g.label} ${OPS[g.op] || g.op} ${g.t}${g.block ? '' : ' · warn only'}`, g.shown, g.na ? 'Not measured' : g.pass ? 'Passed' : g.block ? 'Failed' : 'Warning']);
+    $('#insp').innerHTML = `
+      <div class="run-select" data-od-id="run-select"><label for="rsel" class="lbl">Run</label><select class="select" id="rsel">${runs.map(x => `<option value="${x.id}" ${x.id === cur ? 'selected' : ''}>${x.id} · ${name(x.skill)} ${x.v} · ${x.st}</option>`).join('')}</select></div>
+      <div class="crumbs" data-od-id="breadcrumbs"><a href="runs.html">Runs</a><span>/</span><a href="library.html#${sk.id}">${sk.name}</a><span>/</span><span class="mono">${r.id}</span></div>
+      <div class="ctx"><div class="ttl"><div class="row wrap"><h1>${r.id}</h1>${stBadge(r)}</div><p>${sk.name} <span class="mono">${r.v}</span>${r.b !== '—' ? ` vs baseline <span class="mono">${r.b}</span>` : ''} · <span class="mono">${sk.dataset}</span> · ${r.n} cases · Anthropic · started ${r.when}</p></div>
+        <div class="acts">${r.st === 'regressed' || r.st === 'gate-failed' ? `<button class="btn" id="rerun" data-ic="refresh" ${r.fail ? '' : 'disabled'}>Re-run ${r.fail} failed</button><a class="btn" href="workbench.html?skill=${sk.id}">Open in workbench</a>${r.b !== '—' ? `<a class="btn primary" href="insights.html?a=${sk.id}" data-ic="compare">Compare with ${r.b}</a>` : ''}` : r.st === 'running' ? `<button class="btn" id="cancel" data-ic="pause">Cancel run</button>` : r.st === 'failed' ? `<a class="btn" href="integrations.html#models">Fix connection</a><button class="btn primary" id="retry" data-ic="refresh">Retry run</button>` : `<button class="btn" data-ic="download" id="exp">Export report</button>`}</div></div>
+      ${r.st === 'failed' ? `<div class="banner p1" style="margin-bottom:16px"><i class="mk p1"></i><strong>Run failed:</strong>&nbsp;${r.err}</div>` : ''}
+      ${r.q ? `<section class="measures" data-od-id="run-summary" style="margin-bottom:12px">
+        <div class="measure"><span class="l">Quality score</span><span class="v">${r.q}</span><span class="d ${r.dq < -2 ? 'bad' : ''}">${r.dq > 0 ? '+' : ''}${r.dq} vs ${r.b}</span></div>
+        <div class="measure"><span class="l">Cases passed</span><span class="v">${r.n - r.fail}<small>/ ${r.n}</small></span><span class="d ${r.fail > 15 ? 'bad' : ''}">${r.fail} failed${r.id === 'EV-2418' ? ' · 12 newly' : ''}</span></div>
+        <div class="measure"><span class="l">Latency P95</span><span class="v">${(r.p95 / 1000).toFixed(1)}<small>s</small></span><span class="d">per case</span></div>
+        <div class="measure"><span class="l">Cost</span><span class="v">$${r.cost.toFixed(2)}</span><span class="d">${r.tok} tokens</span></div>
+        <div class="measure"><span class="l">Duration</span><span class="v">${r.dur}</span><span class="d">8 parallel</span></div></section>
+      <section class="gates" data-od-id="acceptance-gates" style="margin-bottom:16px">${gate.map(g => `<div class="gate ${g[0] === 'ok' ? '' : g[0]}"><span class="m">${g[1]}</span><span class="v"><i class="mk ${g[0]}"></i>${g[2]} · ${g[3]}</span></div>`).join('')}</section>` : ''}
+      <section class="panel" data-od-id="case-matrix" style="margin-bottom:16px">
+        <div class="panel-h"><h2>Cases</h2><span class="meta">${r.st === 'running' ? `${r.done} of ${r.n} complete` : ''}</span>
+          <div class="r legend small"><span><span class="cell" style="display:inline-block;width:10px;vertical-align:middle;margin-right:4px"></span>Passed</span><span><span class="cell f" style="display:inline-block;width:10px;vertical-align:middle;margin-right:4px"></span>Failed</span>${r.id === 'EV-2418' ? '<span><span class="cell f flip" style="display:inline-block;width:10px;vertical-align:middle;margin-right:4px"></span>Newly failing</span><span><span class="cell fix" style="display:inline-block;width:10px;vertical-align:middle;margin-right:4px"></span>Newly passing</span>' : ''}</div></div>
+        <div class="panel-b stack">
+          ${r.id === 'EV-2418' ? `<div class="clusters" role="group" aria-label="Failure clusters">${clusters.map(c => `<button data-c="${c[0]}" aria-pressed="${cluster === c[0]}"><i class="mk p1"></i>${c[1]}<span class="num">${c[2]}</span></button>`).join('')}</div>` : ''}
+          <div class="matrix" id="matrix">${cs.map(c => `<button class="cell ${c.pend ? 'pend' : c.f ? 'f' : ''} ${c.flip ? 'flip' : ''} ${c.fix ? 'fix' : ''} ${cluster && c.c !== cluster ? 'dim' : ''} ${selCase === c.i ? 'sel' : ''}" data-i="${c.i}" aria-label="Case ${String(c.i).padStart(3, '0')} ${c.f ? 'failed' : 'passed'}" ${c.pend ? 'disabled' : ''}></button>`).join('')}</div>
+        </div></section>
+      <section class="panel" id="trace" data-od-id="step-trace"></section>`;
+    $$('#insp [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#rsel').onchange = e => go(e.target.value);
+    $('#matrix').onclick = e => { const c = e.target.closest('.cell'); if (!c || c.disabled) return; selCase = +c.dataset.i; selStep = null; $$('#matrix .cell').forEach(x => x.classList.toggle('sel', x === c)); trace(r, cs); };
+    $$('.clusters button').forEach(b => b.onclick = () => { cluster = cluster === b.dataset.c ? null : b.dataset.c; const first = cs.find(c => c.c === cluster); if (first) selCase = first.i; render(); });
+    $('#rerun') && ($('#rerun').onclick = () => { const id = S.db.addRun({ skill: r.skill, v: r.v, b: r.b, n: r.fail, note: `Re-run of ${r.fail} failed cases from ${r.id}` }); runs = S.db.runs(); S.simToast(`${id} started · ${r.fail} failed cases of ${r.id}`); go(id); });
+    $('#cancel') && ($('#cancel').onclick = async () => { const now = S.db.run(r.id); if (await S.confirm({ title: `Cancel ${r.id}?`, body: `${now.done} completed cases keep their results. The remaining ${now.n - now.done} will not run and the gate will not be evaluated.`, confirm: 'Cancel run', danger: true, cancel: 'Keep running' })) { const n2 = S.db.run(r.id); S.db.updateRun(r.id, { canceled: `Canceled by Priya Aronson at ${n2.done} of ${n2.n} cases` }); runs = S.db.runs(); list(); render(); } });
+    $('#retry') && ($('#retry').onclick = () => S.toast('Retry blocked · Azure OpenAI connection is revoked', 'Fix connection', () => location.href = 'integrations.html#models'));
+    $('#exp') && ($('#exp').onclick = () => S.toast(`${r.id} report exported as JSON and Markdown`));
+    if (selCase == null && r.st !== 'running') selCase = (cs.find(c => c.flip && c.c === 'to') || cs.find(c => c.f) || cs[0]).i;
+    if (selCase) { $$('#matrix .cell').forEach(x => x.classList.toggle('sel', +x.dataset.i === selCase)); trace(r, cs); } else $('#trace').innerHTML = '<div class="empty"><h3>Cases are still running</h3><p>Completed cases can be traced now.</p></div>';
+  }
+
+  function trace(r, cs) {
+    const c = cs[selCase - 1]; const id = String(c.i).padStart(3, '0');
+    if (r.st === 'failed' && !r.q) { $('#trace').innerHTML = `<div class="panel-h"><h2>Case ${id}</h2></div><div class="empty"><h3>No trace recorded</h3><p>${explain.err}</p></div>`; return; }
+    const st = steps(c), total = Math.max(...st.map(s => s.s + s.d)), cost = st.reduce((a, s) => a + (s.cost || 0), 0);
+    if (selStep == null) selStep = Math.max(0, st.findIndex(s => s.bad && s.k !== 'sys'));
+    if (selStep < 0) selStep = 2;
+    const s = st[selStep];
+    const exp = c.c === 'to' ? 'SEV-1' : 'SEV-2', got = c.f ? (c.c === 'sev' ? 'SEV-3' : c.c === 'to' ? 'SEV-2' : 'SEV-2') : exp;
+    const io = {
+      in: s.k === 'model' ? `{ "alert": "${caseInput(c.i)}",\n  "service": "${c.c === 'rb' ? 'identity-gw' : 'checkout-api'}",\n  "history": ${c.c === 'to' ? 'null' : '[3 incidents, 30d]'} }` : s.k === 'tool' ? `{ "service": "${c.c === 'rb' ? 'identity-gw' : 'checkout-api'}", "window": "30d" }` : `{ "case": "${id}" }`,
+      out: s.err ? `{ "error": "${s.err}" }` : s.n.includes('classify') ? `{ "severity": "${got}", "confidence": ${c.f ? 0.58 : 0.91} }` : s.n.includes('judge') ? `{ "score": ${c.f ? 0.52 : 0.94}, "pass": ${!c.f} }` : s.n.includes('compose') ? `{ "severity": "${got}", "owner": "identity",\n  "runbook_link": "${c.c === 'rb' ? 'escalation/general' : 'runbooks/identity/latency'}",\n  "summary": "Auth p99 at 9s across eu-west…" }` : '{ "ok": true }'
+    };
+    $('#trace').innerHTML = `
+      <div class="panel-h"><h2>Case <span class="mono">${id}</span></h2><span class="meta">${caseInput(c.i)}</span><div class="r">${c.f ? '<span class="st p1"><i class="mk p1"></i>Failed</span>' : '<span class="st"><i class="mk ok"></i>Passed</span>'}<span class="num small muted">${(total / 1000).toFixed(1)}s · $${cost.toFixed(4)}</span>
+        <button class="icon-btn" id="prev" aria-label="Previous case">${S.icon('chev').replace('<svg', '<svg style="transform:rotate(180deg)"')}</button><button class="icon-btn" id="nextc" aria-label="Next case">${S.icon('chev')}</button></div></div>
+      <div class="panel-b stack">
+        ${c.f ? `<div class="banner p1"><i class="mk p1"></i><span><strong>Why it failed:</strong> ${explain[c.c]}</span></div>` : c.fix ? '<div class="banner"><i class="mk ok"></i>Failed on the baseline, passes on this version.</div>' : ''}
+        <div class="axis"><span></span><div><span>0s</span><span>${(total / 2000).toFixed(1)}s</span><span>${(total / 1000).toFixed(1)}s</span></div><span></span></div>
+        <div class="wf" role="listbox" aria-label="Steps">${st.map((x, i) => `<div class="s" role="option" data-s="${i}" aria-selected="${i === selStep}" tabindex="0"><span class="nm">${x.bad && (x.k !== 'sys' || i === 6) ? '<i class="mk p1"></i>' : '<i class="mk idle"></i>'}${x.n}</span><span class="tr"><i class="${x.err ? 'err' : x.k}" style="left:${x.s / total * 100}%;width:${Math.max(0.6, x.d / total * 100)}%"></i></span><span class="d">${x.d >= 1000 ? (x.d / 1000).toFixed(1) + 's' : x.d + 'ms'}</span></div>`).join('')}</div>
+        <div class="legend small"><span><i style="height:8px;width:10px;border-radius:2px"></i>Model call</span><span><i class="base" style="height:8px;width:10px;border-radius:2px"></i>Tool call</span><span><i style="height:8px;width:10px;border-radius:2px;background:var(--fg-2)"></i>Savant step</span></div>
+        <div class="divider"></div>
+        <div class="row"><h3 class="mono">${s.n}</h3><span class="spacer"></span><span class="small muted">${s.tok ? s.tok + ' · $' + s.cost.toFixed(4) : ''}${s.k === 'model' ? ' · Anthropic' : ''}</span></div>
+        <div class="tabs" role="tablist" id="stabs" style="margin:0">
+          <button role="tab" aria-selected="true" aria-controls="sx-io">Input and output</button>
+          ${selStep === 6 ? '<button role="tab" aria-selected="false" aria-controls="sx-exp">Expected vs actual</button>' : ''}
+          <button role="tab" aria-selected="false" aria-controls="sx-log">Logs</button>
+          <button role="tab" aria-selected="false" aria-controls="sx-raw">Raw span</button>
+        </div>
+        <div id="sx-io" class="diff"><div><div class="lbl" style="margin-bottom:4px">Input</div><pre class="code">${io.in}</pre></div><div><div class="lbl" style="margin-bottom:4px">Output</div><pre class="code">${io.out}</pre></div></div>
+        <div id="sx-exp" hidden class="stack"><div class="diff"><div><div class="lbl" style="margin-bottom:4px">Expected</div><pre class="code">severity: ${exp}\nowner: identity\nrunbook: runbooks/identity/latency</pre></div><div><div class="lbl" style="margin-bottom:4px">Actual</div><pre class="code">severity: ${got !== exp ? `<span class="mark-bad">${got}</span>` : got}\nowner: identity\nrunbook: ${c.c === 'rb' ? '<span class="mark-bad">escalation/general</span>' : 'runbooks/identity/latency'}</pre></div></div>
+          <dl class="kv"><dt>Severity match</dt><dd>${got === exp ? '1.0' : '<span class="mark-bad">0.0</span>'}</dd><dt>Owner match</dt><dd>1.0</dd><dt>Runbook relevance</dt><dd>${c.c === 'rb' ? '<span class="mark-bad">0.2</span>' : '0.9'}</dd><dt>Summary grounding</dt><dd>${c.c === 'ug' ? '<span class="mark-bad">0.4</span>' : '0.9'}</dd><dt>Judge rationale</dt><dd>${c.f ? explain[c.c] : 'All rubric criteria satisfied.'}</dd></dl></div>
+        <pre id="sx-log" hidden class="code">${[`09:33:0${c.i % 9}.112  span.start  ${s.n}`, `09:33:0${c.i % 9}.114  case=${id} run=${r.id} skill=${r.skill}@${r.v}`, s.err ? `09:33:1${c.i % 9}.114  ERROR  ${s.err}` : `09:33:0${c.i % 9}.${(s.d % 900) + 100}  span.end  status=ok`, s.k === 'tool' ? `           mcp.server=${s.n.includes('pager') ? 'pagerduty-mcp' : 'ops-knowledge'} replay=false` : ''].join('\n')}</pre>
+        <pre id="sx-raw" hidden class="code">${JSON.stringify({ span_id: 'sp_' + (c.i * 7919).toString(16), run_id: r.id, case: id, name: s.n, kind: s.k, start_ms: s.s, duration_ms: s.d, status: s.err ? 'error' : 'ok', telemetry: 'full' }, null, 2)}</pre>
+      </div>`;
+    S.tabs($('#stabs'));
+    $$('#trace .s').forEach(x => { x.onclick = () => { selStep = +x.dataset.s; trace(r, cs); }; x.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); x.click(); } if (e.key === 'ArrowDown') x.nextElementSibling?.focus(); if (e.key === 'ArrowUp') x.previousElementSibling?.focus(); }; });
+    const nav = d => { const pool = cluster ? cs.filter(x => x.c === cluster) : cs.filter(x => !x.pend); const k = pool.findIndex(x => x.i === selCase); const nx = pool[(k + d + pool.length) % pool.length]; selCase = nx.i; selStep = null; $$('#matrix .cell').forEach(x => x.classList.toggle('sel', +x.dataset.i === selCase)); trace(r, cs); };
+    $('#prev').onclick = () => nav(-1); $('#nextc').onclick = () => nav(1);
+  }
+
+  if (location.hash === '#prod') { mode = 'prod'; $$('#rtype button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === 'prod')); }
+  list(); render();
+  const running = () => runs.filter(x => x.st === 'running').map(x => x.id);
+  let wasRunning = running();
+  setInterval(() => {
+    runs = S.db.runs(); const now = running();
+    wasRunning.filter(id => !now.includes(id)).forEach(id => { const x = runs.find(y => y.id === id); if (x && x.st !== 'failed') S.simToast(`${id} complete · ${x.st === 'regressed' ? 'gate failed' : x.st === 'baseline' ? 'baseline recorded' : 'gate passed'}`, cur === id ? null : 'Open', () => go(id)); });
+    if (wasRunning.length || now.length) { list(); if (wasRunning.includes(cur) || now.includes(cur)) render(); }
+    wasRunning = now;
+  }, 1500);
+});
+</script>
+</body>
+</html>

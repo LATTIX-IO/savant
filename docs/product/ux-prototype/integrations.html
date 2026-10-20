@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Integrations · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .topo { display: grid; grid-template-columns: 1fr 120px 1fr 120px 1fr; align-items: center; margin-bottom: 16px; padding: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); }
+  .topo .col { display: grid; gap: 6px; }
+  .topo .col .h { font-size: 11px; color: var(--muted); font-weight: 500; }
+  .topo .it { display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px; border-radius: var(--r-tag); background: var(--recess); font-size: 12px; text-decoration: none; color: var(--fg); }
+  .topo .it:hover { background: color-mix(in oklch, var(--recess) 70%, var(--fg)); }
+  .topo .it.p1 { background: var(--crit-bg); color: var(--crit-fg); }
+  .topo .it.p2 { background: var(--warn-bg); color: var(--warn-fg); }
+  .topo .hub { justify-self: center; display: grid; place-items: center; gap: 4px; width: 100%; height: 100%; padding: 12px; border-radius: var(--r-panel); background: var(--fg); color: var(--surface); text-align: center; }
+  .topo .hub img { width: 28px; height: 28px; }
+  .topo .ln { height: 1px; background: var(--border-strong); position: relative; }
+  .topo .ln::after { content: ""; position: absolute; right: 0; top: -3px; border: 3.5px solid transparent; border-left: 6px solid var(--border-strong); border-right: 0; }
+  .token { display: flex; gap: 6px; align-items: center; }
+  .token code { flex: 1; font: 12px var(--font-mono); background: var(--recess); padding: 8px 10px; border-radius: var(--r-ctl); overflow-wrap: anywhere; }
+  @media (max-width: 1000px) { .topo { grid-template-columns: 1fr; gap: 12px; } .topo .ln { display: none; } }
+</style>
+</head>
+<body data-page="integrations">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><span>Integrations</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Integrations</h1></div>
+    <div class="acts" id="acts"></div>
+  </div>
+
+  <section class="topo" data-od-id="integration-topology" aria-label="Integration topology">
+    <div class="col"><span class="h">Sources</span>
+      <a class="it" href="#source"><i class="mk ok"></i>GitHub · 2 orgs</a><a class="it p2" href="#source"><i class="mk p2"></i>wh-legal · reauthorize</a><a class="it" href="#source"><i class="mk ok"></i>GitLab · Bitbucket · Azure</a></div>
+    <div class="ln"></div>
+    <div class="hub"><img src="assets/savant-mark-dark.svg" alt="" width="28" height="28"><strong>Savant</strong><span class="small" style="opacity:.75">index · evaluate · route</span></div>
+    <div class="ln"></div>
+    <div class="col"><span class="h">Execution</span>
+      <a class="it p2" href="#models"><i class="mk p2"></i>Anthropic · rotate key</a><a class="it p1" href="#models"><i class="mk p1"></i>Azure OpenAI · revoked</a><a class="it" href="#router"><i class="mk ok"></i>6 agent clients via router</a></div>
+  </section>
+
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" aria-selected="true" aria-controls="t-source" data-tab="source">Source control <span class="count">5</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-models" data-tab="models">Model providers <span class="count">3</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-router" data-tab="router">Agent clients <span class="count">6</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-dist" data-tab="dist">Distribution <span class="count">7</span></button>
+  </div>
+
+  <section id="t-source" data-od-id="source-control"><div class="panel"><div class="tbl-wrap"><table class="tbl" id="src"><thead><tr><th>Connection</th><th>Provider</th><th>Method</th><th>Status</th><th class="r">Repositories</th><th class="r">Connected</th><th></th></tr></thead><tbody></tbody></table></div></div></section>
+
+  <section id="t-models" hidden data-od-id="model-providers">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="mdl"><thead><tr><th>Connection</th><th>Used for</th><th>Status</th><th class="r">Key age</th><th class="r">Eval spend, 30d</th><th></th></tr></thead><tbody></tbody></table></div></div>
+    <div class="panel" style="margin-top:16px"><div class="panel-h"><h2>Managed by Savant</h2></div>
+      <table class="tbl compact"><tbody><tr><td>Rubric judge</td><td class="muted">Scores evaluation cases and routes skill requests</td><td><span class="st"><i class="mk ok"></i>Operational</span></td></tr><tr><td>Dataset generation</td><td class="muted">Builds and aligns evaluation datasets from manifests</td><td><span class="st"><i class="mk ok"></i>Operational</span></td></tr><tr><td>Safety scanning</td><td class="muted">Scans hub skills before import</td><td><span class="st"><i class="mk ok"></i>Operational</span></td></tr><tr><td>Auto-Improve</td><td class="muted">Proposes skill and evaluation improvements</td><td><span class="st"><i class="mk ok"></i>Operational</span></td></tr></tbody></table></div>
+  </section>
+
+  <section id="t-router" hidden data-od-id="agent-clients">
+    
+    <div class="panel"><div class="tbl-wrap"><table class="tbl" id="rt"><thead><tr><th>Client</th><th>Token</th><th>Telemetry</th><th>Status</th><th>Runs, 14d</th><th class="r">Last seen</th><th></th></tr></thead><tbody></tbody></table></div></div>
+  </section>
+
+  <section id="t-dist" hidden data-od-id="distribution">
+    <div class="panel"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Connector</th><th>Category</th><th>Status</th><th class="r">Skills distributed</th><th></th></tr></thead><tbody>
+
+    </tbody></table></div></div>
+  </section>
+</div>
+</main>
+</div>
+
+<dialog class="dialog" id="rot" aria-labelledby="rot-t">
+  <form method="dialog">
+    <div class="dh"><h2 id="rot-t">Rotate Anthropic key</h2></div>
+    <div class="db stack"><div class="field"><label for="nk">New API key</label><input class="input mono" id="nk" type="password" placeholder="sk-ant-…" autocomplete="off"><span class="hint" id="nk-h">Stored encrypted. Shown once.</span></div></div>
+    <div class="df"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok" id="nk-go">Test and rotate</button></div>
+  </form>
+</dialog>
+<dialog class="dialog" id="addm" aria-labelledby="am-t" data-od-id="add-provider-dialog">
+  <form method="dialog">
+    <div class="dh"><h2 id="am-t">Add model provider</h2></div>
+    <div class="db stack">
+      <div class="field"><label for="am-p">Provider</label><select class="select" id="am-p"><option>OpenAI</option><option>Anthropic</option><option>Azure OpenAI</option><option>OpenAI-compatible</option></select></div>
+      <div class="field" id="am-url-f" hidden><label for="am-url">Base URL</label><input class="input mono" id="am-url" placeholder="https://inference.internal/v1"></div>
+      <div class="field"><label for="am-n">Connection name</label><input class="input" id="am-n" placeholder="OpenAI · research"></div>
+      <div class="field"><label for="am-k">API key</label><input class="input mono" id="am-k" type="password" autocomplete="off"><span class="hint" id="am-h">Stored encrypted. Shown once.</span></div>
+    </div>
+    <div class="df"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok" id="am-go">Test and save</button></div>
+  </form>
+</dialog>
+<dialog class="dialog" id="tok" aria-labelledby="tok-t">
+  <div class="dh"><h2 id="tok-t">Token for <span id="tok-c"></span></h2><p class="muted">Copy it now. Savant stores only a hash.</p></div>
+  <div class="db stack"><div class="token"><code id="tok-v"></code><button class="btn" id="tok-copy" data-ic="copy">Copy</button></div><pre class="code" id="tok-cfg"></pre></div>
+  <div class="df"><button class="btn primary" onclick="this.closest('dialog').close()">Done</button></div>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  const acts = { source: '<button class="btn primary" id="a-src" data-ic="plus">Add connection</button>', models: '<button class="btn primary" id="a-mdl" data-ic="plus">Add model provider</button>', router: '<button class="btn primary" id="a-rt" data-ic="key">Create client token</button>', dist: '' };
+  const setActs = t => { $('#acts').innerHTML = acts[t] || ''; $$('#acts [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#a-src') && ($('#a-src').onclick = () => location.href = 'library.html#repositories');
+    $('#a-mdl') && ($('#a-mdl').onclick = () => { ['#am-n', '#am-k', '#am-url'].forEach(k => $(k).value = ''); $('#addm').showModal(); });
+    $('#a-rt') && ($('#a-rt').onclick = () => token('New client'));
+    history.replaceState(null, '', '#' + t); };
+  S.tabs($('#tabs'), setActs);
+
+  const METHOD = { GitHub: 'App installation', GitLab: 'OAuth', Bitbucket: 'Access token', 'Azure Repos': 'Personal access token' };
+  const SINCE = { wh: '14 Mar', 'wh-legal': '02 Apr', platform: '21 May', ops: '30 Jun', research: '11 Jul' };
+  const src = () => S.db.connections().map(c => [c.conn, c.pv, METHOD[c.pv] || 'OAuth', c.auth === 'active' && c.conn === 'research' ? 'expiring' : c.auth, c.repos, SINCE[c.conn] || 'today', c.sim]);
+  const stc = s => ({ active: '<span class="st"><i class="mk ok"></i>Active</span>', needs_reauthorization: '<span class="st p2"><i class="mk p2"></i>Needs reauthorization</span>', expiring: '<span class="st"><i class="mk p3"></i>Token expires in 9 days</span>', revoked: '<span class="st p1"><i class="mk p1"></i>Revoked</span>', disconnected: '<span class="st unk"><i class="mk unk"></i>Disconnected</span>', rotation: '<span class="st p2"><i class="mk p2"></i>Rotation due</span>' })[s];
+  const drawSrc = () => $('#src tbody').innerHTML = src().map((r, i) => `<tr><td class="mono">${S.esc(r[0])}${r[6] ? ' <span class="tag sim">Simulated</span>' : ''}</td><td>${r[1]}</td><td class="small fg2">${r[2]}</td><td>${stc(r[3])}</td><td class="r num">${r[4]}</td><td class="r num muted">${r[5]}</td>
+    <td class="r nowrap">${r[3] === 'needs_reauthorization' ? `<button class="btn sm" data-re="${i}">Reauthorize</button>` : r[3] === 'expiring' ? `<button class="btn sm" data-re="${i}">Replace token</button>` : ''} <button class="icon-btn" data-more="${i}" aria-label="More actions for ${r[0]}">${S.icon('more')}</button></td></tr>`).join('');
+  drawSrc();
+  $('#src').addEventListener('click', e => {
+    const re = e.target.closest('[data-re]'), mo = e.target.closest('[data-more]');
+    if (re) { const c = src()[+re.dataset.re][0]; re.disabled = true; re.textContent = 'Waiting…'; setTimeout(() => { S.db.repos().filter(r => r.conn === c).forEach(r => { r.auth = 'active'; if (r.sync === 'auth_required') r.sync = 'ok'; }); S.db.save(); drawSrc(); S.simToast(`${c} reconnected · repositories syncing in Library`, 'Open Library', () => location.href = 'library.html#repositories'); }, 1300); }
+    if (mo) { const r = src()[+mo.dataset.more]; S.menu(mo, [{ label: 'View repositories', icon: 'git', act: () => location.href = 'library.html#repositories' }, { sep: true }, { label: 'Disconnect', icon: 'x', danger: true, act: async () => { if (await S.confirm({ title: `Disconnect ${r[0]}?`, body: `${r[4]} repositor${r[4] === 1 ? 'y stops' : 'ies stop'} syncing. Indexed skills and evaluation history are kept but marked stale.`, confirm: 'Disconnect', danger: true })) { S.db.repos().filter(x => x.conn === r[0]).forEach(x => { x.auth = 'disconnected'; x.sync = 'stale'; }); S.db.save(); drawSrc(); S.simToast(`${r[0]} disconnected · its repositories are marked stale`); } } }]); }
+  });
+
+  const mdl = [['Anthropic', 'Evaluations · default', 'rotation', '97 days', '$61.20'], ['OpenAI', 'Comparison runs', 'active', '22 days', '$14.05'], ['Azure OpenAI', 'Finance skills', 'revoked', '—', '$0.00']];
+  const drawM = () => $('#mdl tbody').innerHTML = mdl.map((r, i) => `<tr class="${r[2] === 'revoked' ? 'p1row' : ''}"><td><strong>${S.esc(r[0])}</strong></td><td class="small fg2">${r[1]}</td><td>${stc(r[2])}</td><td class="r num">${r[3]}</td><td class="r num">${r[4]}</td>
+    <td class="r nowrap">${r[2] === 'rotation' ? '<button class="btn sm" id="rotb">Rotate key</button>' : r[2] === 'revoked' ? `<button class="btn sm" data-recon="${i}">Reconnect</button>` : `<button class="btn sm tertiary" data-rev="${i}">Revoke</button>`}</td></tr>`).join('');
+  drawM();
+  $('#mdl').addEventListener('click', async e => {
+    if (e.target.closest('#rotb')) { $('#nk').value = ''; $('#rot').showModal(); }
+    const rv = e.target.closest('[data-rev]'); if (rv) { const r = mdl[+rv.dataset.rev]; if (await S.confirm({ title: `Revoke ${r[0]} key?`, body: 'Running and queued evaluations that use this connection will fail immediately. This cannot be undone; you will need a new key to reconnect.', confirm: 'Revoke key', danger: true })) { r[2] = 'revoked'; r[3] = '—'; drawM(); S.simToast(`${r[0]} key revoked`); } }
+    const rc = e.target.closest('[data-recon]'); if (rc) { $('#rot-t').textContent = `Reconnect ${mdl[+rc.dataset.recon][0]}`; $('#rot').dataset.i = rc.dataset.recon; $('#rot').showModal(); }
+  });
+  $('#nk-go').onclick = e => { const v = $('#nk').value.trim(); if (v.length < 12) { e.preventDefault(); $('#nk').setAttribute('aria-invalid', 'true'); $('#nk-h').className = 'err'; $('#nk-h').textContent = 'Key is too short. Paste the full key.'; } };
+  $('#nk').oninput = () => { $('#nk').removeAttribute('aria-invalid'); $('#nk-h').className = 'hint'; $('#nk-h').textContent = 'Stored encrypted. Shown once.'; };
+  $('#rot').addEventListener('close', () => { if ($('#rot').returnValue !== 'ok') return; const i = +($('#rot').dataset.i ?? 0); mdl[i][2] = 'active'; mdl[i][3] = '0 days'; delete $('#rot').dataset.i; $('#rot-t').textContent = 'Rotate Anthropic key'; drawM(); S.simToast(`${mdl[i][0]} key verified and saved`); });
+
+  $('#am-p').onchange = e => $('#am-url-f').hidden = e.target.value !== 'OpenAI-compatible';
+  const amErr = (m) => { $('#am-k').setAttribute('aria-invalid', 'true'); $('#am-h').className = 'err'; $('#am-h').textContent = m; };
+  $('#am-k').oninput = () => { $('#am-k').removeAttribute('aria-invalid'); $('#am-h').className = 'hint'; $('#am-h').textContent = 'Stored encrypted. Shown once.'; };
+  $('#am-go').onclick = e => {
+    const k = $('#am-k').value.trim(), p = $('#am-p').value;
+    if (p === 'OpenAI-compatible' && !/^https:\/\//.test($('#am-url').value.trim())) { e.preventDefault(); $('#am-url').setAttribute('aria-invalid', 'true'); $('#am-url').focus(); return; }
+    if (k.length < 12) { e.preventDefault(); amErr('Key is too short. Paste the full key.'); return; }
+    if (p === 'Anthropic' && !k.startsWith('sk-ant-')) { e.preventDefault(); amErr('Anthropic keys start with sk-ant-.'); return; }
+  };
+  $('#addm').addEventListener('close', () => { if ($('#addm').returnValue !== 'ok') return; const p = $('#am-p').value; mdl.push([$('#am-n').value.trim() || p, 'Not yet assigned', 'active', '0 days', '$0.00']); drawM(); $('[data-tab="models"] .count').textContent = mdl.length; S.simToast(`${p} connection verified and saved`); });
+
+  const rt = [['Claude Code', 'full', 'ok', '2m', 412], ['Codex', 'full', 'ok', '5m', 220], ['Cursor', 'io', 'ok', '11m', 180], ['GitHub Copilot (VS Code)', 'outcome', 'ok', '1h', 140], ['ChatGPT', 'io', 'ok', '3h', 64], ['Gemini CLI', 'full', 'stale', '12d', 0]];
+  const drawR = () => $('#rt tbody').innerHTML = rt.map((r, i) => `<tr><td><strong>${r[0]}</strong></td><td class="mono small muted">svt_…${(i * 4099 + 7331).toString(16).slice(-4)}</td><td class="small">${{ full: 'Full', io: 'Inputs and outputs', outcome: 'Outcome only' }[r[1]]}</td>
+    <td>${r[2] === 'ok' ? '<span class="st"><i class="mk ok"></i>Connected</span>' : '<span class="st"><i class="mk p3"></i>No activity 12 days</span>'}</td><td>${S.bars(S.walk(i * 13 + 5, 14, r[4] / 14, 0, r[4] / 10, 0, 1000).map(v => r[4] ? v : 0.01), 84, 18)}</td><td class="r num muted">${r[3]}</td>
+    <td class="r nowrap"><button class="btn sm tertiary" data-tk="${i}">Regenerate</button></td></tr>`).join('');
+  drawR();
+  $('#rt').addEventListener('click', async e => { const b = e.target.closest('[data-tk]'); if (!b) return; if (await S.confirm({ title: `Regenerate token for ${rt[+b.dataset.tk][0]}?`, body: 'The current token stops working immediately. Clients must be updated with the new token.', confirm: 'Regenerate', danger: true })) token(rt[+b.dataset.tk][0]); });
+  function token(c) { const v = 'svt_' + Array.from(crypto.getRandomValues(new Uint8Array(24)), b => b.toString(16).padStart(2, '0')).join(''); /* prototype only: production tokens are minted server-side and stored as a hash */ $('#tok-c').textContent = c; $('#tok-v').textContent = v;
+    $('#tok-cfg').textContent = `{ "mcpServers": { "savant": {\n    "url": "https://savant.example/mcp",\n    "headers": { "Authorization": "Bearer ${v.slice(0, 8)}…" } } } }`;
+    $('#tok').showModal(); }
+  $('#tok-copy').insertAdjacentHTML('afterbegin', S.icon('copy'));
+  $('#tok-copy').onclick = () => { navigator.clipboard?.writeText($('#tok-v').textContent).catch(() => {}); $('#tok-copy').lastChild.textContent = 'Copied'; setTimeout(() => $('#tok-copy').lastChild.textContent = 'Copy', 1500); };
+
+  const dist = [['VS Code sync agent', 'local', 'healthy', 6], ['savant-cli', 'local', 'healthy', 9], ['GitHub Actions', 'native', 'healthy', 4], ['Slack', 'notify', 'degraded', '—'], ['Linear', 'notify', 'healthy', '—'], ['Jira', 'notify', 'offline', '—'], ['Signed bundle export', 'bundle', 'healthy', 3]];
+  $('#t-dist tbody').innerHTML = dist.map(d => `<tr><td><strong>${d[0]}</strong></td><td><span class="tag">${d[1]}</span></td><td>${d[2] === 'healthy' ? '<span class="st"><i class="mk ok"></i>Healthy</span>' : d[2] === 'degraded' ? '<span class="st p2"><i class="mk p2"></i>Degraded</span>' : '<span class="st unk"><i class="mk unk"></i>Offline</span>'}</td><td class="r num">${d[3]}</td><td class="r"><button class="btn sm" disabled title="Configuration is planned">Configure</button> <span class="cap plan">Planned</span></td></tr>`).join('');
+
+  const h = location.hash.slice(1); const tb = $(`#tabs [data-tab="${h}"]`); tb ? tb.click() : setActs('source');
+});
+</script>
+</body>
+</html>

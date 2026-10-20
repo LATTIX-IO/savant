@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Insights · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .cmpbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); margin-bottom: 16px; }
+  .cmpbar .side { display: flex; align-items: center; gap: 6px; }
+  .cmpbar .ab { font: 600 11px var(--font-mono); width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; background: var(--recess); }
+  .cmpbar .ab.b { background: var(--fg); color: var(--surface); }
+  .q { font-size: 11px; font-weight: 500; color: var(--muted); }
+  .dumb { display: grid; grid-template-columns: 150px minmax(0, 1fr) 120px; align-items: center; row-gap: 4px; }
+  .dumb > div { height: 34px; display: flex; align-items: center; border-bottom: 1px solid var(--border); }
+  .dumb .lab { font-size: 12px; color: var(--fg-2); }
+  .dumb .val { justify-content: flex-end; gap: 8px; font: 12px var(--font-mono); }
+  .dumb .trk { position: relative; }
+  .dumb .trk::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border); }
+  .dumb .ln { position: absolute; top: calc(50% - 1px); height: 3px; background: var(--fg-2); border-radius: 2px; }
+  .dumb .ln.bad { background: var(--crit); }
+  .dumb .a, .dumb .b { position: absolute; top: 50%; width: 10px; height: 10px; border-radius: 50%; transform: translate(-50%, -50%); }
+  .dumb .a { background: var(--surface); border: 2px solid var(--border-strong); }
+  .dumb .b { background: var(--fg); }
+  .dumb .b.bad { background: var(--crit); }
+  .flipbar { display: flex; height: 20px; border-radius: 4px; overflow: hidden; gap: 2px; }
+  .flipbar i { display: grid; place-items: center; font: 500 10px var(--font-mono); color: var(--surface); }
+  .diffl { font: 12px/1.7 var(--font-mono); background: var(--recess); border-radius: var(--r-ctl); padding: 8px 0; overflow-x: auto; }
+  .diffl div { padding: 0 12px; white-space: pre; }
+  .diffl .add { background: color-mix(in oklch, var(--normal) 12%, transparent); }
+  .diffl .del { background: var(--crit-bg); color: var(--crit-fg); }
+  .rec { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--sim); border-radius: var(--r-ctl); background: var(--sim-bg); }
+  .rec + .rec { margin-top: 8px; }
+  .rec .row strong { color: var(--fg); }
+  .rec p { color: var(--fg-2); font-size: 12px; }
+  .stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin-bottom: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); }
+  .stages > div { padding: 12px 16px; border-left: 1px solid var(--border); display: grid; gap: 8px; align-content: start; }
+  .stages > div:first-child { border-left: 0; }
+  .stages .h { display: flex; align-items: baseline; gap: 8px; }
+  .stages .h b { font: 500 20px var(--font-mono); }
+  .stages .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .rh { display: grid; grid-template-columns: 200px minmax(0, 1fr); row-gap: 2px; }
+  .rh .ln { display: contents; }
+  .rh .nm { font-size: 12px; color: var(--fg-2); height: 44px; display: flex; align-items: center; gap: 6px; padding-right: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border: 0; background: none; text-align: left; cursor: pointer; font-family: var(--font-body); border-radius: 4px; }
+  .rh .nm:hover { color: var(--fg); background: var(--recess); }
+  .rh .nm[aria-pressed="true"] { color: var(--fg); background: var(--selected); }
+  .rh .tr { position: relative; height: 44px; }
+  .rh .tr::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 1px; background: var(--border); }
+  .rh .seg-v { position: absolute; top: calc(50% - 2px); height: 4px; border-radius: 2px; background: color-mix(in oklch, var(--fg) 22%, var(--surface)); }
+  .rh .seg-v.rb { background: var(--warn-bg); outline: 1px dashed var(--warn); }
+  .rh .ev { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 18px; height: 18px; display: grid; place-items: center; border: 0; padding: 0; background: var(--surface); border-radius: 50%; cursor: pointer; }
+  .rh .ev:hover, .rh .ev:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .rh .ev .v { position: absolute; top: -13px; font: 10px var(--font-mono); color: var(--muted); white-space: nowrap; }
+  .rh .ev.rbk .v { top: auto; bottom: -13px; color: var(--warn-fg); }
+  .rh .ax { grid-column: 2; display: flex; justify-content: space-between; font: 10px var(--font-mono); color: var(--muted); padding-top: 4px; border-top: 1px solid var(--border); }
+  .rh .now { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--border-strong); }
+  #rh-log tr.hl td { background: var(--selected); }
+  @media (max-width: 760px) { .rh { grid-template-columns: 110px minmax(0, 1fr); } }
+  .ck { display: inline-flex; justify-content: center; width: 100%; }
+  @media (max-width: 760px) { .stages { grid-template-columns: minmax(0, 1fr); } .stages > div { border-left: 0; border-top: 1px solid var(--border); } }
+  .scatter text { font: 10px var(--font-mono); fill: var(--muted); }
+</style>
+</head>
+<body data-page="insights">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><span>Insights</span><span>/</span><span id="crumb">Compare</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><h1>Insights</h1></div>
+    <div class="acts" id="acts"></div>
+  </div>
+
+  <div class="tabs" role="tablist" id="tabs">
+    <button role="tab" aria-selected="true" aria-controls="t-cmp">Compare versions</button>
+    <button role="tab" aria-selected="false" aria-controls="t-rel" id="tab-rel">Releases <span class="count" id="rel-n">3</span></button>
+    <button role="tab" aria-selected="false" aria-controls="t-port" id="tab-port">Portfolio</button>
+  </div>
+
+  <section id="t-cmp" data-od-id="compare">
+    <div class="cmpbar" data-od-id="compare-picker">
+      <select class="select" id="skill" aria-label="Skill"></select>
+      <span class="side"><span class="ab">A</span><select class="select mono" id="va" aria-label="Version A"></select></span>
+      <button class="icon-btn" id="swap" aria-label="Swap A and B" title="Swap"></button>
+      <span class="side"><span class="ab b">B</span><select class="select mono" id="vb" aria-label="Version B"></select></span>
+      <span class="spacer"></span>
+      <span class="small muted" id="basis"></span>
+    </div>
+    <div id="verdict" style="margin-bottom:16px"></div>
+    <div class="grid g-2">
+      <section class="panel" data-od-id="what-changed"><div class="panel-h"><div><div class="q">What changed</div><h2 id="chg-h">3 files, 1 tool setting</h2></div><div class="r"><a class="btn sm tertiary" href="workbench.html?skill=incident-triage">Open in workbench</a></div></div>
+        <div class="panel-b stack" id="changed"></div></section>
+      <section class="panel" data-od-id="did-it-improve"><div class="panel-h"><div><div class="q">Did it improve</div><h2 id="imp-h"></h2></div><div class="r legend small"><span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;border:2px solid var(--border-strong);margin-right:4px;vertical-align:-1px"></span>A</span><span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--fg);margin-right:4px;vertical-align:-1px"></span>B</span></div></div>
+        <div class="panel-b"><div class="dumb" id="dumb"></div></div></section>
+      <section class="panel" data-od-id="what-regressed"><div class="panel-h"><div><div class="q">What regressed</div><h2 id="reg-h"></h2></div><div class="r"><a class="btn sm" href="runs.html">Trace cases</a></div></div>
+        <div class="panel-b stack" id="regressed"></div></section>
+      <section class="panel" id="recommendations" data-od-id="investigate-next"><div class="panel-h"><div><div class="q">Investigate next</div><h2>Auto-Improve proposals</h2></div><div class="r"><span class="tag sim">Not yet verified</span></div></div>
+        <div class="panel-b" id="recs"></div></section>
+    </div>
+    <section class="panel" style="margin-top:16px" data-od-id="version-history"><div class="panel-h"><h2>Quality across versions</h2></div>
+      <div class="panel-b"><div id="hist"></div></div></section>
+  </section>
+
+  <section id="t-rel" hidden data-od-id="releases">
+    <div class="stages" id="stages" aria-label="Skills by environment"></div>
+    <section class="panel"><div class="panel-h"><h2>Release requests</h2></div>
+      <div class="tbl-wrap"><table class="tbl" id="rel"><thead><tr><th>Skill</th><th>Promotion</th>
+        <th title="Evaluation suite passing">Eval</th><th title="Owner approval">Owner</th><th title="Security review">Security</th><th title="Compliance review">Compliance</th><th title="Staging burn-in, 24 hours">Burn-in</th><th title="Bundle signed and built">Bundle</th>
+        <th>Approvals</th><th>Status</th><th></th></tr></thead><tbody></tbody></table></div>
+      <div class="panel-b row small muted" style="gap:14px;flex-wrap:wrap"><span class="st"><i class="mk ok"></i>Passed</span><span class="st p1"><i class="mk p1"></i>Failed</span><span class="st"><i class="mk p3"></i>Stale</span><span class="st unk"><i class="mk unk"></i>Pending</span><span>— Not required</span></div>
+    </section>
+    <section class="panel" style="margin-top:16px" data-od-id="release-history">
+      <div class="panel-h"><h2>Release history</h2><span class="meta" id="rh-meta"></span>
+        <div class="r"><div class="seg" role="group" aria-label="Event filter" id="rh-f"><button aria-pressed="true" data-v="all">All events</button><button aria-pressed="false" data-v="rollback">Rollbacks</button></div></div></div>
+      <div class="panel-b"><div class="rh" id="rh" role="img" aria-label="Release events by skill over 30 days"></div>
+        <div class="legend small" style="margin-top:8px"><span class="st"><i class="mk idle"></i>Released to staging</span><span class="st"><i class="mk ok"></i>Released to production</span><span class="st p2"><i class="mk p2"></i>Rolled back</span><span class="st p1"><i class="mk p1"></i>Blocked</span></div></div>
+      <div class="tbl-wrap"><table class="tbl compact" id="rh-log"><thead><tr><th>When</th><th>Skill</th><th>Event</th><th>Detail</th><th>By</th></tr></thead><tbody></tbody></table></div>
+    </section>
+  </section>
+
+  <section id="t-port" hidden data-od-id="portfolio">
+    <div class="grid g-21">
+      <section class="panel"><div class="panel-h"><h2>Cost against quality</h2></div>
+        <div class="panel-b"><div id="scatter"></div></div></section>
+      <section class="panel"><div class="panel-h"><h2>Optimization candidates</h2></div>
+        <div class="tbl-wrap"><table class="tbl compact"><tbody>
+          <tr><td><strong>Customer email tone pass</strong><div class="sub">Highest volume · quality 93.0 already above gate</div></td><td class="r"><a class="btn sm" href="evaluations.html?skill=customer-email-tone-pass#new">Test a smaller model</a></td></tr>
+          <tr><td><strong>Engineering RFC reviewer</strong><div class="sub">Edit rate 31% · trending up 4 weeks</div></td><td class="r"><a class="btn sm" href="#" onclick="return pick('engineering-rfc-reviewer')">Compare</a></td></tr>
+          <tr><td><strong>SOC 2 evidence drafter</strong><div class="sub">Not evaluated in 21 days</div></td><td class="r"><a class="btn sm" href="evaluations.html?skill=soc2-evidence-drafter#new">Re-run</a></td></tr>
+          <tr><td><strong>Vendor onboarding memo</strong><div class="sub">No dataset · no telemetry</div></td><td class="r"><a class="btn sm" href="evaluations.html?skill=vendor-onboarding-memo#new">Create suite</a></td></tr>
+        </tbody></table></div></section>
+    </div>
+  </section>
+</div>
+</main>
+</div>
+<script>
+let pick;
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  S.tabs($('#tabs'), t => { $('#crumb').textContent = { 't-port': 'Portfolio', 't-rel': 'Releases', 't-cmp': 'Compare' }[t]; if (t === 't-port') scatter(); if (t === 't-rel') releases(); $('#acts').style.display = t === 't-cmp' ? '' : 'none'; history.replaceState(null, '', location.search + ({ 't-port': '#portfolio', 't-rel': '#releases', 't-cmp': '' }[t])); });
+  $('#swap').innerHTML = S.icon('compare');
+  const P = new URLSearchParams(location.search);
+  let skill = S.skills.find(s => s.id === P.get('a')) ? P.get('a') : 'incident-triage';
+  let swapped = false;
+  $('#skill').innerHTML = S.skills.filter(s => s.score != null).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+
+  const data = id => {
+    const s = S.skills.find(x => x.id === id);
+    if (id === 'incident-triage') return { s, A: 'v3.0', B: 'v3.1', m: [['Quality score', 88.5, 82.4, 1], ['Evidence grounding', 86.2, 84.9, 1], ['Actionability', 89.0, 80.1, 1], ['Policy compliance', 98.9, 98.3, 1], ['Latency P95 (s)', 5.1, 6.4, -1], ['Cost per case ($)', 0.019, 0.021, -1], ['Human edits needed', 0.8, 1.3, -1]], flips: [12, 5, 163], reg: true };
+    const b = s.score, a = +(s.score - (s.delta || 0)).toFixed(1);
+    return { s, A: s.cand ? s.ver : 'v' + (parseFloat(s.ver.slice(1)) - 0.1).toFixed(1), B: s.cand || s.ver, m: [['Quality score', a, b, 1], ['Evidence grounding', +(a - 1.6).toFixed(1), +(b - 1.2).toFixed(1), 1], ['Actionability', +(a + 0.4).toFixed(1), +(b + 0.9).toFixed(1), 1], ['Policy compliance', 99.1, 99.4, 1], ['Latency P95 (s)', 4.3, 4.1, -1], ['Cost per case ($)', 0.023, 0.022, -1], ['Human edits needed', 0.9, 0.7, -1]], flips: s.delta < 0 ? [6, 3, 171] : [2, 7, 171], reg: s.delta < -2 };
+  };
+
+  let skillB = S.skills.find(x => x.id === P.get('b') && x.score != null) && P.get('b') !== skill ? P.get('b') : null;
+  function renderCross() {
+    let a = S.skills.find(x => x.id === skill), b = S.skills.find(x => x.id === skillB);
+    if (swapped) [a, b] = [b, a];
+    $('#skill').value = a.id;
+    $('#va').innerHTML = `<option>${a.name} ${a.ver}</option>`; $('#vb').innerHTML = `<option>${b.name} ${b.ver}</option>`;
+    $('#basis').innerHTML = `Different datasets · <span class="mono">${a.dataset}</span> vs <span class="mono">${b.dataset}</span>`;
+    $('#verdict').innerHTML = `<div class="banner sim"><i class="mk sim"></i><span><strong>Cross-skill comparison is planned.</strong> This preview compares rubric-normalised dimensions only. Case-level results need a shared dataset.</span><span class="acts"><a class="btn sm" href="?a=${a.id}">Compare versions of ${a.name}</a></span></div>`;
+    $('#acts').innerHTML = '<button class="btn" id="export" data-ic="download">Export comparison</button>';
+    $$('#acts [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#export').onclick = () => S.toast('Comparison exported · marked as preview');
+    $('#chg-h').textContent = 'Two different skills';
+    $('#changed').innerHTML = `<table class="tbl compact"><tbody><tr><td class="small muted">Repository</td><td class="mono small">${a.repo}</td><td class="mono small">${b.repo}</td></tr><tr><td class="small muted">Tier</td><td>${a.tier}</td><td>${b.tier}</td></tr><tr><td class="small muted">Dataset</td><td class="mono small">${a.dataset}</td><td class="mono small">${b.dataset}</td></tr><tr><td class="small muted">Runs, 30d</td><td class="num">${a.runs.toLocaleString()}</td><td class="num">${b.runs.toLocaleString()}</td></tr></tbody></table>`;
+    const m = [['Quality score', a.score, b.score, 1], ['Evidence grounding', +(a.score - 1.8).toFixed(1), +(b.score - 1.1).toFixed(1), 1], ['Latency P95 (s)', 4.6, 3.9, -1], ['Cost per case ($)', 0.026, 0.012, -1]];
+    $('#imp-h').textContent = 'Normalised dimensions only';
+    $('#dumb').innerHTML = m.map(([k, x, y, dir]) => { const lo = Math.min(x, y), hi = Math.max(x, y), pad = (hi - lo) * 1.2 || 1, mn = lo - pad, mx = hi + pad, px = (x - mn) / (mx - mn) * 100, py = (y - mn) / (mx - mn) * 100, f = v => v < 1 ? v.toFixed(3) : v.toFixed(1);
+      return `<div class="lab">${k}</div><div class="trk"><span class="ln" style="left:${Math.min(px, py)}%;width:${Math.abs(py - px)}%"></span><span class="a" style="left:${px}%"></span><span class="b" style="left:${py}%"></span></div><div class="val"><span class="muted">${f(x)}</span><span>vs</span><span>${f(y)}</span></div>`; }).join('');
+    $('#reg-h').textContent = 'Not comparable case by case';
+    $('#regressed').innerHTML = '<div class="empty"><span class="cap plan">Planned</span><h3>Needs a shared dataset</h3><p>Generate a joint dataset from both manifests to compare failures case by case.</p><button class="btn" disabled>Generate shared dataset</button></div>';
+    $('#recs').innerHTML = '<div class="empty"><h3>No proposals across skills</h3><p>Proposals are generated per skill from its own failure clusters.</p></div>';
+    S.line($('#hist'), [{ name: a.name, values: a.trend, kind: 'fg' }, { name: b.name, values: b.trend, kind: 'base' }], S.days(30), { h: 180, threshold: 85, thresholdLabel: 'Release gate 85', label: 'Quality, 30 days' });
+  }
+  function render() {
+    if (skillB) return renderCross();
+    const d = data(skill); let A = d.A, B = d.B, m = d.m.map(x => [...x]);
+    if (swapped) { [A, B] = [B, A]; m = m.map(([k, a, b, dir]) => [k, b, a, dir]); }
+    $('#skill').value = skill;
+    $('#va').innerHTML = `<option>${A}</option>`; $('#vb').innerHTML = `<option>${B}</option>`;
+    $('#basis').innerHTML = `Same dataset <span class="mono">${d.s.dataset}</span> · same judge · Anthropic`;
+    const reg = !swapped && d.reg;
+    $('#verdict').innerHTML = reg ? `<div class="banner p1"><i class="mk p1"></i><span><strong>${B} regressed.</strong> Quality fell ${Math.abs(m[0][2] - m[0][1]).toFixed(1)} points on the same 180 cases. Promotion is blocked by the regression gate.</span><span class="acts"><a class="btn sm" href="runs.html">Inspect EV-2418</a></span></div>`
+      : `<div class="banner"><i class="mk ok"></i><span><strong>${B} ${m[0][2] >= m[0][1] ? 'improved' : 'held'}</strong> · quality ${m[0][2] >= m[0][1] ? '+' : ''}${(m[0][2] - m[0][1]).toFixed(1)} on the same cases. All blocking criteria passed.</span></div>`;
+    $('#acts').innerHTML = reg ? `<a class="btn" href="workbench.html?skill=${skill}">Open in workbench</a><button class="btn" disabled title="Blocked by the regression gate">Promotion blocked</button>`
+      : d.s.cand ? `<button class="btn" id="export" data-ic="download">Export comparison</button><button class="btn primary" id="approve">Approve ${d.s.cand}</button>` : `<button class="btn" id="export" data-ic="download">Export comparison</button>`;
+    $$('#acts [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#export') && ($('#export').onclick = () => S.toast('Comparison exported · Markdown and JSON'));
+    $('#approve') && ($('#approve').onclick = async () => { if (await S.confirm({ title: `Approve ${d.s.name} ${d.s.cand}?`, body: `Production releases require 2 approvers. Your approval is 1 of 2. ${d.s.cand} moves to staging for a 24h burn-in after the second approval.`, confirm: 'Approve' })) { $('#approve').disabled = true; $('#approve').textContent = 'Approved · 1 of 2'; S.toast('Approval recorded · waiting for second approver'); } });
+
+    // what changed
+    $('#chg-h').textContent = skill === 'incident-triage' ? '3 files, 1 tool setting' : '2 files';
+    const ch = skill === 'incident-triage' ? [['SKILL.md', '+14 −6'], ['references/severity-matrix.md', '+22 −9'], ['tools.query_pagerduty.timeout', '10s → 8s']] : [['SKILL.md', '+6 −2'], ['references/', '+11 −3']];
+    $('#changed').innerHTML = `<table class="tbl compact"><tbody>${ch.map(c => `<tr><td class="mono small">${c[0]}</td><td class="r mono small">${c[1]}</td></tr>`).join('')}<tr><td class="small muted">Model connection, dataset, judge</td><td class="r small muted">Unchanged</td></tr></tbody></table>
+      ${skill === 'incident-triage' ? `<div class="diffl" aria-label="SKILL.md diff excerpt"><div class="del">- 3. Call find_runbook and query_pagerduty in sequence.</div><div class="add">+ 3. Call find_runbook with the service name and symptom.</div><div>  4. If a deploy landed in the last 2 hours, load pr-summarizer.</div><div class="del">-    timeout: 10s</div><div class="add">+    timeout: 8s</div></div>` : ''}`;
+
+    // dumbbell
+    const better = m.filter(r => (r[2] - r[1]) * r[3] > 0).length;
+    $('#imp-h').textContent = `${better} of ${m.length} measures better`;
+    $('#dumb').innerHTML = m.map(([k, a, b, dir]) => {
+      const lo = Math.min(a, b), hi = Math.max(a, b), pad = (hi - lo) * 1.2 || 1, min = lo - pad, max = hi + pad;
+      const pa = (a - min) / (max - min) * 100, pb = (b - min) / (max - min) * 100, bad = (b - a) * dir < 0 && Math.abs(b - a) / Math.abs(a) > 0.02;
+      const fmt = v => v < 1 ? v.toFixed(3) : v.toFixed(1);
+      return `<div class="lab">${k}</div><div class="trk"><span class="ln ${bad ? 'bad' : ''}" style="left:${Math.min(pa, pb)}%;width:${Math.abs(pb - pa)}%"></span><span class="a" style="left:${pa}%" title="A ${fmt(a)}"></span><span class="b ${bad ? 'bad' : ''}" style="left:${pb}%" title="B ${fmt(b)}"></span></div>
+        <div class="val"><span class="muted">${fmt(a)}</span><span>→</span><span class="${bad ? 'st p1' : ''}">${fmt(b)}</span></div>`;
+    }).join('');
+
+    // regressed
+    const [nf, fx, un] = swapped ? [d.flips[1], d.flips[0], d.flips[2]] : d.flips, tot = nf + fx + un;
+    $('#reg-h').textContent = `${nf} cases newly failing · ${fx} newly passing`;
+    $('#regressed').innerHTML = `<div class="flipbar" role="img" aria-label="${nf} newly failing, ${fx} newly passing, ${un} unchanged"><i style="width:${Math.max(nf / tot * 100, 4)}%;background:var(--crit)">${nf}</i><i style="width:${Math.max(fx / tot * 100, 4)}%;background:var(--fg-2)">${fx}</i><i style="flex:1;background:var(--recess);color:var(--muted)">${un} unchanged</i></div>
+      ${skill === 'incident-triage' && !swapped ? `<table class="tbl compact"><thead><tr><th>Failure cluster</th><th class="r">Newly failing</th><th class="r">Share</th><th></th></tr></thead><tbody>
+        ${[['Severity under-classification', 6], ['Runbook not found', 3], ['Tool timeout · query_pagerduty', 3]].map(c => `<tr><td><span class="st p1"><i class="mk p1"></i>${c[0]}</span></td><td class="r num">${c[1]}</td><td class="r"><div class="bar p1" style="width:80px;display:inline-block"><i style="width:${c[1] / 12 * 100}%"></i></div></td><td class="r"><a class="btn sm tertiary" href="runs.html">Trace</a></td></tr>`).join('')}</tbody></table>` : '<p class="muted">No failure cluster exceeds 2 cases.</p>'}`;
+
+    // recommendations
+    $('#recs').innerHTML = skill === 'incident-triage' ? [
+      ['Restore query_pagerduty timeout to 10s', 'All 3 timeout cases are newly failing, and the tool p95 is 6.9s. Evidence: EV-2418 cases 044, 091, 137.', 'Ready for review', 'r1'],
+      ['Add partial-region examples to the severity matrix', 'Generated from the severity under-classification cluster (6 cases). Expected effect has not been measured.', 'Generated', 'r2']
+    ].map(r => `<div class="rec" data-r="${r[3]}"><div class="row"><span class="st sim"><i class="mk sim"></i>${r[2]}</span></div><div class="row"><strong>${r[0]}</strong></div><p>${r[1]}</p>
+      <div class="row"><button class="btn sm" data-eval="${r[3]}">Evaluate proposal</button><button class="btn sm tertiary" data-rej="${r[3]}">Reject</button></div></div>`).join('')
+      : '<div class="empty"><h3>No open proposals</h3><p>Auto-Improve generates proposals when a failure cluster or a degradation is detected.</p></div>';
+    $$('[data-eval]').forEach(b => b.onclick = () => { b.closest('.rec').querySelector('.st').innerHTML = '<i class="mk sim"></i>Evaluating · EV-2424'; b.disabled = true; S.toast('Proposal applied on a shadow branch · EV-2424 running', 'Watch', () => location.href = 'runs.html'); });
+    $$('[data-rej]').forEach(b => b.onclick = async () => { if (await S.confirm({ title: 'Reject this proposal?', body: 'The recommendation is marked rejected and kept in the audit log. Auto-Improve will not regenerate it for this failure cluster.', confirm: 'Reject proposal', danger: true })) { b.closest('.rec').remove(); S.toast('Proposal rejected'); } });
+
+    // history
+    const vs = skill === 'incident-triage' ? ['v2.6', 'v2.7', 'v2.8', 'v2.9', 'v3.0', 'v3.1'] : ['v-5', 'v-4', 'v-3', 'v-2', A, B];
+    const vals = skill === 'incident-triage' ? [83.1, 84.9, 86.2, 87.4, 88.5, 82.4] : S.walk(skill.length * 13, 5, d.s.score - 4, 0.8, 1.6, 70, 99).concat([m[0][2]]);
+    S.line($('#hist'), [{ name: d.s.name, values: vals, kind: 'fg', marks: d.reg ? [{ i: 5, t: 'Regression' }] : [] }], vs, { h: 180, threshold: 85, thresholdLabel: 'Release gate 85', label: 'Quality across versions' });
+  }
+  pick = id => { skill = id; skillB = null; swapped = false; $$('#tabs [role="tab"]')[0].click(); render(); return false; };
+  $('#skill').onchange = e => { skill = e.target.value; skillB = null; swapped = false; render(); history.replaceState(null, '', '?a=' + skill); };
+  $('#swap').onclick = () => { swapped = !swapped; render(); };
+  render();
+  addEventListener('resize', () => !$('#t-cmp').hidden && render());
+
+
+  function scatter() {
+    const el = $('#scatter'), W = el.clientWidth || 700, H = 300, pl = 44, pb = 30, pt = 10, pr = 16;
+    const pts = S.skills.filter(s => s.score != null).map((s, i) => ({ s, x: s.score, y: [0.034, 0.041, 0.012, 0.028, 0.031, 0.026, 0.006, 0.038][i] }));
+    const x = v => pl + (v - 76) / 20 * (W - pl - pr), y = v => pt + (1 - v / 0.05) * (H - pt - pb);
+    let g = '';
+    for (let k = 0; k <= 5; k++) { const v = k * 0.01; g += `<line x1="${pl}" x2="${W - pr}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)"/><text x="${pl - 6}" y="${y(v) + 3}" text-anchor="end">$${v.toFixed(2)}</text>`; }
+    for (let v = 76; v <= 96; v += 4) g += `<text x="${x(v)}" y="${H - 10}" text-anchor="middle">${v}</text>`;
+    g += `<line x1="${x(85)}" x2="${x(85)}" y1="${pt}" y2="${H - pb}" stroke="var(--crit)" stroke-dasharray="3 3"/><text x="${x(85) + 4}" y="${pt + 10}" style="fill:var(--crit-fg)">Gate 85</text>`;
+    g += pts.map(p => { const r = 4 + Math.sqrt(p.s.runs) / 8; const bad = p.s.status === 'p1'; return `<g class="pt" data-id="${p.s.id}" style="cursor:pointer"><circle cx="${x(p.x)}" cy="${y(p.y)}" r="${r}" fill="${bad ? 'var(--crit)' : 'color-mix(in oklch, var(--fg) 70%, transparent)'}" stroke="var(--surface)" stroke-width="1.5"/><text x="${x(p.x) > W * 0.7 ? x(p.x) - r - 4 : x(p.x) + r + 4}" y="${y(p.y) + 3}" text-anchor="${x(p.x) > W * 0.7 ? 'end' : 'start'}" style="fill:var(--fg-2);font-family:var(--font-body);font-size:11px">${p.s.name}</text></g>`; }).join('');
+    el.innerHTML = `<svg class="chart scatter" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Cost per run against quality score">${g}<text x="${(W + pl) / 2}" y="${H}" text-anchor="middle">Quality score</text></svg>`;
+    $$('.pt', el).forEach(p => { p.onclick = () => pick(p.dataset.id); p.onmousemove = e => { const s = S.skills.find(k => k.id === p.dataset.id); S.tip(`${s.name}<br>quality ${s.score} · ${s.runs.toLocaleString()} runs`, e.clientX, e.clientY); }; p.onmouseleave = () => S.tip(null); });
+  }
+  // releases
+  const CK = { ok: '<i class="mk ok" title="Passed"></i>', p1: '<i class="mk p1" title="Failed"></i>', p3: '<i class="mk p3" title="Stale"></i>', unk: '<i class="mk unk" title="Pending"></i>', na: '<span class="muted" title="Not required">—</span>' };
+  const rel = [
+    { id: 'contract-clause-reviewer', v: 'v4.2', from: 'draft', to: 'staging', ck: ['ok', 'ok', 'unk', 'unk', 'na', 'ok'], ap: 0, need: 1, st: 'pending' },
+    { id: 'incident-triage', v: 'v3.1', from: 'draft', to: 'staging', ck: ['p1', 'unk', 'na', 'na', 'na', 'ok'], ap: 0, need: 1, st: 'blocked', why: 'Eval gate failed · EV-2418' },
+    { id: 'rfp-response-drafter', v: 'v1.4', from: 'staging', to: 'production', ck: ['ok', 'ok', 'ok', 'na', 'burn', 'ok'], ap: 1, need: 2, st: 'pending', burn: 18 },
+    { id: 'soc2-evidence-drafter', v: 'v1.1', from: 'staging', to: 'production', ck: ['p3', 'ok', 'ok', 'ok', 'ok', 'ok'], ap: 0, need: 2, st: 'blocked', why: 'Evaluation older than 14 days' },
+    { id: 'pr-summarizer', v: 'v2.3', from: 'staging', to: 'production', ck: ['ok', 'ok', 'ok', 'na', 'ok', 'ok'], ap: 2, need: 2, st: 'released', when: '08:55' },
+    { id: 'customer-email-tone-pass', v: 'v3.2', from: 'staging', to: 'production', ck: ['ok', 'ok', 'na', 'na', 'ok', 'ok'], ap: 2, need: 2, st: 'released', when: '10 Oct' }
+  ];
+  const relSt = r => ({ pending: '<span class="st unk"><i class="mk unk"></i>Pending</span>', approved: '<span class="st"><i class="mk idle"></i>Approved</span>', blocked: `<span class="st p1" title="${r.why || ''}"><i class="mk p1"></i>Blocked</span>`, released: '<span class="st"><i class="mk ok"></i>Released</span>', rolled_back: '<span class="st p2"><i class="mk p2"></i>Rolled back</span>' })[r.st];
+  // release history (sample data: 13 Sep – 12 Oct 2026)
+  const D0 = new Date(2026, 8, 13), DN = new Date(2026, 9, 12, 23, 59);
+  const at = (m, d, h = 12, mi = 0) => new Date(2026, m - 1, d, h, mi);
+  const hist = [
+    { id: 'contract-clause-reviewer', v: 'v4.1', t: 'prod', d: at(9, 15, 10), by: 'renata.m', note: 'Approved by renata.m, kalia.b' },
+    { id: 'engineering-rfc-reviewer', v: 'v2.0', t: 'prod', d: at(9, 18, 9), by: 'jdv', note: 'Approved by jdv, ari.chen' },
+    { id: 'engineering-rfc-reviewer', v: 'v2.0', t: 'rollback', to: 'v1.9', d: at(9, 19, 7, 40), by: 'jdv', note: 'Manual · edit rate rose to 44% in 22h', dur: '22h' },
+    { id: 'pr-summarizer', v: 'v2.1', t: 'prod', d: at(9, 16, 14), by: 'ari.chen', note: 'Approved by ari.chen, jdv' },
+    { id: 'customer-email-tone-pass', v: 'v3.1', t: 'prod', d: at(9, 20, 11), by: 'kalia.b', note: 'Approved by kalia.b, renata.m' },
+    { id: 'incident-triage', v: 'v3.0', t: 'prod', d: at(9, 22, 16), by: 'min.park', note: 'Approved by min.park, priya.a' },
+    { id: 'engineering-rfc-reviewer', v: 'v2.0', t: 'prod', d: at(9, 25, 10), by: 'jdv', note: 'Re-released with reviewer checklist fix' },
+    { id: 'pr-summarizer', v: 'v2.2', t: 'prod', d: at(9, 28, 9), by: 'ari.chen', note: 'Approved by ari.chen, min.park' },
+    { id: 'pr-summarizer', v: 'v2.2', t: 'rollback', to: 'v2.1', d: at(9, 29, 3, 10), by: 'policy', note: 'Auto-pin on regression · quality −5.4% vs v2.1', dur: '18h' },
+    { id: 'customer-email-tone-pass', v: 'v3.2', t: 'prod', d: at(10, 10, 15), by: 'kalia.b', note: 'Approved by kalia.b, renata.m' },
+    { id: 'rfp-response-drafter', v: 'v1.4', t: 'staging', d: at(10, 11, 18), by: 'kalia.b', note: 'Burn-in started' },
+    { id: 'pr-summarizer', v: 'v2.3', t: 'prod', d: at(10, 12, 8, 55), by: 'ari.chen', note: 'Approved by ari.chen, jdv' },
+    { id: 'incident-triage', v: 'v3.1', t: 'blocked', d: at(10, 12, 9, 42), by: 'policy', note: 'Gate failed · EV-2418 quality 82.4' }
+  ];
+  let rhFilter = 'all', rhSkill = null;
+  const pct = d => Math.max(0, Math.min(100, (d - D0) / (DN - D0) * 100));
+  const fmtD = d => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toTimeString().slice(0, 5);
+  const evMk = t => ({ prod: 'ok', staging: 'idle', rollback: 'p2', blocked: 'p1' })[t];
+  const evName = e => ({ prod: `Released ${e.v} to production`, staging: `Released ${e.v} to staging`, rollback: `Rolled back ${e.v} → ${e.to}`, blocked: `Blocked ${e.v}` })[e.t];
+  function relHistory() {
+    const ids = [...new Set(hist.map(e => e.id))];
+    const rb = hist.filter(e => e.t === 'rollback');
+    $('#rh-meta').textContent = `Last 30 days · ${hist.filter(e => e.t === 'prod').length} production releases · ${rb.length} rollback${rb.length === 1 ? '' : 's'}` + (rb.filter(e => e.dur).length ? ` · median time to rollback ${rb.filter(e => e.dur).map(e => parseInt(e.dur)).sort((a, b) => a - b)[Math.floor(rb.filter(e => e.dur).length / 2)]}h` : '');
+    $('#rh').innerHTML = ids.map(id => { const sk = S.skills.find(k => k.id === id), ev = hist.filter(e => e.id === id).sort((a, b) => a.d - b.d);
+      // live-version segments: each prod release until the next prod release or rollback
+      let segs = ''; ev.forEach((e, k) => { if (e.t !== 'prod' && e.t !== 'rollback') return; const nx = ev.slice(k + 1).find(x => x.t === 'prod' || x.t === 'rollback'); segs += `<span class="seg-v ${e.t === 'rollback' ? 'rb' : ''}" style="left:${pct(e.d)}%;width:${pct(nx ? nx.d : DN) - pct(e.d)}%" title="${e.t === 'rollback' ? e.to : e.v} live"></span>`; });
+      const show = ev.filter(e => rhFilter === 'all' || e.t === 'rollback');
+      return `<div class="ln"><button class="nm" data-sk="${id}" aria-pressed="${rhSkill === id}" title="Filter log to ${sk.name}">${sk.name}</button><div class="tr">${segs}<span class="now" style="left:100%" title="Today"></span>${show.map(e => `<button class="ev ${e.t === 'rollback' ? 'rbk' : ''}" data-i="${hist.indexOf(e)}" style="left:${pct(e.d)}%" aria-label="${sk.name}: ${evName(e)}, ${fmtD(e.d)}" title="${evName(e)} · ${fmtD(e.d)}"><i class="mk ${evMk(e.t)}"></i><span class="v">${e.t === 'rollback' ? '↩ ' + e.to : e.v}</span></button>`).join('')}</div></div>`; }).join('') +
+      `<div class="ax">${S.days(30).filter((_, i) => i % 5 === 0 || i === 29).map(l => `<span>${l}</span>`).join('')}</div>`;
+    const rows = hist.filter(e => (rhFilter === 'all' || e.t === 'rollback') && (!rhSkill || e.id === rhSkill)).sort((a, b) => b.d - a.d);
+    $('#rh-log tbody').innerHTML = rows.map(e => `<tr data-i="${hist.indexOf(e)}"><td class="num muted nowrap">${fmtD(e.d)}</td><td>${S.skills.find(k => k.id === e.id).name}</td>
+      <td><span class="st ${e.t === 'rollback' ? 'p2' : e.t === 'blocked' ? 'p1' : ''}"><i class="mk ${evMk(e.t)}"></i>${evName(e)}</span></td><td class="small fg2">${e.note}${e.dur ? ` · live for ${e.dur}` : ''}</td><td class="mono small">${e.by}</td></tr>`).join('') || '<tr><td colspan="5" class="muted">No events match.</td></tr>';
+  }
+  $('#rh').addEventListener('click', e => {
+    const nm = e.target.closest('[data-sk]'), ev = e.target.closest('.ev');
+    if (nm) { rhSkill = rhSkill === nm.dataset.sk ? null : nm.dataset.sk; relHistory(); }
+    if (ev) { rhSkill = null; relHistory(); const tr = $(`#rh-log tr[data-i="${ev.dataset.i}"]`); if (tr) { tr.classList.add('hl'); $('#main').scrollTo({ top: tr.getBoundingClientRect().top + $('#main').scrollTop - 200, behavior: 'smooth' }); setTimeout(() => tr.classList.remove('hl'), 2200); } }
+  });
+  $$('#rh-f button').forEach(b => b.onclick = () => { rhFilter = b.dataset.v; $$('#rh-f button').forEach(x => x.setAttribute('aria-pressed', x === b)); relHistory(); });
+  const logEvent = e => { hist.push(Object.assign({ d: new Date(2026, 9, 12, new Date().getHours(), new Date().getMinutes()), by: 'priya.a' }, e)); relHistory(); };
+  function releases() {
+    relHistory();
+    const env = { draft: [], staging: [], production: [] };
+    S.skills.forEach(s => env[s.env].push(s.name));
+    $('#stages').innerHTML = ['draft', 'staging', 'production'].map(e => `<div><div class="h"><span class="lbl">${e[0].toUpperCase() + e.slice(1)}</span><b>${env[e].length}</b></div><div class="chips">${env[e].map(n => `<span class="tag" style="font-family:var(--font-body)">${n}</span>`).join('')}</div></div>`).join('');
+    $('#rel-n').textContent = rel.filter(r => r.st === 'pending' || r.st === 'approved').length;
+    $('#rel tbody').innerHTML = rel.map((r, i) => { const s = S.skills.find(k => k.id === r.id);
+      return `<tr class="${r.st === 'blocked' && r.ck[0] === 'p1' ? 'p1row' : ''}"><td><strong>${s.name}</strong> <span class="mono small">${r.v}</span>${r.why ? `<div class="sub">${r.why}</div>` : ''}</td><td class="small nowrap">${r.from} → ${r.to}</td>
+        ${r.ck.map(c => `<td><span class="ck">${c === 'burn' ? `<span class="row" title="Burn-in ${r.burn} of 24 hours"><span class="bar" style="width:36px"><i style="width:${r.burn / 24 * 100}%"></i></span><span class="num small">${r.burn}h</span></span>` : CK[c]}</span></td>`).join('')}
+        <td class="num">${r.ap} / ${r.need}</td><td>${relSt(r)}${r.when ? `<div class="sub">${r.when}</div>` : ''}</td>
+        <td class="r nowrap">${r.st === 'pending' ? `<button class="btn sm" data-ap="${i}">Approve</button>` : r.st === 'approved' ? `<button class="btn sm" data-pr="${i}">Promote to ${r.to}</button>` : r.st === 'released' ? `<button class="btn sm tertiary" data-rb="${i}">Roll back</button>` : r.st === 'blocked' ? `<a class="btn sm" href="${r.ck[0] === 'p1' ? 'runs.html' : 'evaluations.html?skill=' + r.id + '#new'}">${r.ck[0] === 'p1' ? 'Inspect run' : 'Re-run evaluation'}</a>` : ''}</td></tr>`; }).join('');
+  }
+  $('#rel').addEventListener('click', async e => {
+    const ap = e.target.closest('[data-ap]'), pr = e.target.closest('[data-pr]'), rb = e.target.closest('[data-rb]');
+    if (ap) { const r = rel[+ap.dataset.ap], s = S.skills.find(k => k.id === r.id); const open = r.ck.filter(c => c === 'unk').length;
+      if (await S.confirm({ title: `Approve ${s.name} ${r.v}?`, body: `${r.to === 'production' ? 'Production needs 2 approvers.' : 'Staging needs 1 approver.'} ${open ? `${open} readiness check${open > 1 ? 's are' : ' is'} still pending; in the prototype they complete on approval.` : 'All readiness checks have passed.'}`, confirm: 'Approve' })) {
+        r.ap++; if (r.ap >= r.need) { r.st = 'approved'; r.ck = r.ck.map(c => c === 'unk' ? 'ok' : c); } releases(); S.toast(r.st === 'approved' ? `${s.name} ${r.v} approved · ready to promote` : `Approval ${r.ap} of ${r.need} recorded`); } }
+    if (pr) { const r = rel[+pr.dataset.pr], s = S.skills.find(k => k.id === r.id);
+      if (r.burn && r.burn < 24) return S.toast(`Burn-in has ${24 - r.burn}h remaining · promotion unlocks automatically`);
+      if (await S.confirm({ title: `Promote ${s.name} ${r.v} to ${r.to}?`, body: `Agent clients loading this skill through the router receive ${r.v} on their next call. The previous version stays available for rollback.`, confirm: `Promote to ${r.to}` })) { r.st = 'released'; r.when = 'now'; logEvent({ id: r.id, v: r.v, t: r.to === 'production' ? 'prod' : 'staging', note: `Promoted by priya.a · ${r.ap} of ${r.need} approvals` }); releases(); S.toast(`${s.name} ${r.v} released to ${r.to}`); } }
+    if (rb) { const r = rel[+rb.dataset.rb], s = S.skills.find(k => k.id === r.id);
+      if (await S.confirm({ title: `Roll back ${s.name} ${r.v}?`, body: `Production reverts to the previous version immediately for every agent client. ${r.v} is pinned out until a new release request passes its gate.`, confirm: 'Roll back', danger: true })) { r.st = 'rolled_back'; r.when = 'now'; { const prev = [...hist].filter(x => x.id === r.id && x.t === 'prod' && x.v !== r.v).sort((a, b) => b.d - a.d)[0]; logEvent({ id: r.id, v: r.v, t: 'rollback', to: prev ? prev.v : 'previous', note: 'Manual rollback from Releases' }); } releases(); S.toast(`${s.name} rolled back`); } }
+  });
+
+  if (location.hash === '#releases') $('#tab-rel').click();
+  if (location.hash === '#portfolio') $('#tab-port').click();
+});
+</script>
+</body>
+</html>

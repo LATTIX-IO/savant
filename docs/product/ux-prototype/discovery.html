@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Skill opportunities · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .funnel { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); margin-bottom: 16px; }
+  .funnel button { display: grid; gap: 2px; padding: 12px 16px; border: 0; border-left: 1px solid var(--border); background: none; text-align: left; font: inherit; color: var(--fg); cursor: pointer; position: relative; }
+  .funnel button:first-child { border-left: 0; }
+  .funnel button:hover { background: var(--recess); }
+  .funnel button[aria-pressed="true"] { background: var(--selected); box-shadow: inset 0 -2px 0 var(--accent); }
+  .funnel .l { font-size: 12px; color: var(--muted); }
+  .funnel .v { font: 500 20px var(--font-mono); }
+  .flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+  .flow .stp { display: grid; gap: 4px; min-width: 120px; flex: 1; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); background: var(--surface); }
+  .flow .stp.var { border-style: dashed; background: var(--bg); }
+  .flow .stp .n { font-weight: 500; font-size: 12px; line-height: 1.35; }
+  .flow .stp .bar { height: 4px; }
+  .flow .stp .m { font: 11px var(--font-mono); color: var(--muted); }
+  .flow .ar { align-self: center; color: var(--muted); }
+  .gen { display: grid; gap: 8px; }
+  .gen .row .num { margin-left: auto; }
+  .privacy dt { width: 170px; }
+  .src { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .src:last-child { border-bottom: 0; }
+  @media (max-width: 900px) { .funnel { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+</style>
+</head>
+<body data-page="library">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="library.html">Library</a><span>/</span><span>Opportunities</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl"><div class="row wrap"><h1>Skill opportunities</h1><span class="cap plan">Planned</span></div></div>
+    <div class="acts"><span class="st small" id="obs-state"><i class="mk ok"></i>Observing 3 sources</span><button class="btn" id="open-src" data-ic="shield">Sources and privacy</button></div>
+  </div>
+
+  <nav class="funnel" aria-label="Discovery pipeline" id="funnel" data-od-id="discovery-funnel"></nav>
+
+  <div class="grid g-21">
+    <section class="panel" data-od-id="opportunity-map"><div class="panel-h"><h2>Where time goes</h2><div class="r legend small"><span><i style="height:8px;width:8px;border-radius:50%;background:var(--fg)"></i>No skill</span><span><i style="height:8px;width:8px;border-radius:50%;background:var(--border-strong)"></i>Overlaps a skill</span><span><i style="height:8px;width:8px;border-radius:50%;border:1px dashed var(--muted);background:transparent"></i>Below privacy minimum</span></div></div>
+      <div class="panel-b"><div id="map"></div></div></section>
+    <section class="panel" data-od-id="discovery-guards"><div class="panel-h"><h2>Guardrails</h2></div>
+      <div class="panel-b"><dl class="kv privacy" id="guards"></dl></div></section>
+  </div>
+
+  <section class="panel" style="margin-top:16px" data-od-id="candidates">
+    <div class="panel-h"><h2>Recurring work</h2><span class="meta" id="cnt"></span></div>
+    <div class="tbl-wrap"><table class="tbl" id="cand"><thead><tr><th>Pattern</th><th>Teams</th><th class="r">People</th><th class="r">Times, 30d</th><th class="r">Median time</th><th>Consistency</th><th>Existing skill</th><th class="r">Hours, 30d</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+</main>
+</div>
+
+<aside class="drawer" id="cd" aria-hidden="true" aria-labelledby="cd-t" data-od-id="candidate-drawer" style="width:min(600px,100vw)">
+  <div class="drawer-h"><div class="row"><span class="small muted" id="cd-k"></span><span class="spacer"></span><button class="icon-btn" id="cd-x" aria-label="Close"></button></div><h2 id="cd-t"></h2><div class="row wrap" id="cd-tags"></div>
+    <div class="tabs" role="tablist" id="cd-tabs" style="margin:8px 0 0">
+      <button role="tab" aria-selected="true" aria-controls="cd-proc">Procedure</button>
+      <button role="tab" aria-selected="false" aria-controls="cd-ev">Evidence</button>
+      <button role="tab" aria-selected="false" aria-controls="cd-draft" id="cd-tab-draft">Draft skill</button>
+    </div></div>
+  <div class="drawer-b">
+    <div id="cd-proc" class="stack" style="padding-top:12px"></div>
+    <div id="cd-ev" class="stack" hidden style="padding-top:12px"></div>
+    <div id="cd-draft" class="stack" hidden style="padding-top:12px"></div>
+  </div>
+  <div class="drawer-f" id="cd-f"></div>
+</aside>
+
+<dialog class="dialog wide" id="srcd" aria-labelledby="src-t" data-od-id="sources-dialog">
+  <div class="dh"><h2 id="src-t">Sources and privacy</h2></div>
+  <div class="db stack">
+    <div id="srcs"></div>
+    <div class="divider"></div>
+    <div class="grid g-2">
+      <div class="field"><label for="g-min">Minimum people per pattern</label><input class="input mono" id="g-min" type="number" min="3" value="5"></div>
+      <div class="field"><label for="g-ret">Keep raw sessions for</label><select class="select" id="g-ret"><option>7 days</option><option selected>30 days</option><option>90 days</option></select></div>
+    </div>
+    <div class="field"><span class="lbl">Always on</span><div class="row wrap small" style="gap:14px"><span class="row"><i class="mk ok"></i>Personal data and secrets redacted</span><span class="row"><i class="mk ok"></i>No per-person views or rankings</span><span class="row"><i class="mk ok"></i>Opt-in per team</span></div></div>
+    <div class="field"><label for="g-excl">Never observe</label><input class="input" id="g-excl" value="HR system, payroll, personal email, health benefits portal"></div>
+    <div class="field"><span class="lbl">Who can see discovery</span><div class="small fg2">Platform admin and Reviewer roles · <a href="access.html#mx">Access and roles</a></div></div>
+  </div>
+  <div class="df"><button class="btn" id="src-cancel">Cancel</button><button class="btn primary" id="src-save">Save</button></div>
+</dialog>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  $('#cd-x').innerHTML = S.icon('x');
+  const MIN = () => S.store.get('disc-min', 5);
+  const C = [
+    { id: 'C1', n: 'Vendor due diligence memo', teams: ['Procurement', 'Legal ops'], ppl: 23, times: 312, min: 34, cons: 82, cov: ['vendor-onboarding-memo', 71], st: 'new', tier: 'T2',
+      steps: [['Pull W-9 and insurance certificate from Coupa', 94], ['Run sanctions and adverse-media check', 88], ['Score risk with the vendor questionnaire', 79], ['Draft memo from the legal template', 91], ['Route to legal-ops for sign-off', 86]], variant: ['If the vendor is outside the US: add FX and export-control section', 23],
+      tools: ['Coupa', 'Sanctions screening API', 'Microsoft Word', 'DocuSign'], ok: 89, sessions: 412 },
+    { id: 'C5', n: 'Customer escalation summary', teams: ['Support'], ppl: 31, times: 540, min: 9, cons: 64, cov: ['customer-email-tone-pass', 35], st: 'new', tier: 'T3',
+      steps: [['Read the ticket thread', 97], ['Pull account tier and SLA', 72], ['Summarise issue, impact and ask', 90], ['Post in #escalations', 81]], variant: ['If enterprise tier: tag the account manager', 41], tools: ['Zendesk', 'Salesforce', 'Slack'], ok: 84, sessions: 611 },
+    { id: 'C3', n: 'Rollback runbook selection', teams: ['SRE'], ppl: 14, times: 260, min: 12, cons: 69, cov: ['incident-triage', 48], st: 'new', tier: 'T1',
+      steps: [['Identify the failing deploy', 92], ['Find the service runbook', 85], ['Check rollback safety notes', 64], ['Run rollback and confirm health', 88]], variant: ['If a schema migration shipped: page the database owner', 18], tools: ['PagerDuty', 'Argo CD', 'Confluence'], ok: 91, sessions: 288 },
+    { id: 'C2', n: 'Quarterly access review evidence', teams: ['Security', 'IT'], ppl: 9, times: 120, min: 52, cons: 76, cov: null, st: 'drafting', tier: 'T1',
+      steps: [['Export user lists per system', 96], ['Compare against HR roster', 90], ['Flag orphaned and excess access', 83], ['Collect manager attestations', 77], ['Package evidence for auditors', 88]], variant: null, tools: ['Okta', 'Workday', 'Jira'], ok: 86, sessions: 131 },
+    { id: 'C4', n: 'Contract renewal reminder letter', teams: ['Legal ops'], ppl: 11, times: 95, min: 18, cons: 91, cov: null, st: 'review', tier: 'T2',
+      steps: [['Find contracts renewing in 90 days', 98], ['Check auto-renew and notice terms', 93], ['Draft reminder from the template', 95], ['Send to the business owner', 90]], variant: null, tools: ['Ironclad', 'Outlook'], ok: 94, sessions: 102 },
+    { id: 'C7', n: 'Board deck data pull', teams: ['Finance'], ppl: 6, times: 22, min: 95, cons: 41, cov: null, st: 'new', tier: 'T2',
+      steps: [['Pull metrics from the warehouse', 81], ['Reconcile with the GL', 52], ['Build charts', 66]], variant: ['Ad hoc analysis varies by board member request', 59], tools: ['Snowflake', 'Excel', 'PowerPoint'], ok: 72, sessions: 24 },
+    { id: 'C6', n: 'Expense policy exception check', teams: ['Finance'], ppl: 4, times: 48, min: 21, cons: 88, cov: null, st: 'held', tier: 'T2', steps: [['Find the expense and the policy clause', 90], ['Check manager approval', 85], ['Write the exception note', 80]], variant: null, tools: ['Concur'], ok: 88, sessions: 52 }
+  ];
+  const saved = S.store.get('disc', {}); C.forEach(c => { if (saved[c.id]) c.st = saved[c.id]; });
+  const persist = () => { const o = {}; C.forEach(c => o[c.id] = c.st); S.store.set('disc', o); };
+  const hours = c => Math.round(c.times * c.min * 0.6 / 60);
+  const held = c => c.ppl < MIN();
+  const STS = { new: ['unk', 'New'], drafting: ['sim', 'Drafting'], review: ['sim', 'In review'], published: ['ok', 'Published as draft'], extend: ['sim', 'Extending skill'], dismissed: ['idle', 'Dismissed'], held: ['idle', 'Held · privacy minimum'] };
+  let stage = null;
+  const stOf = c => held(c) ? 'held' : c.st === 'held' ? 'new' : c.st;
+  const nm = id => S.skills.find(k => k.id === id)?.name || id;
+
+  function funnel() {
+    const vis = C.filter(c => !held(c));
+    const F = [['obs', 'Sessions observed, 30d', '18,420'], ['pat', 'Recurring patterns', 41], ['qual', 'Worth a skill', vis.filter(c => c.cons >= 60 && stOf(c) !== 'dismissed').length], ['drafting', 'Drafting', vis.filter(c => ['drafting', 'extend'].includes(stOf(c))).length], ['review', 'In review', vis.filter(c => stOf(c) === 'review').length], ['published', 'Published', vis.filter(c => stOf(c) === 'published').length]];
+    $('#funnel').innerHTML = F.map(f => `<button data-f="${f[0]}" aria-pressed="${stage === f[0]}"><span class="l">${f[1]}</span><span class="v">${f[2]}</span></button>`).join('');
+    $$('#funnel [data-f]').forEach(b => b.onclick = () => { const f = b.dataset.f; stage = stage === f || ['obs', 'pat'].includes(f) ? null : f; draw(); });
+  }
+  function guards() {
+    $('#guards').innerHTML = `<dt>People per pattern</dt><dd>at least <span class="num">${MIN()}</span></dd><dt>Personal data</dt><dd>redacted before storage</dd><dt>Per-person views</dt><dd>none</dd><dt>Raw sessions kept</dt><dd>${S.store.get('disc-ret', '30 days')}</dd><dt>Teams opted in</dt><dd>7 of 11</dd><dt>Excluded</dt><dd>HR, payroll, personal email</dd>`;
+  }
+  function map() {
+    const el = $('#map'), W = el.clientWidth || 640, H = 260, pl = 44, pr = 16, pt = 12, pb = 30;
+    const xs = v => pl + Math.log10(v) / Math.log10(800) * (W - pl - pr), ys = v => pt + (1 - v / 100) * (H - pt - pb);
+    let g = '';
+    [10, 30, 100, 300].forEach(v => g += `<line x1="${xs(v)}" x2="${xs(v)}" y1="${pt}" y2="${H - pb}" stroke="var(--border)"/><text x="${xs(v)}" y="${H - 12}" text-anchor="middle">${v}</text>`);
+    [0, 25, 50, 75, 100].forEach(v => g += `<line x1="${pl}" x2="${W - pr}" y1="${ys(v)}" y2="${ys(v)}" stroke="var(--border)"/><text x="${pl - 6}" y="${ys(v) + 3}" text-anchor="end">${v}m</text>`);
+    g += `<text x="${(W + pl) / 2}" y="${H}" text-anchor="middle">times per 30 days</text>`;
+    const boxes = [];
+    [...C].sort((a, b) => hours(b) - hours(a)).forEach(c => { const r = 4 + Math.sqrt(c.ppl) * 2, h = held(c), x = xs(c.times), y = ys(Math.min(c.min, 100));
+      const label = h ? 'Hidden' : c.n, w = label.length * 6, right = x + r + 4 + w < W - pr, lx = right ? x + r + 4 : x - r - 4 - w;
+      const box = [lx, y - 8, lx + w, y + 6], clash = boxes.some(b => !(box[2] < b[0] || box[0] > b[2] || box[3] < b[1] || box[1] > b[3]));
+      if (!clash) boxes.push(box);
+      boxes.push([x - r, y - r, x + r, y + r]);
+      g += `<g class="pt" data-c="${c.id}" style="cursor:${h ? 'default' : 'pointer'}" ${h ? '' : 'tabindex="0" role="button"'} aria-label="${h ? 'Pattern below privacy minimum' : c.n}"><circle cx="${x}" cy="${y}" r="${r}" fill="${h ? 'transparent' : c.cov ? 'var(--border-strong)' : 'var(--fg)'}" stroke="${h ? 'var(--muted)' : 'var(--surface)'}" ${h ? 'stroke-dasharray="3 2"' : ''} stroke-width="1.5"/>
+        ${clash ? '' : `<text x="${right ? lx : lx + w}" y="${y + 3}" text-anchor="${right ? 'start' : 'end'}" style="fill:${h ? 'var(--muted)' : 'var(--fg-2)'};font-family:var(--font-body);font-size:11px">${label}</text>`}</g>`; });
+    el.innerHTML = `<svg class="chart" viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="Recurring work by frequency and time">${g}</svg>`;
+    $$('#map .pt').forEach(p => { const c = C.find(x => x.id === p.dataset.c); p.onmousemove = e => S.tip(held(c) ? `Fewer than ${MIN()} people · hidden` : `${c.n}<br>${c.times} times · ${c.min}m · ${c.ppl} people`, e.clientX, e.clientY); p.onmouseleave = () => S.tip(null); if (held(c)) return; p.onclick = () => open(c.id); p.onkeydown = e => { if (e.key === 'Enter') open(c.id); }; });
+  }
+  function draw() {
+    funnel(); guards(); map();
+    const rows = C.filter(c => !stage || (stage === 'qual' ? c.cons >= 60 && !held(c) && stOf(c) !== 'dismissed' : stage === 'drafting' ? ['drafting', 'extend'].includes(stOf(c)) : stOf(c) === stage)).sort((a, b) => hours(b) - hours(a));
+    $('#cnt').textContent = stage ? `${rows.length} shown` : '';
+    $('#cand tbody').innerHTML = rows.map(c => { const h = held(c), [mk, l] = STS[stOf(c)];
+      return h ? `<tr><td class="muted">Pattern hidden</td><td class="small muted">${c.teams.join(', ')}</td><td class="r num muted">&lt; ${MIN()}</td><td colspan="5" class="small muted">Fewer people than the privacy minimum. Nothing about this pattern is shown or drafted.</td><td><span class="st"><i class="mk idle"></i>Held</span></td></tr>`
+        : `<tr class="click" data-c="${c.id}"><td><a class="name" href="#${c.id}">${c.n}</a></td><td class="small fg2">${c.teams.join(', ')}</td><td class="r num">${c.ppl}</td><td class="r num">${c.times}</td><td class="r num">${c.min}m</td>
+        <td><span class="score"><span class="bar ${c.cons < 50 ? 'p1' : ''}" style="width:56px"><i style="width:${c.cons}%"></i></span><span class="num small ${c.cons < 50 ? 'st p2' : ''}">${c.cons}%</span></span></td>
+        <td class="small">${c.cov ? `${nm(c.cov[0])} <span class="num muted">${c.cov[1]}%</span>` : '<span class="muted">None</span>'}</td><td class="r num">${hours(c)}</td><td><span class="st ${mk === 'sim' ? 'sim' : mk === 'unk' ? 'unk' : ''}"><i class="mk ${mk}"></i>${l}</span></td></tr>`; }).join('');
+    $$('#cand tr[data-c]').forEach(tr => tr.onclick = e => { e.preventDefault(); open(tr.dataset.c); });
+  }
+
+  /* candidate drawer */
+  const dr = $('#cd'); let cur = null;
+  $('#cd-x').onclick = () => S.closeDrawer(dr);
+  S.tabs($('#cd-tabs'));
+  function open(id) {
+    const c = C.find(x => x.id === id); if (!c || held(c)) return; cur = c;
+    $('#cd-k').textContent = `${c.teams.join(' · ')} · suggested ${c.tier}`; $('#cd-t').textContent = c.n;
+    const [mk, l] = STS[stOf(c)];
+    $('#cd-tags').innerHTML = `<span class="st ${mk === 'sim' ? 'sim' : mk === 'unk' ? 'unk' : ''}"><i class="mk ${mk}"></i>${l}</span><span class="tag">${c.ppl} people</span><span class="tag">${c.times} times · 30d</span><span class="tag">${hours(c)} h</span>`;
+    $('#cd-proc').innerHTML = `<div class="flow">${c.steps.map((s, i) => `${i ? '<span class="ar">→</span>' : ''}<div class="stp"><span class="n">${s[0]}</span><span class="bar"><i style="width:${s[1]}%"></i></span><span class="m">${s[1]}% of runs</span></div>`).join('')}</div>
+      ${c.variant ? `<div class="flow"><div class="stp var"><span class="n">${c.variant[0]}</span><span class="m">${c.variant[1]}% of runs</span></div></div>` : ''}
+      <div class="row wrap small" style="gap:6px"><span class="muted">Tools</span>${c.tools.map(t => `<span class="tag" style="font-family:var(--font-body)">${t}</span>`).join('')}</div>
+      ${c.cons < 50 ? '<div class="banner p2"><i class="mk p2"></i><span>Too inconsistent to automate as one skill.</span></div>' : ''}
+      ${c.cov && c.cov[1] >= 60 ? `<div class="banner sim"><i class="mk sim"></i><span>${c.cov[1]}% overlap with ${nm(c.cov[0])}. Extending it is likely better than a new skill.</span></div>` : c.cov ? `<div class="row small"><span class="muted">Closest skill</span><span>${nm(c.cov[0])}</span><span class="num muted">${c.cov[1]}% overlap</span></div>` : ''}`;
+    $('#cd-ev').innerHTML = `<dl class="kv"><dt>Sessions</dt><dd class="num">${c.sessions}</dd><dt>People</dt><dd class="num">${c.ppl} across ${c.teams.length} team${c.teams.length > 1 ? 's' : ''}</dd><dt>Finished successfully</dt><dd class="num">${c.ok}%</dd><dt>Source</dt><dd>Agent sessions and tickets</dd></dl>
+      <span class="lbl">Example sessions · redacted</span>
+      <table class="tbl compact"><tbody>${[0, 1, 2].map(i => `<tr><td class="mono small">S-${(c.sessions * 7 + i * 131).toString(36).toUpperCase()}</td><td class="small fg2">${c.steps.length} steps · ${Math.round(c.min * (0.8 + i * 0.2))}m</td><td>${i === 2 ? '<span class="st p2"><i class="mk p2"></i>Rework</span>' : '<span class="st"><i class="mk ok"></i>Completed</span>'}</td></tr>`).join('')}</tbody></table>
+      <span class="small muted">Shown only as aggregates and redacted examples. No person is identified.</span>`;
+    drawDraft(); footer();
+    $$('#cd-tabs [role="tab"]')[0].click();
+    S.openDrawer(dr); history.replaceState(null, '', '#' + id);
+  }
+  function drawDraft() {
+    const c = cur, s = stOf(c);
+    if (['new', 'dismissed'].includes(s)) { $('#cd-draft').innerHTML = `<div class="empty"><h3>No draft yet</h3><p>Generate one from the ${c.sessions} observed sessions.</p></div>`; return; }
+    if (s === 'drafting' && c.gen != null && c.gen < 4) {
+      const G = ['Write SKILL.md from the common procedure', `Build ${Math.min(40, Math.round(c.sessions / 4))} eval cases from successful sessions`, 'Shadow-run against observed outcomes', 'Check overlap and policy'];
+      $('#cd-draft').innerHTML = `<div class="gen">${G.map((g, i) => `<div class="row small"><i class="mk ${i < c.gen ? 'ok' : i === c.gen ? 'sim' : 'unk'}"></i><span>${g}</span><span class="num muted">${i < c.gen ? 'done' : i === c.gen ? '…' : ''}</span></div>`).join('')}</div>`; return; }
+    const slug = c.n.toLowerCase().replace(/[^a-z]+/g, '-');
+    $('#cd-draft').innerHTML = `<section class="measures" style="grid-template-columns:repeat(3,1fr)"><div class="measure"><span class="l">Shadow quality</span><span class="v">${(c.ok - 6.4).toFixed(1)}</span></div><div class="measure"><span class="l">Agrees with people</span><span class="v">${c.ok - 3}<small>%</small></span></div><div class="measure"><span class="l">Eval cases</span><span class="v">${Math.min(40, Math.round(c.sessions / 4))}</span></div></section>
+      <pre class="code">---
+name: ${slug}
+description: ${c.n} following the procedure ${c.ppl} people use today.
+tier: ${c.tier.toLowerCase().replace('t', 'tier')}
+origin: discovered · ${c.id}
+---
+${c.steps.map((x, i) => `${i + 1}. ${x[0]}`).join('\n')}${c.variant ? `\n- ${c.variant[0]}` : ''}</pre>
+      <div class="field"><label for="own">Owner</label><select class="select" id="own"><option>renata.m · ${c.teams[0]}</option><option>kalia.b</option><option>jdv</option></select></div>`;
+  }
+  function footer() {
+    const c = cur, s = stOf(c), f = $('#cd-f');
+    if (s === 'new') f.innerHTML = `<button class="btn tertiary" id="f-dis">Dismiss</button><span class="spacer"></span>${c.cov && c.cov[1] >= 60 ? `<button class="btn" id="f-gen">New skill instead</button><button class="btn primary" id="f-ext">Extend ${nm(c.cov[0])}</button>` : `<button class="btn primary" id="f-gen" ${c.cons < 50 ? 'disabled title="Too inconsistent to automate"' : ''}>Generate draft skill</button>`}`;
+    else if (s === 'drafting' || s === 'extend') f.innerHTML = `<button class="btn tertiary" id="f-dis">Dismiss</button><span class="spacer"></span><button class="btn primary" id="f-rev" ${c.gen != null && c.gen < 4 ? 'disabled' : ''}>Send for review</button>`;
+    else if (s === 'review') f.innerHTML = `<a class="btn" href="workbench.html">Open in Workbench</a><span class="spacer"></span><button class="btn primary" id="f-pub">Publish as draft skill</button>`;
+    else if (s === 'published') f.innerHTML = `<a class="btn primary" href="library.html">Open in Library</a>`;
+    else f.innerHTML = `<button class="btn" id="f-re">Reopen</button>`;
+    $('#f-gen') && ($('#f-gen').onclick = () => generate());
+    $('#f-ext') && ($('#f-ext').onclick = () => { c.st = 'extend'; persist(); draw(); open(c.id); S.simToast(`Proposal to extend ${nm(c.cov[0])} sent to its owner`); });
+    $('#f-rev') && ($('#f-rev').onclick = () => { c.st = 'review'; persist(); draw(); open(c.id); S.simToast(`${c.n} sent to ${$('#own') ? $('#own').value.split(' ·')[0] : 'the owner'} for review`); });
+    $('#f-pub') && ($('#f-pub').onclick = async () => { if (!await S.confirm({ title: `Publish ${c.n}?`, body: `Creates a draft ${c.tier} skill with its evaluation suite. Only the owner's team can load it until it passes its gate and is released.`, confirm: 'Publish as draft' })) return; c.st = 'published'; persist(); draw(); open(c.id); S.simToast(`${c.n} published as a draft skill`); });
+    $('#f-dis') && ($('#f-dis').onclick = async () => { if (!await S.confirm({ title: 'Dismiss this pattern?', body: 'It is hidden from discovery and not suggested again unless it changes significantly.', confirm: 'Dismiss', danger: true })) return; c.st = 'dismissed'; persist(); draw(); S.closeDrawer(dr); });
+    $('#f-re') && ($('#f-re').onclick = () => { c.st = 'new'; persist(); draw(); open(c.id); });
+  }
+  function generate() {
+    const c = cur; c.st = 'drafting'; c.gen = 0; persist(); draw(); $('#cd-tab-draft').click(); drawDraft(); footer();
+    const t = setInterval(() => { c.gen++; if (cur === c) { drawDraft(); footer(); } if (c.gen >= 4) { clearInterval(t); delete c.gen; draw(); if (cur === c) { drawDraft(); footer(); } S.simToast(`Draft ready · ${c.n}`); } }, 700);
+  }
+
+  /* sources and privacy */
+  const SRC0 = [['Agent sessions via the skill router', 'on', '14,980 sessions'], ['Tickets · Jira and Zendesk', 'on', '2,910 tickets'], ['IDE and agent transcripts', 'optin', '3 teams opted in'], ['Documents · SharePoint', 'off', ''], ['Chat · Slack', 'off', '']];
+  let src = S.store.get('disc-src', SRC0.map(s => s[1]));
+  function drawSrc() {
+    $('#srcs').innerHTML = SRC0.map((s, i) => `<div class="src"><span>${s[0]}${s[2] && src[i] !== 'off' ? `<div class="sub">${s[2]}</div>` : ''}</span><select class="select" data-s="${i}" aria-label="${s[0]}"><option value="on" ${src[i] === 'on' ? 'selected' : ''}>On</option><option value="optin" ${src[i] === 'optin' ? 'selected' : ''}>Teams opt in</option><option value="off" ${src[i] === 'off' ? 'selected' : ''}>Off</option></select><span class="st ${src[i] === 'off' ? 'unk' : ''}"><i class="mk ${src[i] === 'off' ? 'unk' : 'ok'}"></i>${src[i] === 'off' ? 'Off' : 'Collecting'}</span></div>`).join('');
+    $$('#srcs [data-s]').forEach(sel => sel.onchange = () => { src[+sel.dataset.s] = sel.value; drawSrc(); });
+  }
+  $('#open-src').onclick = () => { src = S.store.get('disc-src', SRC0.map(s => s[1])); drawSrc(); $('#g-min').value = MIN(); $('#srcd').showModal(); };
+  $('#src-cancel').onclick = () => $('#srcd').close();
+  $('#src-save').onclick = () => {
+    const m = parseInt($('#g-min').value, 10); if (isNaN(m) || m < 3) { $('#g-min').setAttribute('aria-invalid', 'true'); return S.simToast('The minimum is 3 people'); }
+    S.store.set('disc-src', src); S.store.set('disc-min', m); S.store.set('disc-ret', $('#g-ret').value);
+    $('#obs-state').innerHTML = `<i class="mk ok"></i>Observing ${src.filter(x => x !== 'off').length} sources`; $('#srcd').close(); draw(); S.simToast('Discovery settings saved');
+  };
+  $('#obs-state').innerHTML = `<i class="mk ok"></i>Observing ${S.store.get('disc-src', SRC0.map(s => s[1])).filter(x => x !== 'off').length} sources`;
+  draw(); addEventListener('resize', map);
+  const h = location.hash.slice(1); if (h) open(h);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .set { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; align-items: start; }
+  .snav { display: grid; gap: 2px; position: sticky; top: 0; }
+  .snav button { display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 10px; border: 0; border-radius: var(--r-ctl); background: none; color: var(--fg-2); font: 500 13px var(--font-body); text-align: left; cursor: pointer; }
+  .snav button:hover { background: var(--recess); color: var(--fg); }
+  .snav button[aria-selected="true"] { background: var(--recess); color: var(--fg); box-shadow: inset 3px 0 0 var(--accent); }
+  .form-row { display: grid; grid-template-columns: 220px minmax(0, 420px); gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--border); align-items: start; }
+  .form-row:last-child { border: 0; }
+  .form-row .d { font-size: 12px; color: var(--muted); }
+  @media (max-width: 900px) { .set, .form-row { grid-template-columns: minmax(0, 1fr); } .snav { position: static; grid-auto-flow: column; overflow-x: auto; } }
+</style>
+</head>
+<body data-page="settings">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="overview.html">Wexler &amp; Hahn</a><span>/</span><span>Settings</span><span>/</span><span id="crumb">General</span></div>
+  <div class="ctx" data-od-id="context-row"><div class="ttl"><h1>Workspace settings</h1></div><div class="acts" id="acts"></div></div>
+  <div class="set">
+    <nav class="snav" role="tablist" aria-label="Settings sections" id="snav" data-od-id="settings-nav">
+      <button role="tab" aria-selected="true" aria-controls="s-gen" data-tab="General">General</button>
+      <button role="tab" aria-selected="false" aria-controls="s-mem" data-tab="Members">Members</button>
+      <button type="button" onclick="location.href='access.html'" data-od-id="nav-access">Access and roles</button>
+      <button role="tab" aria-selected="false" aria-controls="s-pol" data-tab="Policies">Policies</button>
+      <button role="tab" aria-selected="false" aria-controls="s-ai" data-tab="Auto-Improve" id="tab-ai">Auto-Improve</button>
+      <button role="tab" aria-selected="false" aria-controls="s-aud" data-tab="Audit log" id="tab-audit">Audit log</button>
+      <button role="tab" aria-selected="false" aria-controls="s-bill" data-tab="Billing">Billing</button>
+    </nav>
+    <div>
+      <section id="s-gen" class="panel" data-od-id="general">
+        <div class="form-row"><div><label class="lbl" for="wn">Workspace name</label></div><input class="input" id="wn" value="Wexler &amp; Hahn"></div>
+        <div class="form-row"><div><span class="lbl">URL</span></div><span class="mono">savant.example/o/wexler-hahn</span></div>
+        <div class="form-row"><div><span class="lbl">Default evaluation connection</span><div class="d">Used when a suite does not specify one</div></div><select class="select" id="dc"><option>Anthropic</option><option>OpenAI</option></select></div>
+        <div class="form-row"><div><span class="lbl">Evaluation freshness</span><div class="d">Skills older than this are marked stale</div></div><div class="seg" role="group" id="fr"><button aria-pressed="false">7 days</button><button aria-pressed="true">14 days</button><button aria-pressed="false">30 days</button></div></div>
+        <div class="form-row"><div><span class="lbl">Density</span><div class="d">Compact for monitoring, comfortable for authoring</div></div><div class="seg" role="group" id="dens"><button aria-pressed="true" data-v="compact">Compact</button><button aria-pressed="false" data-v="comfortable">Comfortable</button></div></div>
+      </section>
+      <section id="s-mem" class="panel" hidden data-od-id="members">
+        <div class="panel-h" data-od-id="members-sync"><span class="st" id="m-sync"><i class="mk ok"></i>Okta · SCIM</span><span class="small fg2" id="m-sync-t">Synced 4m ago · 412 users · 38 groups</span>
+          <div class="r"><a class="small" href="access.html#map">1 grant not backed by Okta</a><button class="btn sm" id="m-syncnow" data-ic="refresh">Sync now</button></div></div>
+        <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Member</th><th>Role</th><th>Provider groups</th><th>Source</th><th>Status</th></tr></thead><tbody>
+        <tr><td><strong>Priya Aronson</strong><div class="sub">you</div></td><td>Platform admin</td><td class="small mono fg2">grp-platform</td><td class="small">Okta</td><td><span class="st"><i class="mk ok"></i>Active</span></td></tr>
+        <tr><td><strong>renata.m</strong></td><td>Release approver</td><td class="small mono fg2">grp-legal-ops, grp-release-mgmt</td><td class="small">Okta</td><td><span class="st"><i class="mk ok"></i>Active</span></td></tr>
+        <tr><td><strong>min.park</strong></td><td>Skill author</td><td class="small mono fg2">grp-engineering, grp-sre</td><td class="small">Okta</td><td><span class="st"><i class="mk ok"></i>Active</span></td></tr>
+        <tr><td><strong>ari.chen</strong></td><td>Reviewer</td><td class="small mono fg2">grp-engineering, grp-security</td><td class="small">Okta</td><td><span class="st"><i class="mk ok"></i>Active</span></td></tr>
+        <tr><td><strong>kalia.b</strong></td><td>Skill user · Skill author on RFP response drafter</td><td class="small mono fg2">grp-finance</td><td class="small"><span class="st p2"><i class="mk p2"></i>Direct grant</span></td><td><span class="st"><i class="mk ok"></i>Active</span></td></tr>
+        <tr><td><strong>sasha.gw</strong></td><td>Reviewer</td><td class="small mono fg2">grp-security</td><td class="small">Okta</td><td><span class="st unk"><i class="mk unk"></i>Provisioned · not signed in</span></td></tr>
+      </tbody></table></div></section>
+      <section id="s-pol" class="panel" hidden data-od-id="policies"><div class="tbl-wrap"><table class="tbl" id="pol"><thead><tr><th>Policy</th><th>Type</th><th>Enforcement</th><th>State</th><th class="r">Decisions, 30d</th><th class="r">Applies to</th></tr></thead><tbody></tbody></table></div></section>
+      <section id="s-ai" hidden data-od-id="auto-improve-policy">
+        <div class="row" style="margin-bottom:12px"><span class="cap plan">Planned</span></div>
+        <div class="panel"><div class="tbl-wrap"><table class="tbl" id="aip"><thead><tr><th>Skills</th><th>Tier 1</th><th>Tier 2</th><th>Tier 3</th></tr></thead><tbody></tbody></table></div></div>
+        <div class="panel" style="margin-top:16px"><div class="tbl-wrap"><table class="tbl" id="aie"><thead><tr><th>Evaluations <span class="tag sim">Alpha</span></th><th>Tier 1</th><th>Tier 2</th><th>Tier 3</th></tr></thead><tbody></tbody></table></div></div>
+        
+      </section>
+      <section id="s-aud" class="panel" hidden data-od-id="audit-log">
+        <div class="panel-h"><label class="search" style="width:260px"><svg class="i" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="m10.5 10.5 3 3"/></svg><input class="input" id="aq" placeholder="Filter by actor or action" aria-label="Filter audit log"></label></div>
+        <div class="tbl-wrap"><table class="tbl compact" id="aud"><thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead><tbody></tbody></table></div></section>
+      <section id="s-bill" class="panel" hidden data-od-id="billing">
+        <div class="empty"><svg class="i" viewBox="0 0 16 16" style="width:24px;height:24px"><rect x="3" y="7" width="10" height="7" rx="1.5"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg><h3>Billing requires the Owner role</h3><p>Your role is Platform admin. renata.m can change the plan or payment method.</p><button class="btn" onclick="Savant.toast('Access request sent to renata.m')">Request access</button></div>
+      </section>
+    </div>
+  </div>
+</div>
+</main>
+</div>
+<aside class="drawer" id="pd" aria-hidden="true" aria-labelledby="pd-t" data-od-id="policy-drawer">
+  <div class="drawer-h"><div class="row"><span class="small muted" id="pd-k"></span><span class="spacer"></span><button class="icon-btn" id="pd-x" aria-label="Close"></button></div><h2 id="pd-t"></h2><div class="row wrap" id="pd-tags"></div></div>
+  <div class="drawer-b stack" id="pd-b" style="padding-top:12px"></div>
+  <div class="drawer-f" id="pd-f"></div>
+</aside>
+<dialog class="dialog" id="invd" aria-labelledby="inv-t" data-od-id="invite-dialog">
+  <form method="dialog">
+    <div class="dh"><h2 id="inv-t">Invite a member</h2></div>
+    <div class="db stack">
+      <div class="field"><label for="inv-e">Work email</label><input class="input" id="inv-e" type="email" placeholder="name@wexlerhahn.com" autocomplete="off"><span class="hint" id="inv-h">Must use a verified domain: wexlerhahn.com</span></div>
+      <div class="field"><label for="inv-r">Role</label><select class="select" id="inv-r"><option>Viewer</option><option>Reviewer</option><option>Maintainer</option></select><span class="hint">Owner and Platform admin are assigned by an Owner.</span></div>
+    </div>
+    <div class="df"><button class="btn" value="cancel" formnovalidate>Cancel</button><button class="btn primary" value="ok" id="inv-go">Send invitation</button></div>
+  </form>
+</dialog>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  let dirty = false, aiDirty = false, aiPol = S.ai.policy();
+  const T = ['T1', 'T2', 'T3'];
+  const SK_ROWS = [['minDelta', 'Minimum quality gain in shadow evaluation', '+'], ['maxNewFail', 'Newly failing cases allowed', '≤'], ['minRuns', 'Production runs required, 7 days', '≥'], ['maxSuccessDrop', 'Max success-rate drop vs baseline (pt)', '≤'], ['maxEditRise', 'Max edit-ratio rise vs baseline (pts)', '≤'], ['minReports', 'Supporting field reports', '≥'], ['maxDepth', 'Max recursive iterations', '≤']];
+  const EV_ROWS = [['maxDrift', 'Max score drift on the previous version (pts)', '≤'], ['minReports', 'Supporting field reports', '≥']];
+  const onCell = (k, t, on) => `<td><label class="row small"><button class="toggle" role="switch" aria-checked="${on}" data-on="${k}" data-t="${t}" aria-label="${k === 'skills' ? 'Skills' : 'Evaluations'} Auto-Improve for ${t.replace('T', 'Tier ')}"></button>${on ? 'On' : 'Off'}</label></td>`;
+  const numCell = (k, f, t, v, sign, on) => `<td><div class="row"><span class="mono small muted" style="width:14px">${sign}</span><input class="input mono" style="width:80px;height:28px" data-k="${k}" data-f="${f}" data-t="${t}" value="${v}" ${on ? '' : 'disabled'} aria-label="${f} for ${t}"></div></td>`;
+  function drawAi() {
+    $('#aip tbody').innerHTML = `<tr><td><strong>Auto-approve skill proposals</strong></td>${T.map(t => onCell('skills', t, aiPol[t].skills.on)).join('')}</tr>` +
+      SK_ROWS.map(([f, l, sg]) => `<tr><td class="small fg2">${l}</td>${T.map(t => numCell('skills', f, t, aiPol[t].skills[f], sg, aiPol[t].skills.on)).join('')}</tr>`).join('');
+    $('#aie tbody').innerHTML = `<tr><td><strong>Auto-approve evaluation proposals</strong><div class="sub">Datasets, rubrics and gates</div></td>${T.map(t => onCell('evals', t, aiPol[t].evals.on)).join('')}</tr>` +
+      EV_ROWS.map(([f, l, sg]) => `<tr><td class="small fg2">${l}</td>${T.map(t => numCell('evals', f, t, aiPol[t].evals[f], sg, aiPol[t].evals.on)).join('')}</tr>`).join('') +
+      `<tr><td class="small fg2">Require version ranking to stay stable</td>${T.map(t => `<td><input type="checkbox" class="chk" data-k="evals" data-f="stableRanking" data-t="${t}" ${aiPol[t].evals.stableRanking ? 'checked' : ''} ${aiPol[t].evals.on ? '' : 'disabled'} aria-label="Stable ranking for ${t}"></td>`).join('')}</tr>`;
+    $$('#s-ai [data-on]').forEach(b => b.onclick = async () => {
+      const k = b.dataset.on, t = b.dataset.t, on = !aiPol[t][k].on, tier = t.replace('T', 'Tier ');
+      if (on && k === 'evals' && !await S.ai.evalsWarning(`${tier} evaluations`)) return;
+      if (on && k === 'skills' && t === 'T1' && !await S.confirm({ title: 'Turn on Auto-Improve for Tier 1 skills?', body: 'Tier 1 skills handle restricted data and critical workflows. Proposals that meet the Tier 1 criteria will be committed to candidate branches without review. Production promotion still needs 2 approvers.', confirm: 'Turn on for Tier 1' })) return;
+      aiPol[t][k].on = on; aiDirty = true; drawAi(); setActs('Auto-Improve');
+    });
+    $$('#s-ai input[data-f]').forEach(i => i.onchange = () => {
+      const { k, f, t } = i.dataset;
+      if (i.type === 'checkbox') aiPol[t][k][f] = i.checked;
+      else { const v = parseFloat(i.value); if (isNaN(v) || v < 0) { i.setAttribute('aria-invalid', 'true'); return; } i.removeAttribute('aria-invalid'); aiPol[t][k][f] = v; }
+      aiDirty = true; setActs('Auto-Improve');
+    });
+  }
+  function saveAi() {
+    if ($('#s-ai [aria-invalid="true"]')) return S.toast('Fix the highlighted values before saving');
+    S.ai.setPolicy(aiPol); aiDirty = false; setActs('Auto-Improve');
+    const on = T.filter(t => aiPol[t].skills.on).map(t => t.replace('T', 'Tier ')), ev = T.filter(t => aiPol[t].evals.on).map(t => t.replace('T', 'Tier '));
+    S.toast(`Auto-Improve policy saved · skills: ${on.join(', ') || 'off'} · evaluations: ${ev.join(', ') || 'off'}`);
+  }
+  drawAi();
+  const setActs = t => { $('#crumb').textContent = t; $('#acts').innerHTML = t === 'General' ? `<span class="small muted" id="ss">${dirty ? 'Unsaved changes' : ''}</span><button class="btn primary" id="sv" ${dirty ? '' : 'disabled'}>Save changes</button>` : t === 'Members' ? '<a class="btn" href="access.html#ea">Check a user</a><a class="btn primary" href="access.html">Manage roles</a>' : t === 'Policies' ? '<span class="cap plan">Authoring planned</span><button class="btn primary" data-ic="plus" id="newpol">New policy</button>' : t === 'Audit log' ? '<button class="btn" id="csv" data-ic="download">Export CSV</button>' : t === 'Auto-Improve' ? `<span class="small muted">${aiDirty ? 'Unsaved changes' : ''}</span><button class="btn" id="ai-reset" ${aiDirty ? '' : 'disabled'}>Discard</button><button class="btn primary" id="ai-save" ${aiDirty ? '' : 'disabled'}>Save policy</button>` : '';
+    $('#ai-save') && ($('#ai-save').onclick = saveAi);
+    $('#ai-reset') && ($('#ai-reset').onclick = () => { aiPol = S.ai.policy(); aiDirty = false; drawAi(); setActs('Auto-Improve'); });
+    $$('#acts [data-ic]').forEach(el => el.insertAdjacentHTML('afterbegin', S.icon(el.dataset.ic)));
+    $('#sv') && ($('#sv').onclick = () => { dirty = false; setActs('General'); S.toast('Workspace settings saved'); });
+    $('#inv') && ($('#inv').onclick = () => { $('#inv-e').value = ''; $('#invd').showModal(); });
+    $('#newpol') && ($('#newpol').onclick = () => editPolicy());
+    $('#csv') && ($('#csv').onclick = () => S.toast('Audit log exported · last 30 days · 412 events')); };
+  S.tabs($('#snav'), t => setActs($(`[aria-controls="${t}"]`)?.dataset.tab || t));
+  setActs('General');
+  $('#inv-go').onclick = e => { const v = $('#inv-e').value.trim(); if (!/^[^@\s]+@wexlerhahn\.com$/i.test(v)) { e.preventDefault(); $('#inv-e').setAttribute('aria-invalid', 'true'); $('#inv-h').className = 'err'; $('#inv-h').textContent = v.includes('@') ? 'Only wexlerhahn.com addresses can join this workspace.' : 'Enter a full email address.'; } };
+  $('#inv-e').oninput = () => { $('#inv-e').removeAttribute('aria-invalid'); $('#inv-h').className = 'hint'; $('#inv-h').textContent = 'Must use a verified domain: wexlerhahn.com'; };
+  $('#invd').addEventListener('close', () => { if ($('#invd').returnValue !== 'ok') return; const v = $('#inv-e').value.trim(); $('#s-mem tbody').insertAdjacentHTML('beforeend', `<tr><td><strong>${v.split('@')[0]}</strong><div class="sub">${v}</div></td><td>${$('#inv-r').value}</td><td class="small fg2">—</td><td><span class="st unk"><i class="mk unk"></i>Invited</span></td><td></td></tr>`); S.toast(`Invitation sent to ${v}`); });
+  // policies
+  const pols = [
+    { n: 'Tier 1 read access requires SSO group', t: 'access', e: 'enforce', st: 'active', dec: 412, scope: 'Tier 1', rule: 'load_skill allowed only when subject is in group sso-tier1', ev: [['09:12', 'Allowed', 'min.park loaded Incident triage'], ['08:40', 'Denied', 'contractor-07 loaded Contract clause reviewer']] },
+    { n: 'Production releases require 2 approvers', t: 'approval', e: 'enforce', st: 'active', dec: 6, scope: 'All skills', rule: 'release to production requires 2 distinct approvers, excluding the author', ev: [['08:55', 'Allowed', 'PR summarizer v2.3 · ari.chen, jdv'], ['Yest.', 'Held', 'RFP response drafter v1.4 · 1 of 2']] },
+    { n: 'Staging burn-in of 24h before production', t: 'environment', e: 'enforce', st: 'active', dec: 4, scope: 'All skills', rule: 'release to production requires 24h in staging with no P1 alerts', ev: [['Yest.', 'Held', 'RFP response drafter v1.4 · 18h of 24h']] },
+    { n: 'Auto-pin on regression greater than 5%', t: 'environment', e: 'enforce', st: 'active', dec: 1, scope: 'All skills', rule: 'when quality drops more than 5% vs baseline, pin the production version', ev: [['09:42', 'Blocked', 'Incident triage v3.1 · −6.9% vs v3.0']] },
+    { n: 'Tier 1 cannot distribute to local agents', t: 'distribution', e: 'shadow', st: 'draft', dec: 37, scope: 'Tier 1', rule: 'deny distribution of Tier 1 skills to local sync agents', ev: [['10:02', 'Would deny', 'VS Code sync agent · Contract clause reviewer']] },
+    { n: 'External eval datasets require legal review', t: 'approval', e: 'shadow', st: 'draft', dec: 0, scope: 'Datasets', rule: 'datasets with an external source require legal-ops approval before use', ev: [] }
+  ];
+  const decSt = d => d === 'Denied' || d === 'Blocked' ? `<span class="st p1"><i class="mk p1"></i>${d}</span>` : d === 'Held' ? `<span class="st p2"><i class="mk p2"></i>${d}</span>` : d === 'Would deny' ? `<span class="st sim"><i class="mk sim"></i>${d}</span>` : `<span class="st"><i class="mk ok"></i>${d}</span>`;
+  const drawPol = () => $('#pol tbody').innerHTML = pols.map((p, i) => `<tr class="click" data-i="${i}"><td><a class="name" href="#">${S.esc(p.n)}</a></td><td><span class="tag">${p.t}</span></td><td>${p.e === 'shadow' ? '<span class="st sim"><i class="mk sim"></i>Shadow mode</span>' : 'Enforce'}</td><td>${p.st === 'active' ? '<span class="st"><i class="mk ok"></i>Active</span>' : '<span class="st sim"><i class="mk sim"></i>Draft</span>'}</td><td class="r num">${p.dec}</td><td class="r small">${p.scope}</td></tr>`).join('');
+  drawPol();
+  const pd = $('#pd'); $('#pd-x').innerHTML = S.icon('x'); $('#pd-x').onclick = () => { pd.dataset.guard = ''; S.closeDrawer(pd); };
+  $('#pol').addEventListener('click', e => { const tr = e.target.closest('tr[data-i]'); if (!tr) return; e.preventDefault(); viewPolicy(+tr.dataset.i); });
+  function viewPolicy(i) {
+    const p = pols[i]; pd.dataset.guard = '';
+    $('#pd-k').textContent = 'Policy'; $('#pd-t').textContent = p.n;
+    $('#pd-tags').innerHTML = `<span class="tag">${p.t}</span>${p.st === 'active' ? '<span class="st"><i class="mk ok"></i>Active</span>' : '<span class="st sim"><i class="mk sim"></i>Draft · shadow mode</span>'}`;
+    $('#pd-b').innerHTML = `<dl class="kv"><dt>Rule</dt><dd class="mono">${p.rule}</dd><dt>Scope</dt><dd>${p.scope}</dd><dt>Enforcement</dt><dd>${p.e === 'shadow' ? 'Shadow mode: decisions are recorded, nothing is blocked' : 'Enforced'}</dd><dt>Decisions, 30d</dt><dd class="num">${p.dec}</dd></dl>
+      <h3>Recent decisions</h3>${p.ev.length ? `<table class="tbl compact"><tbody>${p.ev.map(e => `<tr><td class="num muted">${e[0]}</td><td>${decSt(e[1])}</td><td class="small">${e[2]}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No decisions recorded yet.</p>'}
+      <a class="small" href="#" id="pd-aud">View all in audit log</a>`;
+    $('#pd-aud').onclick = e => { e.preventDefault(); S.closeDrawer(pd); $('#tab-audit').click(); $('#aq').value = 'policy'; $('#aq').dispatchEvent(new Event('input')); };
+    $('#pd-f').innerHTML = p.st === 'draft' ? `<button class="btn" id="pd-edit">Edit draft</button><button class="btn primary" id="pd-act">Activate</button>` : '<button class="btn" disabled title="Policy editing is planned">Edit</button><span class="cap plan" style="align-self:center">Planned</span>';
+    $('#pd-edit') && ($('#pd-edit').onclick = () => editPolicy(i));
+    $('#pd-act') && ($('#pd-act').onclick = async () => { if (await S.confirm({ title: `Activate “${S.esc(p.n)}”?`, body: `In shadow mode this policy would have affected <strong>${p.dec}</strong> decisions in 30 days. Activating enforces it immediately for ${p.scope}. Activation needs a second Owner approval.`, confirm: 'Request activation' })) { S.toast('Activation requested · waiting for renata.m'); S.closeDrawer(pd); } });
+    S.openDrawer(pd);
+  }
+  function editPolicy(i) {
+    const p = i == null ? { n: '', t: 'approval', scope: 'Tier 1', e: 'shadow' } : pols[i];
+    $('#pd-k').innerHTML = '<span class="cap plan">Planned · policy authoring preview</span>'; $('#pd-t').textContent = i == null ? 'New policy' : 'Edit draft'; $('#pd-tags').innerHTML = '';
+    $('#pd-b').innerHTML = `<div class="field"><label for="pn">Name</label><input class="input" id="pn" value="${S.esc(p.n)}" placeholder="Tier 2 releases require security review"><span class="hint" id="pn-h"></span></div>
+      <div class="grid g-2"><div class="field"><label for="pt">Type</label><select class="select" id="pt">${['access', 'approval', 'distribution', 'environment'].map(t => `<option ${t === p.t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="field"><label for="ps">Applies to</label><select class="select" id="ps">${['All skills', 'Tier 1', 'Tier 2', 'Tier 3', 'Datasets'].map(t => `<option ${t === p.scope ? 'selected' : ''}>${t}</option>`).join('')}</select></div></div>
+      <div class="field"><span class="lbl">Rule</span><div class="row wrap" style="gap:6px"><span class="small fg2">When</span><select class="select" id="pw"><option>a release targets production</option><option>a skill is loaded by an agent client</option><option>a skill is distributed to a connector</option><option>an evaluation uses an external dataset</option></select>
+        <span class="small fg2">require</span><select class="select" id="pr"><option>security review</option><option>2 approvers</option><option>SSO group membership</option><option>passing evaluation within 14 days</option></select></div></div>
+      <div class="field"><span class="lbl">Enforcement</span><div class="seg" role="group" id="pe"><button aria-pressed="${p.e === 'shadow'}" data-v="shadow">Shadow mode</button><button aria-pressed="${p.e !== 'shadow'}" data-v="enforce">Enforce</button></div><span class="hint">Shadow mode records what the policy would decide without blocking anything.</span></div>
+      <div class="banner sim" id="pimp"><i class="mk sim"></i><span>Simulated against the last 30 days: would have held <strong id="pimp-n">2</strong> of 10 releases.</span></div>`;
+    pd.dataset.guard = 'Discard this policy draft?';
+    const sim = () => { const n = { 'Tier 1': 2, 'Tier 2': 3, 'Tier 3': 1, 'All skills': 6, Datasets: 0 }[$('#ps').value] + ($('#pr').selectedIndex === 3 ? 1 : 0); $('#pimp-n').textContent = n; };
+    ['#ps', '#pr', '#pw'].forEach(k => $(k).onchange = sim); sim();
+    $$('#pe button').forEach(b => b.onclick = () => $$('#pe button').forEach(x => x.setAttribute('aria-pressed', x === b)));
+    $('#pd-f').innerHTML = '<button class="btn" id="pd-cancel">Cancel</button><button class="btn primary" id="pd-save">Save as draft</button>';
+    $('#pd-cancel').onclick = () => S.closeDrawer(pd);
+    $('#pd-save').onclick = () => {
+      const n = $('#pn').value.trim(); if (n.length < 6) { $('#pn').setAttribute('aria-invalid', 'true'); $('#pn-h').className = 'err'; $('#pn-h').textContent = 'Give the policy a descriptive name.'; $('#pn').focus(); return; }
+      const rec = { n, t: $('#pt').value, e: 'shadow', st: 'draft', dec: 0, scope: $('#ps').value, rule: `when ${$('#pw').value}, require ${$('#pr').value}`, ev: [] };
+      rec.e = $('#pe [aria-pressed="true"]').dataset.v;
+      if (i == null) pols.push(rec); else Object.assign(pols[i], rec);
+      drawPol(); pd.dataset.guard = ''; S.closeDrawer(pd); S.simToast(`“${n}” saved as draft · not enforced until activated`);
+    };
+    if (!pd.classList.contains('open')) S.openDrawer(pd);
+  }
+  $('#m-syncnow').onclick = e => { const b = e.currentTarget; b.disabled = true; b.lastChild.textContent = 'Syncing…'; setTimeout(() => { b.disabled = false; b.lastChild.textContent = 'Sync now'; $('#m-sync-t').textContent = 'Synced just now · 412 users · 38 groups'; S.simToast('Synced with Okta · no changes'); }, 1400); };
+  const mark = () => { dirty = true; setActs('General'); };
+  $('#wn').oninput = mark; $('#dc').onchange = mark;
+  $$('#fr button').forEach(b => b.onclick = () => { $$('#fr button').forEach(x => x.setAttribute('aria-pressed', x === b)); mark(); });
+  const dn = S.store.get('density', 'compact'); document.documentElement.dataset.density = dn; $$('#dens button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === dn));
+  $$('#dens button').forEach(b => b.onclick = () => { $$('#dens button').forEach(x => x.setAttribute('aria-pressed', x === b)); document.documentElement.dataset.density = b.dataset.v; S.store.set('density', b.dataset.v); });
+  const aud = [['09:42', 'policy', 'policy.blocked', 'Auto-pin on regression · Incident triage v3.1'], ['09:42', 'savant', 'evaluation.completed', 'EV-2418'], ['08:40', 'policy', 'policy.denied', 'Tier 1 read access · contractor-07'], ['09:10', 'auto-improve', 'recommendation.generated', 'incident-triage'], ['08:55', 'ari.chen', 'release.promoted', 'pr-summarizer v2.3'], ['08:31', 'savant', 'repository.sync_failed', 'ops/runbooks'], ['08:02', 'priya.a', 'connection.rotated', 'OpenAI'], ['Yest.', 'renata.m', 'version.created', 'contract-clause-reviewer v4.2'], ['Yest.', 'min.park', 'policy.viewed', 'Auto-pin on regression'], ['6 Oct', 'priya.a', 'connection.revoked', 'Azure OpenAI']];
+  const draw = () => { const q = $('#aq').value.toLowerCase(); $('#aud tbody').innerHTML = aud.filter(a => !q || a.join(' ').toLowerCase().includes(q)).map(a => `<tr><td class="num muted">${a[0]}</td><td class="mono small">${a[1]}</td><td class="mono small">${a[2]}</td><td>${a[3]}</td></tr>`).join('') || '<tr><td colspan="4" class="muted">No events match.</td></tr>'; };
+  $('#aq').oninput = draw; draw();
+  addEventListener('beforeunload', e => { if (dirty || aiDirty) { e.preventDefault(); e.returnValue = ''; } });
+  if (location.hash === '#audit') $('#tab-audit').click();
+  if (location.hash === '#members') $('[aria-controls="s-mem"]').click();
+  if (location.hash === '#billing') $('[aria-controls="s-bill"]').click();
+  if (location.hash === '#policies') $('[aria-controls="s-pol"]').click();
+  if (location.hash === '#auto-improve') $('#tab-ai').click();
+});
+</script>
+</body>
+</html>

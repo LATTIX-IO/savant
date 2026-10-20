@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Savant UX modernization · Prototype overview</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  body { overflow: auto; }
+  .doc { max-width: 1180px; margin: 0 auto; padding: 0 24px 64px; }
+  .dhead { display: flex; align-items: center; gap: 12px; height: 56px; border-bottom: 1px solid var(--border); margin-bottom: 32px; }
+  .dhead img { width: 28px; height: 28px; }
+  .dhead .logo-dark { display: none; }
+  html[data-theme="dark"] .dhead .logo-dark { display: block; }
+  html[data-theme="dark"] .dhead .logo-light { display: none; }
+  .hero { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 32px; align-items: end; margin-bottom: 40px; }
+  .hero h1 { font-size: 24px; line-height: 32px; max-width: 34ch; }
+  [data-od-id="ux-assessment"] .tbl td { padding-top: 8px; padding-bottom: 8px; height: auto; }
+  .hero p { color: var(--fg-2); margin-top: 8px; max-width: 60ch; font-size: 14px; }
+  .sect { margin-top: 48px; }
+  .sect > h2 { margin-bottom: 4px; }
+  .sect > .lead { color: var(--muted); margin-bottom: 16px; max-width: 70ch; }
+  .screens { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); overflow: hidden; }
+  .scr { display: grid; grid-template-columns: 28px 1fr auto; gap: 4px 10px; padding: 14px 16px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); text-decoration: none; color: var(--fg); }
+  .scr:nth-child(3n) { border-right: 0; }
+  .scr:hover { background: var(--recess); }
+  .scr .j { grid-row: 1 / 3; font: 600 12px var(--font-mono); width: 24px; height: 24px; border-radius: 4px; background: var(--recess); display: grid; place-items: center; color: var(--fg-2); }
+  .scr:hover .j { background: var(--surface); }
+  .scr b { font-weight: 600; }
+  .scr span.d { grid-column: 2 / 4; font-size: 12px; color: var(--muted); }
+  .scr svg { color: var(--muted); }
+  .ia { display: grid; grid-template-columns: minmax(0, 1fr) 80px minmax(0, 1fr); gap: 0; align-items: stretch; }
+  .ia .col { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-panel); padding: 8px; }
+  .ia .col h3 { padding: 6px 8px 8px; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .ia .it { display: flex; align-items: center; gap: 8px; height: 30px; padding: 0 8px; border-radius: 4px; font-size: 13px; }
+  .ia .it .muted { margin-left: auto; font-size: 11px; }
+  .ia .it.cut { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+  .ia .it.new { background: var(--recess); font-weight: 500; }
+  .ia svg.map { width: 100%; height: 100%; }
+  .caps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .caps ul { margin: 0; padding: 0 16px 14px 32px; display: grid; gap: 6px; color: var(--muted); font-size: 12px; }
+  .caps li a { font-size: 13px; color: var(--fg); }
+  .caps li a:hover { color: var(--link); }
+  .sw { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+  .sw div { display: grid; grid-template-columns: 28px 1fr; gap: 2px 10px; align-items: center; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-ctl); background: var(--surface); font-size: 12px; }
+  .sw i { grid-row: 1 / 3; width: 28px; height: 28px; border-radius: 4px; border: 1px solid var(--border); }
+  .sw span { color: var(--muted); font: 11px var(--font-mono); }
+  @media (max-width: 900px) { .hero, .caps { grid-template-columns: minmax(0, 1fr); } .screens { grid-template-columns: minmax(0, 1fr); } .scr { border-right: 0; } .ia { grid-template-columns: minmax(0, 1fr); gap: 12px; } .ia .mapcol { display: none; } }
+</style>
+</head>
+<body>
+<div class="band" style="height:4px" role="presentation"></div>
+<div class="doc">
+  <header class="dhead" data-od-id="doc-header">
+    <img class="logo-light" src="assets/savant-mark-light.svg" alt="" width="28" height="28"><img class="logo-dark" src="assets/savant-mark-dark.svg" alt="" width="28" height="28">
+    <strong style="font-size:15px">Savant</strong><span class="muted">UX modernization prototype · 12 Oct 2026</span>
+    <span class="spacer"></span><span class="mode-pill"><i class="mk sim"></i>Sample data</span>
+    <button class="icon-btn" id="theme" aria-label="Toggle colour theme"></button>
+  </header>
+
+  <section class="hero" data-od-id="hero">
+    <div>
+      <h1>Savant as an engineering workbench, not a set of admin pages</h1>
+      <p>Twelve navigation items become six workspaces plus two administrative areas. Explanatory copy gives way to measures, matrices, traces and comparisons. Every screen answers the same four questions: what is this, what state is it in, what can I do, and where do I look next.</p>
+    </div>
+    <div class="measures" aria-label="Change summary">
+      <div class="measure"><span class="l">Primary nav items</span><span class="v">12 → 6</span><span class="d">+2 admin, 1 guide</span></div>
+      <div class="measure"><span class="l">Skill detail tabs</span><span class="v">8 → 4</span><span class="d">inspector drawer</span></div>
+      <div class="measure"><span class="l">Screens prototyped</span><span class="v">9</span><span class="d">6 journeys</span></div>
+    </div>
+  </section>
+
+  <section class="sect" data-od-id="screens">
+    <h2>Prototype screens</h2><p class="lead">Each screen is a working page: filters, drawers, dialogs, live progress and empty, failure and permission states. Shared shell, theme and command search (Ctrl K) carry across all of them.</p>
+    <div class="screens">
+      <a class="scr" href="onboarding.html" data-od-id="screen-onboarding"><span class="j">A</span><b>Setup guide</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Empty workspace to a first baseline: connect, select, index (with a partial failure), key validation, first run</span></a>
+      <a class="scr" href="library.html" data-od-id="screen-library"><span class="j">B</span><b>Library</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Skill inventory with compact and detailed views, bulk actions, inspector, repository sync and hub safety verdicts</span></a>
+      <a class="scr" href="workbench.html" data-od-id="screen-workbench"><span class="j">C</span><b>Workbench</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Canvas of inputs, tools, dependencies and eval assets beside a SKILL.md editor, with validation and unsaved-work guard</span></a>
+      <a class="scr" href="evaluations.html" data-od-id="screen-evaluations"><span class="j">D</span><b>Evaluations</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Definition, execution and results kept apart. Six-step builder with acceptance criteria and cost estimate</span></a>
+      <a class="scr" href="runs.html" data-od-id="screen-runs"><span class="j">E</span><b>Runs</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Gate results, a 180-case matrix, failure clusters and a step waterfall with inputs, outputs, judge rationale and logs</span></a>
+      <a class="scr" href="insights.html" data-od-id="screen-insights"><span class="j">F</span><b>Insights</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">What changed, did it improve, what regressed, what next. Portfolio cost against quality</span></a>
+      <a class="scr" href="overview.html" data-od-id="screen-overview"><span class="j">·</span><b>Overview</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Priority-ordered attention queue, in-flight work, quality by tier and a skill health matrix</span></a>
+      <a class="scr" href="integrations.html" data-od-id="screen-integrations"><span class="j">·</span><b>Integrations</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Topology of sources and execution, key rotation and revocation, router client tokens</span></a>
+      <a class="scr" href="settings.html" data-od-id="screen-settings"><span class="j">·</span><b>Settings</b><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10m-4-4 4 4-4 4"/></svg><span class="d">Members, policies, audit log, density and a permission-denied billing state</span></a>
+    </div>
+  </section>
+
+  <section class="sect" data-od-id="ux-assessment">
+    <h2>UX assessment of the current app</h2><p class="lead">Audit of apps/web: routes, screens and components. Evidence paths refer to the current repository.</p>
+    <div class="panel"><div class="tbl-wrap"><table class="tbl">
+      <thead><tr><th>Severity</th><th>Problem today</th><th>Evidence</th><th>Resolution in prototype</th><th>Status</th></tr></thead><tbody>
+      <tr><td><span class="st p1"><i class="mk p1"></i>High</span></td><td>Twelve navigation items with overlapping names: “Skills” and “Skill catalog” are different screens. Icons are reused across sections.</td><td class="mono small">app-shell.tsx:83</td><td>Six workspaces. The hub is a Discover tab in Library</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="library.html#discover">See it</a></td></tr>
+      <tr><td><span class="st p1"><i class="mk p1"></i>High</span></td><td>Evaluation detail mixes a 20-field config form, scorecard, cases and recommendations in one 2,617-line screen</td><td class="mono small">evaluation-detail.tsx</td><td>Definition in the builder, execution in Runs, results in Insights</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="evaluations.html#new">See it</a></td></tr>
+      <tr><td><span class="st p1"><i class="mk p1"></i>High</span></td><td>No step-level view of a failing case: users cannot see where a case broke</td><td class="mono small">skill_run_artifacts</td><td>Case matrix, failure clusters and step waterfall</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="runs.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>Medium</span></td><td>Page headers explain implementation status (“read-only until endpoints land”)</td><td class="mono small">releases.tsx:80 · policies.tsx:84</td><td>Releases and policies are actionable. Planned work is tagged on the control</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="insights.html#releases">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>Medium</span></td><td>KPI strips repeat across Overview, Intelligence, Evaluations and Connectors</td><td class="mono small">overview.tsx · intelligence.tsx</td><td>One measures strip per page, each measure linking to its evidence</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="overview.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>Medium</span></td><td>Skill page has 8 tabs. Badges restate counts shown elsewhere</td><td class="mono small">skill.tsx</td><td>4-tab inspector drawer that keeps the inventory in view</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="library.html#incident-triage">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>Medium</span></td><td>Controls do nothing and give no feedback: resync, export, search, notifications</td><td class="mono small">overview.tsx · audit.tsx</td><td>Every control acts, including workspace switching, add provider and invite. Unavailable ones are disabled with a reason</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="integrations.html#models">See it</a></td></tr>
+      <tr><td><span class="st"><i class="mk p3"></i>Low</span></td><td>Loading and empty states are missing on Overview, Router, Audit, Catalog and Evaluations</td><td class="mono small">screens/*</td><td>Skeleton loading, empty, stale, offline, failed and permission-denied states</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="overview.html?state=offline">See it</a></td></tr>
+      <tr><td><span class="st"><i class="mk p3"></i>Low</span></td><td>Lavender-tinted paper, five switchable accents and Geist drift from the spec</td><td class="mono small">globals.css · tweaks-panel.tsx</td><td>Role-based tokens: one interaction colour, ISA-101 status colours, IBM Plex</td><td class="nowrap"><span class="st"><i class="mk ok"></i>Resolved</span> <a class="small" href="#token-proposal">See it</a></td></tr>
+    </tbody></table></div></div>
+    <p class="small muted" style="margin-top:8px">To review system states, add <span class="mono">?state=loading</span>, <span class="mono">?state=offline</span> or <span class="mono">?state=stale</span> to any screen URL. Real offline and online events trigger the same states.</p>
+  </section>
+
+  <section class="sect" data-od-id="ia-proposal">
+    <h2>Information architecture</h2><p class="lead">Organised by job to be done. Governance pages that only make sense in context move next to the entities they govern.</p>
+    <div class="ia">
+      <div class="col"><h3>Today · 12 items</h3>
+        <div class="it">Overview</div><div class="it">Skills</div><div class="it">Repositories</div><div class="it">Skill catalog</div><div class="it">Evaluations</div><div class="it">Releases</div><div class="it">Intelligence</div><div class="it">Skill router</div><div class="it">Policies <span class="muted">dev only</span></div><div class="it">Audit <span class="muted">dev only</span></div><div class="it">Connectors <span class="muted">dev only</span></div><div class="it">Settings</div></div>
+      <div class="mapcol"><svg class="map" viewBox="0 0 80 420" preserveAspectRatio="none" aria-hidden="true" id="iamap"></svg></div>
+      <div class="col"><h3>Proposed · 6 + 2</h3>
+        <div class="it new">Overview <span class="muted">attention, health</span></div><div class="it new">Library <span class="muted">skills, repos, discover</span></div><div class="it new">Workbench <span class="muted">new</span></div><div class="it new">Evaluations <span class="muted">suites, datasets</span></div><div class="it new">Runs <span class="muted">new</span></div><div class="it new">Insights <span class="muted">compare, releases</span></div><div class="it" style="height:12px"></div><div class="it">Integrations <span class="muted">sources, models, router</span></div><div class="it">Settings <span class="muted">members, policies, audit</span></div><div class="it" style="height:12px"></div><div class="it">Setup guide <span class="muted">until complete</span></div></div>
+    </div>
+  </section>
+
+  <section class="sect" data-od-id="capability-map">
+    <h2>Capability fidelity</h2><p class="lead">The prototype marks each capability so no planned backend work is presented as operational.</p>
+    <div class="caps">
+      <div class="panel"><div class="panel-h"><span class="cap live">Implemented</span><span class="meta">UX modernised</span></div><ul><li><a href="library.html#repositories">Git connections, sync, assessment and fix PRs</a></li><li><a href="library.html#incident-triage">Skill index, versions, dependencies</a></li><li><a href="evaluations.html">Evaluation results and dataset generation</a></li><li><a href="workbench.html?layer=improve">Auto-Improve proposals with review</a> · approve, reject, modify on the canvas</li><li><a href="library.html#discover">Marketplace import with safety verdicts</a></li><li><a href="integrations.html#router">MCP router tokens and AI connections</a></li></ul></div>
+      <div class="panel"><div class="panel-h"><span class="cap surf">Under-surfaced</span><span class="meta">Now designed and interactive</span></div><ul><li><a href="evaluations.html#new">Run evaluation from the UI</a> · builder and per-suite run</li><li><a href="runs.html">Step traces from run artifacts</a> · waterfall, I/O, judge, logs</li><li><a href="runs.html">Failure clusters as navigation</a> · filter the case matrix</li><li><a href="insights.html#releases">Release approval and promotion</a> · readiness checks, 2 approvers, rollback</li><li><a href="settings.html">Policy decisions and audit</a> · policy drawer with recent decisions</li><li><a href="integrations.html#dist">Connectors</a> · health stays read-only</li></ul></div>
+      <div class="panel"><div class="panel-h"><span class="cap plan">Planned</span><span class="meta">Interactive previews, violet in UI</span></div><ul><li><a href="workbench.html">Multi-skill workflow composition</a> · add steps, branch, map inputs, validate</li><li><a href="evaluations.html#new">Scheduled and on-candidate evaluations</a> · saved as proposed triggers</li><li><a href="evaluations.html#new">Execution inside customer harnesses</a> · saved as proposed configuration</li><li><a href="library.html#pr-summarizer">Dependents’ regression suites</a> · impact preview in Dependencies</li><li><a href="insights.html?a=pr-summarizer&b=engineering-rfc-reviewer">Cross-skill comparison</a> · normalised dimensions only</li><li><a href="settings.html">Policy authoring</a> · drafts in shadow mode</li><li><a href="workflows.html">Multi-step workflows</a> · execution graph, branching, test runs, versioned evaluation</li><li><a href="discovery.html">Skill opportunities from observed work</a> · privacy-gated, drafts for review</li><li><a href="access.html">Role-based access synced with the identity provider</a></li><li><a href="reports.html#mine">Reporter status and notifications</a></li><li><a href="evaluations.html#auto-improve">Auto-Improve for evaluations</a> · alpha, behind a risk warning</li><li><a href="reports.html">Field reports triage</a> · reports become eval cases and Auto-Improve evidence</li><li><a href="settings.html#auto-improve">Per-tier Auto-Improve policy</a> · skills and evaluations</li><li><a href="workbench.html?layer=improve">Recursive improvement and Auto-Improve</a> · proposals on the canvas, gated by evals and telemetry</li></ul></div>
+    </div>
+  </section>
+
+  <section class="sect" data-od-id="ux03">
+    <h2>UX-03 · State and evaluation integrity</h2><p class="lead">Defect fixes with automated acceptance tests. Run <span class="mono">node tests/acceptance.js</span> (25 checks), and open <a href="tests/journey.html">tests/journey.html</a> for the browser journey at 1280px and 390px.</p>
+    <div class="panel"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Priority</th><th>Defect</th><th>Correction</th><th></th></tr></thead><tbody>
+      <tr><td><span class="st p1"><i class="mk p1"></i>P0</span></td><td>Saved Workbench edits lost on reload</td><td>Saved source is stored separately from drafts; ?new=1 creates a real skill on save</td><td class="nowrap"><a class="small" href="workbench.html?skill=pr-summarizer">See it</a></td></tr>
+      <tr><td><span class="st p1"><i class="mk p1"></i>P0</span></td><td>Gates could report false passes</td><td>Every gate is evaluated against its own threshold; status follows blocking gates</td><td class="nowrap"><a class="small" href="runs.html#EV-2418">See it</a></td></tr>
+      <tr><td><span class="st p1"><i class="mk p1"></i>P0</span></td><td>Workflow evidence survived edits</td><td>Evaluations are tied to a graph hash and snapshot; edits mark them outdated and block publishing</td><td class="nowrap"><a class="small" href="workflows.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Re-indexing duplicated skills</td><td>Skill identity is repository + manifest path; re-indexing reconciles</td><td class="nowrap"><a class="small" href="library.html#repositories">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Workflow validation incomplete</td><td>Cycles, unreachable steps, dead ends, invalid edges, incomplete branches and unsatisfiable joins</td><td class="nowrap"><a class="small" href="workflows.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Workflow configuration ignored at run time</td><td>Branch conditions and stop, continue or retry policies drive the test run</td><td class="nowrap"><a class="small" href="workflows.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Workspace data shared</td><td>Storage is namespaced per workspace; Research sandbox shows only its own assets</td><td class="nowrap"><a class="small" href="onboarding.html">See it</a></td></tr>
+      <tr><td><span class="st "><i class="mk p3"></i>P2</span></td><td>Unsafe shared HTML sinks</td><td>Toasts, menus and command search render text; user values are escaped elsewhere</td><td class="nowrap"><a class="small" href="index.html">See it</a></td></tr>
+    </tbody></table></div></div>
+  </section>
+
+  <section class="sect" data-od-id="iteration-corrections">
+    <h2>Review corrections</h2><p class="lead">Cross-screen continuity and functional fidelity.</p>
+    <div class="panel"><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Priority</th><th>Finding</th><th>Correction</th><th></th></tr></thead><tbody>
+      <tr><td><span class="st p1"><i class="mk p1"></i>P0</span></td><td>Started evaluations did not appear in Runs</td><td>One shared run store; every start deep-links to its run</td><td class="nowrap"><a class="small" href="evaluations.html#new">See it</a></td></tr>
+      <tr><td><span class="st p1"><i class="mk p1"></i>P0</span></td><td>New repositories did not add skills</td><td>Indexing a repository adds its skills to Library, Evaluations and Runs</td><td class="nowrap"><a class="small" href="library.html#repositories">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Workbench always showed Incident triage</td><td>The skill comes from the link and loads its own files, tools, dependency and versions</td><td class="nowrap"><a class="small" href="workbench.html?skill=pr-summarizer">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Runs hid its selector below 1,000px</td><td>A labelled run selector replaces the list on narrow screens</td><td class="nowrap"><a class="small" href="runs.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Simulated outcomes looked real</td><td>Simulated toasts and tags on everything a simulation creates</td><td class="nowrap"><a class="small" href="library.html">See it</a></td></tr>
+      <tr><td><span class="st p2"><i class="mk p2"></i>P1</span></td><td>Workflows were a planned overlay only</td><td>Workflow graph with branches, parallel steps, approvals, test runs and versioned evaluation</td><td class="nowrap"><a class="small" href="workflows.html">See it</a></td></tr>
+      <tr><td><span class="st"><i class="mk p3"></i>P2</span></td><td>Hub and Discovered were confusable</td><td>Marketplace for public skills, Opportunities for observed work</td><td class="nowrap"><a class="small" href="library.html#discover">See it</a></td></tr>
+      <tr><td><span class="st"><i class="mk p3"></i>P2</span></td><td>User values interpolated into HTML; tokens from Math.random</td><td>User values escaped; example tokens from crypto.getRandomValues</td><td class="nowrap"><a class="small" href="integrations.html#router">See it</a></td></tr>
+    </tbody></table></div></div>
+    <div class="panel" style="margin-top:12px"><div class="panel-h"><h2>Implementation requirements</h2></div><div class="panel-b"><ul style="margin:0;padding-left:18px;display:grid;gap:6px" class="fg2">
+      <li>Render user-provided values as text nodes or through a sanitising template layer. Never build HTML strings from input. Ship a strict Content Security Policy.</li>
+      <li>Mint client tokens and keys server-side with a CSPRNG, store only a hash, show the secret once and scope it to one client.</li>
+      <li>Replace the prototype's browser storage with the API. Simulated operations here map to real endpoints and must surface their failures the same way.</li>
+    </ul></div></div>
+  </section>
+
+  <section class="sect" id="token-proposal" data-od-id="token-proposal">
+    <h2>Design token proposal</h2><p class="lead">Colour by role, not by hue. Neutral surfaces carry the hierarchy, so a healthy workspace shows almost no colour. The Savant mark keeps its own colours.</p>
+    <div class="sw">
+      <div><i style="background:var(--bg)"></i>Canvas<span>bg</span></div><div><i style="background:var(--surface)"></i>Surface<span>surface</span></div><div><i style="background:var(--recess)"></i>Recess<span>recess · tags</span></div>
+      <div><i style="background:var(--fg)"></i>Foreground<span>fg</span></div><div><i style="background:var(--muted)"></i>Muted<span>muted</span></div><div><i style="background:var(--border-strong)"></i>Control border<span>border-strong</span></div>
+      <div><i style="background:var(--accent)"></i>Interaction<span>primary · focus</span></div><div><i style="background:var(--crit)"></i>P1 critical<span>regressed · failed</span></div><div><i style="background:var(--warn)"></i>P2 warning<span>near threshold</span></div>
+      <div><i style="background:var(--normal)"></i>Normal<span>dot only</span></div><div><i style="background:var(--sim)"></i>Not real<span>sample · proposal</span></div><div><i style="background:var(--destructive)"></i>Destructive<span>revoke · discard</span></div>
+    </div>
+  </section>
+</div>
+<div class="toasts" aria-live="polite"></div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant;
+  const set = t => { document.documentElement.dataset.theme = t; S.store.set('theme', t); S.$('#theme').innerHTML = S.icon(t === 'dark' ? 'sun' : 'moon'); };
+  set(document.documentElement.dataset.theme || 'light');
+  S.$('#theme').onclick = () => set(document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark');
+  // old index → new index
+  const map = [[0, 0], [1, 1], [2, 1], [3, 1], [4, 3], [5, 5], [6, 5], [7, 6], [8, 7], [9, 7], [10, 6], [11, 7]];
+  const yl = i => 59 + i * 30, yr = i => i < 6 ? 59 + i * 30 : 59 + 6 * 30 + 12 + (i - 6) * 30;
+  S.$('#iamap').innerHTML = map.map(([a, b]) => `<path d="M0 ${yl(a)} C 40 ${yl(a)}, 40 ${yr(b)}, 80 ${yr(b)}" fill="none" stroke="var(--border-strong)" stroke-width="1" vector-effect="non-scaling-stroke"/>`).join('');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Overview · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<style>
+  .attn td:first-child { width: 132px; }
+  .attn .what { display: grid; line-height: 1.35; padding: 6px 0; }
+  .attn td.act { width: 1%; text-align: right; }
+  .flight { display: grid; gap: 14px; }
+  .flight .f { display: grid; gap: 6px; }
+  .flight .f .row .num { margin-left: auto; }
+  .tl { list-style: none; margin: 0; padding: 0; }
+  .tl li { display: grid; grid-template-columns: 52px 14px 1fr; gap: 8px; padding: 6px 0; align-items: start; }
+  .tl .t { font: 11px/18px var(--font-mono); color: var(--muted); }
+  .tl .dot { margin-top: 6px; }
+  .tl .e { line-height: 1.4; }
+  .heat td.c { text-align: right; font: 12px var(--font-mono); padding: 0 10px; }
+  .heat td.c span { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 64px; height: 26px; padding: 0 8px; border-radius: var(--r-tag); }
+  .heat th.c { text-align: right; }
+  .sec-h { display: flex; align-items: center; gap: 8px; padding: 10px 16px 6px; font-size: 12px; color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body data-page="overview">
+<div class="app" id="app">
+<main class="main" id="main">
+<div class="page">
+  <div class="crumbs" data-od-id="breadcrumbs"><a href="index.html">Wexler &amp; Hahn</a><span>/</span><span>Overview</span></div>
+  <div class="ctx" data-od-id="context-row">
+    <div class="ttl">
+      <h1 data-od-id="page-title">Overview</h1>
+      <p><span class="num">9</span> governed skills · <span class="num">5</span> repositories · synced <span class="num">2m</span> ago</p>
+    </div>
+    <div class="acts">
+      <div class="seg" role="group" aria-label="Time range" id="range">
+        <button aria-pressed="false" data-d="7">7d</button><button aria-pressed="true" data-d="30">30d</button><button aria-pressed="false" data-d="90">90d</button>
+      </div>
+      <button class="btn" id="resync" data-ic="refresh" data-od-id="resync-repos">Resync repositories</button>
+      <a class="btn primary" href="evaluations.html#new" data-ic="plus" data-od-id="cta-new-evaluation">New evaluation</a>
+    </div>
+  </div>
+
+  <section class="measures" data-od-id="measures" aria-label="Workspace measures">
+    <a class="measure" href="insights.html"><span class="l">Median quality score</span><span class="v" id="m-q">88.6</span><span class="d">+0.7 vs prior 30d</span><span id="sp-q"></span></a>
+    <a class="measure" href="evaluations.html"><span class="l">Evaluation case pass rate</span><span class="v">91.2<small>%</small></span><span class="d">1,940 cases · 14 runs</span><span id="sp-p"></span></a>
+    <a class="measure" href="runs.html"><span class="l">Skill runs, 7d</span><span class="v">17,618</span><span class="d">6 runtimes reporting</span><span id="sp-r"></span></a>
+    <a class="measure" href="insights.html"><span class="l">Mean cost per run</span><span class="v">$0.021</span><span class="d">−$0.002 vs prior 30d</span><span id="sp-c"></span></a>
+    <a class="measure" href="#attention"><span class="l">Open regressions</span><span class="v">1</span><span class="d bad">Incident triage v3.1</span></a>
+  </section>
+
+  <div class="grid g-21" style="margin-top:16px">
+    <section class="panel" id="attention" data-od-id="needs-attention">
+      <div class="panel-h"><h2>Needs attention</h2>
+        <div class="r"><div class="seg" role="group" aria-label="Filter"><button aria-pressed="true" data-f="all">All</button><button aria-pressed="false" data-f="p1">P1</button><button aria-pressed="false" data-f="p2">P2</button></div></div>
+      </div>
+      <div class="tbl-wrap"><table class="tbl attn" id="attn-tbl"><tbody></tbody></table></div>
+      <div class="sec-h">Awaiting your decision</div>
+      <div class="tbl-wrap"><table class="tbl attn"><tbody>
+        <tr><td><span class="st"><i class="mk idle"></i>Approval</span></td>
+          <td><div class="what"><strong>Contract clause reviewer <span class="mono">v4.2</span></strong><span class="muted small">180 of 180 cases passed · quality +1.2 vs v4.1</span></div></td>
+          <td class="muted small nowrap">2h</td><td class="act"><a class="btn sm" href="insights.html?a=contract-clause-reviewer">Review</a></td></tr>
+        <tr><td><span class="st sim"><i class="mk sim"></i>Proposal</span></td>
+          <td><div class="what"><strong>Add severity rubric examples to Incident triage</strong><span class="muted small">Generated by Auto-Improve from failure cluster “severity under-classification” · not yet evaluated</span></div></td>
+          <td class="muted small nowrap">51m</td><td class="act"><a class="btn sm" href="insights.html#recommendations">Open proposal</a></td></tr>
+      </tbody></table></div>
+    </section>
+
+    <section class="panel" data-od-id="in-flight">
+      <div class="panel-h"><h2>In flight</h2><span class="meta" id="flight-meta">2 running · 1 queued</span><div class="r"><a class="btn sm tertiary" href="runs.html">All runs</a></div></div>
+      <div class="panel-b flight" id="flight"></div>
+    </section>
+  </div>
+
+  <div class="grid g-21" style="margin-top:16px">
+    <section class="panel" data-od-id="quality-trend">
+      <div class="panel-h"><h2>Quality by tier</h2>
+        <div class="r legend"><span><i></i>Tier 1</span><span><i class="base"></i>Tier 2</span><span><i class="dash"></i>Tier 3</span></div></div>
+      <div class="panel-b"><div id="trend"></div></div>
+    </section>
+    <section class="panel" data-od-id="activity">
+      <div class="panel-h"><h2>Activity</h2><div class="r"><a class="btn sm tertiary" href="settings.html#audit">Audit log</a></div></div>
+      <div class="panel-b" style="padding-top:8px"><ol class="tl">
+        <li><span class="t">09:42</span><i class="mk p1 dot"></i><span class="e"><a href="runs.html">EV-2418</a> completed with regressions · Incident triage <span class="mono">v3.1</span></span></li>
+        <li><span class="t">09:10</span><i class="mk sim dot"></i><span class="e">Proposal generated for Incident triage</span></li>
+        <li><span class="t">08:55</span><i class="mk idle dot"></i><span class="e">ari.chen promoted PR summarizer <span class="mono">v2.3</span> to production</span></li>
+        <li><span class="t">08:31</span><i class="mk p1 dot"></i><span class="e">ops/runbooks indexing failed · 2 manifests invalid</span></li>
+        <li><span class="t">Yest.</span><i class="mk idle dot"></i><span class="e">wh/skills synced · 3 skills updated at <span class="mono">a41c9e2</span></span></li>
+        <li><span class="t">Yest.</span><i class="mk idle dot"></i><span class="e">renata.m opened candidate <span class="mono">v4.2</span> of Contract clause reviewer</span></li>
+      </ol></div>
+    </section>
+  </div>
+
+  <section class="panel" style="margin-top:16px" data-od-id="health-matrix">
+    <div class="panel-h"><h2>Skill health</h2>
+      <div class="r"><a class="btn sm tertiary" href="library.html">Open library</a></div></div>
+    <div class="tbl-wrap"><table class="tbl compact heat" id="heat"><thead><tr>
+      <th>Skill</th><th>Tier</th><th class="c">Quality</th><th class="c">Grounding</th><th class="c">Actionability</th><th class="c">Policy</th><th class="c">Latency P95</th><th class="c">Edit rate</th><th>Runs, 14d</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+</div>
+</main>
+</div>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$;
+  // measures sparklines
+  $('#sp-q').outerHTML = S.spark(S.walk(3, 30, 87.6, 0.04, 1.2, 80, 95));
+  $('#sp-p').outerHTML = S.spark(S.walk(5, 30, 90, 0.04, 1.8, 80, 99));
+  $('#sp-r').outerHTML = S.bars(S.walk(9, 14, 60, 0.8, 30, 10, 100));
+  $('#sp-c').outerHTML = S.spark(S.walk(11, 30, 60, -0.3, 6, 10, 100));
+
+  // needs attention
+  const items = [
+    { p: 'p1', s: 'Regressed', t: 'Incident triage <span class="mono">v3.1</span>', d: 'Quality 82.4, −6.1 vs v3.0 · promotion blocked', age: '38m', a: 'Inspect run', href: 'runs.html' },
+    { p: 'p1', s: 'Indexing failed', t: 'ops/runbooks', d: '2 SKILL.md manifests invalid · 4 skills not imported', age: '1h', a: 'View errors', href: 'library.html#repositories' },
+    { p: 'p2', s: 'Auth required', t: 'wh/legal-skills', d: 'GitHub app installation needs reauthorization', age: '3h', a: 'Reauthorize', href: 'integrations.html' },
+    { p: 'p2', s: 'Key rotation', t: 'Anthropic connection', d: 'Key older than 90-day rotation policy', age: '1d', a: 'Rotate key', href: 'integrations.html#models' },
+    { p: 'p2', s: 'Near threshold', t: 'Engineering RFC reviewer', d: 'Edit rate 31% · limit 35%', age: '3d', a: 'Compare', href: 'insights.html?a=engineering-rfc-reviewer' },
+    { p: 'p3', s: 'Stale', t: 'SOC 2 evidence drafter', d: 'Last evaluated 21 days ago · policy is 14 days', age: '21d', a: 'Re-run', act: 'rerun' }
+  ];
+  const draw = f => {
+    $('#attn-tbl tbody').innerHTML = items.filter(i => f === 'all' || i.p === f).map(i => `
+      <tr class="${i.p === 'p1' ? 'p1row' : ''}"><td><span class="st ${i.p === 'p3' ? '' : i.p}"><i class="mk ${i.p}"></i>${i.s}</span></td>
+      <td><div class="what"><strong>${i.t}</strong><span class="${i.p === 'p1' ? '' : 'muted'} small">${i.d}</span></div></td>
+      <td class="muted small nowrap">${i.age}</td>
+      <td class="act">${i.href ? `<a class="btn sm" href="${i.href}">${i.a}</a>` : `<button class="btn sm" data-act="${i.act}">${i.a}</button>`}</td></tr>`).join('');
+  };
+  S.loading($('#attn-tbl tbody'), 4, 4, () => draw('all'));
+  S.$$('#attention .seg button').forEach(b => b.onclick = () => { S.$$('#attention .seg button').forEach(x => x.setAttribute('aria-pressed', x === b)); draw(b.dataset.f); });
+  $('#attn-tbl').addEventListener('click', e => {
+    const b = e.target.closest('[data-act="rerun"]'); if (!b) return;
+    const id = S.db.addRun({ skill: 'soc2-evidence-drafter', v: 'v1.1', b: 'v1.1', n: 72 }); b.disabled = true; b.textContent = id;
+    S.simToast(`${id} started · SOC 2 evidence drafter`, 'Watch', () => location.href = 'runs.html#' + id); drawF();
+  });
+
+  // in flight with live progress
+  const drawF = () => {
+    const live = S.db.runs().filter(r => r.st === 'running');
+    $('#flight-meta').textContent = `${live.length} running · 1 queued`;
+    $('#flight').innerHTML = live.map(f => `<a class="f" href="runs.html#${f.id}" style="text-decoration:none;color:inherit"><div class="row"><span class="mono small muted">${f.id}</span><span style="font-weight:500">${S.esc(S.skills.find(k => k.id === f.skill)?.name || f.skill)} ${f.v}</span>${f.sim ? '<span class="tag sim">Simulated</span>' : ''}</div>
+      <div class="row"><div class="bar" style="flex:1"><i style="width:${f.done / f.n * 100}%"></i></div><span class="num small">${f.done} / ${f.n}</span></div></a>`).join('') +
+      `<div class="f"><div class="row"><span class="mono small muted">GEN-88</span><span style="font-weight:500">Quarterly earnings summary · dataset generation</span></div><div class="row"><div class="bar" style="flex:1"><i style="width:0"></i></div><span class="num small">Queued</span></div></div>` +
+      '<div class="divider"></div><div class="row small muted"><i class="mk unk"></i>Scheduled evaluations<span class="cap plan" style="margin-left:auto">Planned</span></div>';
+  };
+  drawF(); setInterval(drawF, 1500);
+
+  // trend
+  const trend = d => { const L = S.days(d);
+    S.line($('#trend'), [
+      { name: 'Tier 1', values: S.walk(21, d, 88, 0.0, 1.6, 75, 98).map((v, i, a) => i === a.length - 1 ? 86.3 : v), kind: 'fg', marks: [{ i: d - 1, t: 'EV-2418 regression' }] },
+      { name: 'Tier 2', values: S.walk(23, d, 86, 0.03, 1.4, 75, 98), kind: 'base' },
+      { name: 'Tier 3', values: S.walk(29, d, 91, 0.01, 1.2, 75, 98), kind: 'dash' }
+    ], L, { min: 78, max: 96, h: 220, threshold: 85, thresholdLabel: 'Release gate 85', area: true, label: 'Median quality score by tier' });
+  };
+  trend(30);
+  S.$$('#range button').forEach(b => b.onclick = () => { S.$$('#range button').forEach(x => x.setAttribute('aria-pressed', x === b)); trend(+b.dataset.d); });
+  addEventListener('resize', () => trend(+S.$('#range [aria-pressed="true"]').dataset.d));
+
+  // heat matrix
+  const r = S.rng(7);
+  const cell = (v, fmt, bad, warn, invert) => {
+    if (v == null) return '<td class="c"><span class="muted">—</span></td>';
+    const t = invert ? 1 - v.n : v.n, pct = Math.round(8 + t * 34);
+    const mk = bad ? '<i class="mk p1"></i>' : warn ? '<i class="mk p2"></i>' : '';
+    const bg = bad ? 'var(--crit-bg)' : warn ? 'var(--warn-bg)' : `color-mix(in oklch, var(--fg) ${pct}%, var(--surface))`;
+    const fg = bad ? 'var(--crit-fg)' : warn ? 'var(--warn-fg)' : pct > 30 ? 'var(--surface)' : 'var(--fg)';
+    return `<td class="c"><span style="background:${bg};color:${fg}">${mk}${fmt}</span></td>`;
+  };
+  const heatRows = () => S.skills.map(s => {
+    if (s.score == null) return `<tr class="click" data-id="${s.id}"><td><a class="name" href="library.html#${s.id}">${s.name}</a></td><td><span class="tag">${s.tier}</span></td><td colspan="6"><span class="st unk"><i class="mk unk"></i>No evaluation yet</span></td><td>${S.bars(s.runTrend.map(() => 0.01), 84, 18)}</td></tr>`;
+    const g = Math.min(99, s.score + (r() - 0.5) * 6), ac = Math.min(99, s.score + (r() - 0.5) * 8), pol = s.id === 'incident-triage' ? 94 : 100 - Math.round(r() * 3);
+    const lat = Math.round(1800 + r() * 2600), edit = s.id === 'engineering-rfc-reviewer' ? 31 : Math.round(8 + r() * 16);
+    return `<tr class="click" data-id="${s.id}"><td><a class="name" href="library.html#${s.id}">${s.name}</a></td><td><span class="tag">${s.tier}</span></td>
+      ${cell({ n: (s.score - 70) / 30 }, s.score.toFixed(1), s.delta < -2)}${cell({ n: (g - 70) / 30 }, g.toFixed(1))}${cell({ n: (ac - 70) / 30 }, ac.toFixed(1), s.id === 'incident-triage')}
+      ${cell({ n: (pol - 90) / 10 }, pol + '%')}${cell({ n: (lat - 1500) / 3500 }, (lat / 1000).toFixed(1) + 's', false, false, true)}${cell({ n: edit / 40 }, edit + '%', false, edit >= 30, true)}
+      <td>${S.bars(s.runTrend, 84, 18)}</td></tr>`;
+  }).join('');
+  S.loading($('#heat tbody'), 9, 6, () => $('#heat tbody').innerHTML = heatRows());
+  $('#heat').addEventListener('click', e => { const tr = e.target.closest('tr[data-id]'); if (tr && !e.target.closest('a')) location.href = 'library.html#' + tr.dataset.id; });
+
+  // resync
+  $('#resync').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.lastChild.textContent = 'Syncing 5 repositories…';
+    setTimeout(() => { b.disabled = false; b.lastChild.textContent = 'Resync repositories'; S.toast('4 of 5 repositories synced · ops/runbooks still failing', 'View errors', () => location.href = 'library.html#repositories'); }, 2200);
+  };
+});
+</script>
+</body>
+</html>

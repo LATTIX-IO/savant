@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workbench · Incident triage · Savant</title>
+<script>try{var t=localStorage.getItem('sv-theme');document.documentElement.dataset.theme=t?JSON.parse(t):'light';var n=localStorage.getItem('sv-nav');if(n)document.documentElement.dataset.nav=JSON.parse(n);var d=localStorage.getItem('sv-density');if(d)document.documentElement.dataset.density=JSON.parse(d)}catch(e){}</script>
+<link rel="stylesheet" href="assets/savant.css">
+<script src="assets/savant.js"></script>
+<link rel="stylesheet" href="assets/workbench-improve.css">
+<script src="assets/workbench-skill.js"></script>
+<style>
+  .wb { display: grid; grid-template-rows: auto minmax(0, 1fr) 36px; height: 100%; }
+  .wb-head { padding: 14px 20px 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .wb-head .ctx { margin: 0; }
+  .wb-body { display: grid; grid-template-columns: 220px minmax(0, 1fr) 340px; min-height: 0; }
+  .tree { border-right: 1px solid var(--border); background: var(--surface); overflow: auto; padding: 8px; }
+  .tree h3 { font-size: 12px; color: var(--muted); font-weight: 500; padding: 8px 8px 4px; }
+  .tree button { display: flex; align-items: center; gap: 8px; width: 100%; height: 28px; padding: 0 8px; border: 0; border-radius: 4px; background: none; color: var(--fg-2); font: 12px var(--font-mono); cursor: pointer; text-align: left; }
+  .tree button:hover { background: var(--recess); color: var(--fg); }
+  .tree button[aria-current="true"] { background: var(--selected); color: var(--fg); }
+  .tree .ind { padding-left: 24px; }
+  .tree .dirty::after { content: "●"; margin-left: auto; font-size: 9px; color: var(--fg-2); }
+  .center { display: grid; grid-template-rows: 44px minmax(0, 1fr); min-width: 0; min-height: 0; }
+  .ctool { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .canvas-wrap { position: relative; overflow: auto; background-color: var(--bg); background-image: radial-gradient(color-mix(in oklch, var(--fg) 14%, transparent) 1px, transparent 1px); background-size: 16px 16px; }
+  .canvas { position: relative; width: 1040px; height: 560px; transform-origin: 0 0; }
+  .canvas svg.edges { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
+  .node { position: absolute; width: 196px; padding: 8px 10px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); background: var(--surface); cursor: pointer; display: grid; gap: 2px; text-align: left; font: inherit; color: var(--fg); }
+  .node:hover { background: color-mix(in oklch, var(--recess) 50%, var(--surface)); }
+  .node .k { font: 500 10px var(--font-mono); color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  .node .t { font-weight: 500; font-size: 13px; }
+  .node .s { font-size: 11px; color: var(--muted); }
+  .node.main { background: var(--fg); color: var(--surface); border-color: var(--fg); width: 220px; }
+  .node.main .k, .node.main .s { color: color-mix(in oklch, var(--surface) 70%, var(--fg)); }
+  .node.main:hover { background: color-mix(in oklch, var(--fg) 88%, var(--surface)); }
+  .node.sel { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
+  .node.plan { border: 1.5px dashed var(--sim); background: var(--sim-bg); color: var(--sim-fg); }
+  .node.plan .k, .node.plan .s { color: var(--sim-fg); }
+  .node.warn { border-color: var(--warn); }
+  .lane { position: absolute; font: 500 11px var(--font-body); color: var(--muted); }
+  .planlayer { display: none; }
+  .show-plan .planlayer { display: block; }
+  .zoom { position: absolute; right: 12px; bottom: 12px; display: flex; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-ctl); padding: 2px; z-index: 2; }
+  .editor { display: none; grid-template-columns: 44px 1fr; height: 100%; background: var(--surface); }
+  .code-mode .editor { display: grid; }
+  .code-mode .canvas-wrap { display: none; }
+  .split-mode { grid-template-rows: 44px minmax(0, 1fr) minmax(0, 1fr); }
+  .split-mode .editor { display: grid; border-top: 1px solid var(--border); }
+  .gutter { font: 12px/20px var(--font-mono); color: var(--muted); text-align: right; padding: 12px 8px; background: var(--bg); border-right: 1px solid var(--border); overflow: hidden; user-select: none; }
+  #src { border: 0; resize: none; outline: none; font: 12px/20px var(--font-mono); padding: 12px; background: var(--surface); color: var(--fg); white-space: pre; tab-size: 2; }
+  .config { border-left: 1px solid var(--border); background: var(--surface); overflow: auto; }
+  .config .sect { padding: 14px 16px; border-bottom: 1px solid var(--border); display: grid; gap: 10px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips label { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border-strong); border-radius: var(--r-ctl); font-size: 12px; cursor: pointer; }
+  .chips label:has(input:checked) { background: var(--selected); border-color: var(--accent); }
+  .chips input { accent-color: var(--accent); margin: 0; }
+  .tool-row { display: flex; align-items: center; gap: 8px; font: 12px var(--font-mono); }
+  #wfd .ab { font: 600 11px var(--font-mono); width: 20px; height: 20px; display: grid; place-items: center; border-radius: 4px; background: var(--recess); flex: none; }
+  #wfd .ab.b { background: var(--fg); color: var(--surface); }
+  .dsum { display: flex; flex-wrap: wrap; gap: 6px; }
+  .flowrow { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 8px; align-items: center; }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .chain .ar { color: var(--muted); font-size: 11px; }
+  .dc { display: inline-flex; align-items: center; gap: 5px; height: 26px; padding: 0 8px; border-radius: var(--r-tag); background: var(--recess); font-size: 12px; color: var(--fg); white-space: nowrap; }
+  .dc .g { font: 600 11px var(--font-mono); width: 10px; text-align: center; }
+  .dc.add { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--fg); font-weight: 500; }
+  .dc.del { color: var(--muted); text-decoration: line-through; background: transparent; box-shadow: inset 0 0 0 1px var(--border); }
+  .dc.chg { box-shadow: inset 0 0 0 1px var(--border-strong); }
+  .dtbl td { vertical-align: top; padding-top: 8px; padding-bottom: 8px; height: auto; }
+  .dtbl .was { color: var(--muted); text-decoration: line-through; }
+  .dtbl .now { font-weight: 500; }
+  .vbar { display: flex; align-items: center; gap: 16px; padding: 0 16px; border-top: 1px solid var(--border); background: var(--surface); font-size: 12px; color: var(--fg-2); }
+  @media (max-width: 1100px) { .wb-body { grid-template-columns: minmax(0, 1fr) 300px; } .tree { display: none; } }
+  @media (max-width: 760px) { .wb-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; } .config { border-left: 0; border-top: 1px solid var(--border); max-height: 45vh; } }
+</style>
+</head>
+<body data-page="workbench">
+<div class="app" id="app">
+<main class="main" id="main" style="overflow:hidden">
+<div class="wb">
+  <div class="wb-head">
+    <div class="crumbs" data-od-id="breadcrumbs"><a href="library.html">Library</a><span>/</span><a href="library.html#incident-triage">Incident triage</a><span>/</span><span>Workbench</span></div>
+    <div class="ctx" data-od-id="context-row">
+      <div class="ttl"><div class="row wrap"><h1>Incident triage</h1><span class="tag sim">v3.1 candidate</span><span class="tag">platform/agent-skills</span><span class="tag">branch savant/incident-triage-v3.1</span></div></div>
+      <div class="acts">
+        <span class="small muted" id="savestate" aria-live="polite">All changes saved</span>
+        <button class="btn" id="discard" hidden>Discard</button>
+        <button class="btn" id="save" data-ic="git">Save draft</button>
+        <a class="btn primary" href="evaluations.html?skill=incident-triage#new" data-ic="play" data-od-id="cta-prepare-evaluation">Prepare evaluation</a>
+      </div>
+    </div>
+  </div>
+  <div class="wb-body">
+    <nav class="tree" aria-label="Skill files" data-od-id="asset-tree">
+      <h3>Skill</h3>
+      <button aria-current="true" data-file="skill" data-ic="file">SKILL.md</button>
+      <button data-ic="folder">references/</button>
+      <button class="ind" data-file="ref" data-ref="severity-matrix.md" data-ic="file">severity-matrix.md</button>
+      <button class="ind" data-file="ref" data-ref="escalation-paths.md" data-ic="file">escalation-paths.md</button>
+      <button data-ic="folder">scripts/</button>
+      <button class="ind" data-file="ref" data-ref="parse_alert.py" data-ic="file">parse_alert.py</button>
+      <h3>Evaluation assets</h3>
+      <button data-node="ds" data-ic="file">sev-2-corpus-v3</button>
+      <button data-node="rb" data-ic="file">severity-rubric-v2</button>
+      <button data-node="bl" data-ic="file">baseline v3.0</button>
+    </nav>
+
+    <div class="center" id="center">
+      <div class="ctool">
+        <div class="seg" role="group" aria-label="View" id="view"><button aria-pressed="true" data-v="canvas" data-ic="workbench">Canvas</button><button aria-pressed="false" data-v="split">Split</button><button aria-pressed="false" data-v="code" data-ic="code">SKILL.md</button></div>
+        <span class="mono small" id="ed-file">SKILL.md</span><span class="tag" id="ed-ro" hidden>Read-only · edit in repository</span><span class="spacer"></span>
+        <span class="st sim small" id="plan-sum" hidden></span>
+        <button class="btn sm" id="plan-add" hidden>Add step</button>
+        <button class="btn sm" id="plan-drafts" hidden data-od-id="workflow-drafts-btn">Drafts</button>
+        <a class="btn sm" href="workflows.html" data-od-id="open-workflows">Workflows</a>
+        <label class="row small fg2" title="Multi-skill workflow composition is planned and not yet operational">
+          <button class="toggle" role="switch" aria-checked="false" id="plan-t" aria-label="Show planned workflow composition"></button>Workflow composition <span class="cap plan">Planned</span></label>
+      </div>
+      <div class="canvas-wrap" id="cw" data-od-id="workflow-canvas">
+        <div class="canvas" id="canvas">
+          <svg class="edges" id="edges" aria-hidden="true"></svg>
+          <span class="lane" style="left:24px;top:14px">Inputs</span>
+          <span class="lane" style="left:290px;top:14px">Skill</span>
+          <span class="lane" style="left:570px;top:14px">Tools and dependencies</span>
+          <span class="lane" style="left:830px;top:14px">Output</span>
+          <div class="evlayer"><span class="lane" style="left:24px;top:388px">Evaluation assets</span>
+          <button class="node" id="n-ds" data-n="ds" style="left:24px;top:420px"><span class="k">DATASET</span><span class="t mono" style="font-size:12px">sev-2-corpus-v3</span><span class="s">180 cases</span></button>
+          <button class="node" id="n-rb" data-n="rb" style="left:290px;top:420px"><span class="k">RUBRIC</span><span class="t mono" style="font-size:12px">severity-rubric-v2</span><span class="s">5 criteria · rubric judge</span></button>
+          <button class="node" id="n-bl" data-n="bl" style="left:570px;top:420px"><span class="k">BASELINE</span><span class="t">v3.0 · production</span><span class="s">Quality 88.5</span></button>
+          </div>
+          <button class="node" id="n-in1" data-n="in1" style="left:24px;top:60px"><span class="k">INPUT</span><span class="t">Alert payload</span><span class="s mono">PagerDuty v3 webhook · JSON</span></button>
+          <button class="node" id="n-in2" data-n="in2" style="left:24px;top:170px"><span class="k">INPUT</span><span class="t">Service context</span><span class="s mono">service, owner, recent deploys</span></button>
+          <button class="node main sel" id="n-skill" data-n="skill" style="left:290px;top:108px"><span class="k">SKILL · v3.1</span><span class="t">Incident triage</span><span class="s">4 instruction sections · 2 references</span></button>
+          <button class="node" id="n-t1" data-n="t1" style="left:570px;top:44px"><span class="k">MCP TOOL</span><span class="t mono" style="font-size:12px">find_runbook</span><span class="s">ops-knowledge server</span></button>
+          <button class="node warn" id="n-t2" data-n="t2" style="left:570px;top:132px"><span class="k"><i class="mk p2"></i>MCP TOOL</span><span class="t mono" style="font-size:12px">query_pagerduty</span><span class="s">Timeout 8s · p95 6.9s</span></button>
+          <button class="node" id="n-d1" data-n="d1" style="left:570px;top:220px"><span class="k">LOADS SKILL</span><span class="t">PR summarizer</span><span class="s mono">v2.3 · production</span></button>
+          <button class="node" id="n-out" data-n="out" style="left:830px;top:120px"><span class="k">OUTPUT</span><span class="t">Triage report</span><span class="s mono">severity, owner, runbook, summary</span></button>
+          <div class="planlayer">
+            <button class="node plan" id="n-br" data-n="br" style="left:830px;top:250px;width:180px"><span class="k">BRANCH · PLANNED</span><span class="t">If severity ≤ SEV-2</span><span class="s">Route to status update</span></button>
+            <button class="node plan" id="n-p2" data-n="p2" style="left:830px;top:350px;width:180px"><span class="k">SKILL · PLANNED</span><span class="t">Customer email tone pass</span><span class="s">Draft status page update</span></button>
+          </div>
+        </div>
+        <div class="zoom"><button class="icon-btn" id="zo" aria-label="Zoom out"><svg class="i" viewBox="0 0 16 16"><path d="M3 8h10"/></svg></button><button class="btn sm tertiary mono" id="zr">100%</button><button class="icon-btn" id="zi" aria-label="Zoom in"><svg class="i" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button></div>
+      </div>
+      <div class="editor" data-od-id="skill-editor"><div class="gutter" id="gut"></div><textarea id="src" spellcheck="false" aria-label="SKILL.md source"></textarea></div>
+    </div>
+
+    <aside class="config" id="config" aria-label="Configuration" data-od-id="config-panel"></aside>
+  </div>
+  <div class="vbar" data-od-id="validation-bar" id="vbar"></div>
+</div>
+</main>
+</div>
+<dialog class="dialog wide" id="wfd" aria-labelledby="wfd-t" data-od-id="workflow-drafts-dialog">
+  <div class="dh"><div class="row"><h2 id="wfd-t">Workflow drafts</h2><span class="cap plan" style="margin-left:auto">Planned</span></div></div>
+  <div class="tabs" role="tablist" id="wf-tabs" style="margin:0 16px">
+    <button role="tab" aria-selected="true" aria-controls="wf-p-list" data-tab="list">Drafts</button>
+    <button role="tab" aria-selected="false" aria-controls="wf-p-cmp" data-tab="cmp" id="wf-tab-cmp">Compare</button>
+  </div>
+  <div class="db stack" id="wf-p-cmp" hidden data-od-id="workflow-draft-diff" style="max-height:62vh;overflow:auto">
+    <div class="row wrap" style="gap:8px"><span class="ab">A</span><select class="select" id="wf-a" aria-label="Draft A" style="flex:1;min-width:160px"></select>
+      <button class="icon-btn" id="wf-swap" aria-label="Swap A and B" title="Swap"></button>
+      <span class="ab b">B</span><select class="select" id="wf-b" aria-label="Draft B" style="flex:1;min-width:160px"></select></div>
+    <div id="wf-diff"></div>
+  </div>
+  <div class="db stack" id="wf-p-list">
+    <div class="field"><label for="wf-name">Save current composition as</label><div class="row"><input class="input" id="wf-name" placeholder="Incident triage with status update" style="flex:1" autocomplete="off"><button class="btn primary" id="wf-save">Save draft</button></div><span class="hint" id="wf-h">Saved in this browser for the prototype</span></div>
+    <div class="panel"><table class="tbl compact" id="wf-list"><thead><tr><th>Draft</th><th class="r">Steps</th><th class="r">Saved</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="df"><button class="btn" id="wf-close">Close</button></div>
+</dialog>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const S = Savant, $ = S.$, $$ = S.$$;
+  const WS = window.WBSKILL || { id: 'incident-triage' }, OTHER = WS.id !== 'incident-triage';
+  const wbKey = 'wb-draft' + (OTHER ? '-' + WS.id : '');
+  const SRC0 = OTHER ? WS.src : `---
+name: incident-triage
+description: Classify an incoming production alert by severity, identify the owning team, link the matching runbook and draft a first-response summary.
+version: 3.1.0
+tier: tier1
+owner: min.park
+runtimes: [claude-code, codex, cursor, copilot]
+telemetry: full
+tools:
+  - find_runbook
+  - query_pagerduty
+dependencies:
+  - pr-summarizer@^2.3
+---
+
+# Incident triage
+
+## When to use
+Use when an alert fires from PagerDuty or Datadog and needs a severity decision.
+
+## Procedure
+1. Parse the alert with scripts/parse_alert.py.
+2. Classify severity using references/severity-matrix.md.
+3. Call find_runbook with the service name and symptom.
+4. If a deploy landed in the last 2 hours, load pr-summarizer for the diff.
+5. Return the triage report.
+
+## Output
+severity, owner, runbook_link, summary (≤ 80 words)
+`;
+  // saved source is canonical; an unsaved draft sits on top of it until saved or discarded
+  let BASE = (S.db.source(WS.id) || {}).src || SRC0;
+  const draft = S.store.get(wbKey);
+  $('#src').value = draft ?? BASE;
+  let dirty = draft != null && draft !== BASE;
+  const nodes = {
+    in1: { t: 'Alert payload', k: 'Input', body: `<div class="field"><label>Schema</label><pre class="code">{ "incident_id": "string",\n  "service": "string",\n  "summary": "string",\n  "triggered_at": "datetime" }</pre></div><div class="field"><label>Sample source</label><select class="select"><option>sev-2-corpus-v3 · case 001</option><option>Paste JSON</option></select></div>` },
+    in2: { t: 'Service context', k: 'Input', body: `<dl class="kv"><dt>Provided by</dt><dd>Agent harness at runtime</dd><dt>Fields</dt><dd class="mono">service, owner, recent_deploys[]</dd><dt>Required</dt><dd>No · skill degrades gracefully</dd></dl>` },
+    skill: { t: 'Incident triage', k: 'Skill · v3.1', body: () => `
+      <div class="field"><label for="desc">Description</label><textarea class="textarea" id="desc" rows="4">${$('#src').value.match(/description: (.*)/)?.[1] || ''}</textarea><span class="hint" id="desc-n"></span></div>
+      <div class="field"><span class="lbl">Runtimes</span><div class="chips">${['Claude Code', 'Codex', 'Cursor', 'GitHub Copilot', 'Gemini CLI'].map((r, i) => `<label><input type="checkbox" ${i < 4 ? 'checked' : ''}>${r}</label>`).join('')}</div></div>
+      <div class="field"><span class="lbl">Telemetry reported to Savant</span><div class="seg" role="group" id="tele"><button aria-pressed="true">Full</button><button aria-pressed="false">Inputs and outputs</button><button aria-pressed="false">Outcome only</button></div><span class="hint">Full telemetry is required for step-level traces in Runs.</span></div>
+      <div class="field"><span class="lbl">Allowed tools</span>${(OTHER ? WS.tools : ['find_runbook', 'query_pagerduty']).map(t => `<div class="tool-row"><button class="toggle" role="switch" aria-checked="true" aria-label="${t}"></button>${t}</div>`).join('')}</div>` },
+    t1: { t: 'find_runbook', k: 'MCP tool', body: `<dl class="kv"><dt>Server</dt><dd class="mono">ops-knowledge</dd><dt>Calls, 7d</dt><dd class="num">2,104</dd><dt>p95 latency</dt><dd class="num">1.2s</dd><dt>Error rate</dt><dd class="num">0.4%</dd></dl><div class="field"><label>Timeout</label><input class="input mono" value="8s"></div><label class="row small"><button class="toggle" role="switch" aria-checked="true" aria-label="Replay recorded responses"></button>Replay recorded responses during evaluation</label>` },
+    t2: { t: 'query_pagerduty', k: 'MCP tool', warn: 'p95 latency 6.9s is within 15% of the 8s timeout. 3 evaluation cases timed out in EV-2418.', body: `<dl class="kv"><dt>Server</dt><dd class="mono">pagerduty-mcp</dd><dt>Calls, 7d</dt><dd class="num">1,880</dd><dt>p95 latency</dt><dd class="num">6.9s</dd><dt>Timeouts</dt><dd class="num">3 of 180 eval cases</dd></dl><div class="field"><label for="to">Timeout</label><input class="input mono" id="to" value="8s"></div><label class="row small"><button class="toggle" role="switch" aria-checked="false" aria-label="Replay recorded responses"></button>Replay recorded responses during evaluation</label><a class="btn sm" href="runs.html">See timed-out cases</a>` },
+    d1: { t: 'PR summarizer', k: 'Loads skill', body: `<dl class="kv"><dt>Constraint</dt><dd class="mono">^2.3</dd><dt>Resolved</dt><dd class="mono">v2.3 · production</dd><dt>Quality</dt><dd class="num">89.7</dd></dl><a class="btn sm" href="library.html#pr-summarizer">Open in library</a>` },
+    out: { t: 'Triage report', k: 'Output', body: `<pre class="code">{ "severity": "SEV-1 | SEV-2 | SEV-3",\n  "owner": "team-slug",\n  "runbook_link": "url",\n  "summary": "string ≤ 80 words" }</pre><span class="hint">Scored by severity-rubric-v2: severity match, owner match, runbook relevance, summary grounding, actionability.</span>` },
+    ds: { t: 'sev-2-corpus-v3', k: 'Dataset', body: `<dl class="kv"><dt>Cases</dt><dd class="num">180</dd><dt>Source</dt><dd>Redacted incidents, Jan–Aug 2026</dd><dt>Labels</dt><dd>severity, owner, runbook</dd><dt>Version</dt><dd class="mono">v3 · 14 Aug</dd></dl><a class="btn sm" href="evaluations.html">Open in evaluations</a>` },
+    rb: { t: 'severity-rubric-v2', k: 'Rubric', body: `<dl class="kv"><dt>Judge</dt><dd>Savant rubric judge</dd><dt>Criteria</dt><dd>5 weighted</dd><dt>Pass threshold</dt><dd class="num">0.80 per case</dd></dl>` },
+    bl: { t: 'v3.0 · production', k: 'Baseline', body: `<dl class="kv"><dt>Quality</dt><dd class="num">88.5</dd><dt>Run</dt><dd class="mono">EV-2390</dd></dl><a class="btn sm" href="insights.html?a=incident-triage">Compare with v3.1</a>` },
+    br: { plan: true, kind: 'branch', t: 'If severity ≤ SEV-2', k: 'Branch', cond: ['severity', '≤', 'SEV-2'] }, p2: { plan: true, kind: 'skill', t: 'Customer email tone pass', k: 'Skill step', skill: 'customer-email-tone-pass', map: ['summary', 'severity'], onfail: 'continue' }
+  };
+  const edges = [['in1', 'skill'], ['in2', 'skill'], ['skill', 't1'], ['skill', 't2'], ['skill', 'd1'], ['skill', 'out'], ['ds', 'skill', 'eval'], ['rb', 'skill', 'eval'], ['bl', 'skill', 'eval'], ['out', 'br', 'plan'], ['br', 'p2', 'plan']];
+  if (OTHER) {
+    Object.entries(WS.nodes).forEach(([k, v]) => { if (v) nodes[k] = v; else delete nodes[k]; });
+    nodes.skill.t = WS.name; nodes.skill.k = 'Skill';
+    for (let k = edges.length - 1; k >= 0; k--) if ((WS.noDep && edges[k].includes('d1')) || (WS.noT2 && edges[k].includes('t2'))) edges.splice(k, 1);
+    if (nodes.br) { nodes.br.t = 'If confidence ≥ 0.8'; nodes.br.cond = ['confidence', '≥', '0.8']; }
+  }
+  function drawEdges() {
+    const c = $('#canvas').getBoundingClientRect(), z = scale;
+    $('#edges').innerHTML = edges.map(([a, b, kind]) => {
+      const A = $('#n-' + a), B = $('#n-' + b); const imp = $('#cw').classList.contains('layer-improve');
+      if (!A || !B || (kind && kind.startsWith('plan') && !$('#cw').classList.contains('show-plan')) || (kind === 'eval' && imp) || (kind && kind.startsWith('prop') && !imp)) return '';
+      const ra = A.getBoundingClientRect(), rb = B.getBoundingClientRect();
+      let x1, y1, x2, y2, d;
+      if (kind === 'prop') { x1 = (ra.left + ra.width / 2 - c.left) / z; y1 = (ra.top - c.top) / z; x2 = (rb.left + rb.width / 2 - c.left) / z; y2 = (rb.bottom - c.top) / z; d = `M${x1} ${y1} C ${x1} ${y1 - 50}, ${x2} ${y2 + 50}, ${x2} ${y2}`; }
+      else if (kind === 'prop-side') { x1 = (ra.right - c.left) / z; y1 = (ra.top + ra.height / 2 - c.top) / z; x2 = (rb.right - c.left) / z; y2 = (rb.top + rb.height / 2 - c.top) / z; d = `M${x1} ${y1} C ${x1 + 44} ${y1}, ${x2 + 44} ${y2}, ${x2} ${y2}`; }
+      else if (kind === 'prop-h') { x1 = (ra.left - c.left) / z; y1 = (ra.top + ra.height / 2 - c.top) / z; x2 = (rb.right - c.left) / z; y2 = (rb.top + rb.height / 2 - c.top) / z; const m = (x1 + x2) / 2; d = `M${x1} ${y1} C ${m} ${y1}, ${m} ${y2}, ${x2} ${y2}`; }
+      else if (kind === 'eval') { x1 = (ra.left + ra.width / 2 - c.left) / z; y1 = (ra.top - c.top) / z; x2 = (rb.left + rb.width / 2 - c.left) / z; y2 = (rb.bottom - c.top) / z; d = `M${x1} ${y1} C ${x1} ${y1 - 60}, ${x2} ${y2 + 60}, ${x2} ${y2}`; }
+      else if (kind === 'plan-h') { x1 = (ra.right - c.left) / z; y1 = (ra.top + ra.height / 2 - c.top) / z; x2 = (rb.left - c.left) / z; y2 = (rb.top + rb.height / 2 - c.top) / z; const m = (x1 + x2) / 2; d = `M${x1} ${y1} C ${m} ${y1}, ${m} ${y2}, ${x2} ${y2}`; }
+      else if (kind === 'plan') { x1 = (ra.left + ra.width / 2 - c.left) / z; y1 = (ra.bottom - c.top) / z; x2 = (rb.left + rb.width / 2 - c.left) / z; y2 = (rb.top - c.top) / z; d = `M${x1} ${y1} L ${x2} ${y2}`; }
+      else { x1 = (ra.right - c.left) / z; y1 = (ra.top + ra.height / 2 - c.top) / z; x2 = (rb.left - c.left) / z; y2 = (rb.top + rb.height / 2 - c.top) / z; const m = (x1 + x2) / 2; d = `M${x1} ${y1} C ${m} ${y1}, ${m} ${y2}, ${x2} ${y2}`; }
+      const col = kind && (kind.startsWith('plan') || kind.startsWith('prop')) ? 'var(--sim)' : 'var(--border-strong)';
+      return `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.25" ${kind ? 'stroke-dasharray="4 3"' : ''}/><circle cx="${x2}" cy="${y2}" r="2.5" fill="${col}"/>`;
+    }).join('');
+  }
+  let scale = 1;
+  const zoom = z => { scale = Math.max(0.6, Math.min(1.4, +z.toFixed(1))); $('#canvas').style.transform = `scale(${scale})`; $('#zr').textContent = Math.round(scale * 100) + '%'; drawEdges(); };
+  $('#zi').onclick = () => zoom(scale + 0.1); $('#zo').onclick = () => zoom(scale - 0.1); $('#zr').onclick = () => zoom(1);
+
+  let planSeq = 0, lastPlan = 'p2';
+  function planConfig(id, n) {
+    const head = `<div class="sect"><div class="row"><span class="muted small">${n.k}</span><span class="cap plan" style="margin-left:auto">Planned</span></div><h2>${n.t}</h2></div>`;
+    let body = '';
+    if (n.kind === 'branch') body = `<div class="field"><span class="lbl">Condition on previous output</span><div class="row" style="gap:6px"><select class="select mono" data-c="0">${['severity', 'owner', 'confidence'].map(f => `<option ${f === n.cond[0] ? 'selected' : ''}>${f}</option>`).join('')}</select><select class="select mono" data-c="1">${['≤', '=', '≥'].map(f => `<option ${f === n.cond[1] ? 'selected' : ''}>${f}</option>`).join('')}</select><input class="input mono" data-c="2" value="${n.cond[2]}" style="width:90px" aria-label="Value"></div></div><div class="field"><span class="lbl">Otherwise</span><select class="select"><option>End workflow</option><option>Continue to next step</option></select></div>`;
+    else if (n.kind === 'skill') body = `<div class="field"><label>Skill</label><select class="select" data-skill>${S.skills.map(k => `<option value="${k.id}" ${k.id === n.skill ? 'selected' : ''}>${k.name} · ${k.ver}</option>`).join('')}</select></div>
+      <div class="field"><span class="lbl">Inputs mapped from previous step</span><div class="chips">${['severity', 'owner', 'runbook_link', 'summary'].map(f => `<label><input type="checkbox" data-map="${f}" ${n.map.includes(f) ? 'checked' : ''}>${f}</label>`).join('')}</div></div>
+      <div class="field"><span class="lbl">If this step fails</span><div class="seg" role="group" data-of><button aria-pressed="${n.onfail === 'stop'}" data-v="stop">Stop workflow</button><button aria-pressed="${n.onfail === 'continue'}" data-v="continue">Continue</button></div></div>`;
+    else body = `<div class="field"><label>Approver group</label><select class="select"><option>sre-leads</option><option>platform</option></select></div><div class="field"><label>Timeout</label><input class="input mono" value="30m"></div>`;
+    $('#config').innerHTML = head + `<div class="sect">${body}</div><div class="sect"><div class="row"><button class="btn sm" id="pl-val">Validate structure</button>${id !== 'br' && id !== 'p2' ? '<button class="btn sm tertiary" id="pl-del">Remove step</button>' : ''}</div><span class="small" id="pl-out"></span></div>`;
+    $$('#config [data-c]').forEach(el => el.oninput = el.onchange = () => { n.cond[+el.dataset.c] = el.value; n.t = `If ${n.cond.join(' ')}`; $(`#n-${id} .t`).textContent = n.t; });
+    $('#config [data-skill]') && ($('#config [data-skill]').onchange = e => { n.skill = e.target.value; n.t = S.skills.find(k => k.id === n.skill).name; $(`#n-${id} .t`).textContent = n.t; $('#config h2').textContent = n.t; });
+    $$('#config [data-map]').forEach(c => c.onchange = () => { n.map = $$('#config [data-map]:checked').map(x => x.dataset.map); });
+    $$('#config [data-of] button').forEach(b => b.onclick = () => { n.onfail = b.dataset.v; $$('#config [data-of] button').forEach(x => x.setAttribute('aria-pressed', x === b)); });
+    $('#pl-val').onclick = () => { const steps = Object.values(nodes).filter(x => x.plan); const unmapped = steps.filter(x => x.kind === 'skill' && !x.map.length).length;
+      $('#pl-out').innerHTML = unmapped ? `<span class="st p2"><i class="mk p2"></i>${unmapped} step${unmapped > 1 ? 's have' : ' has'} no mapped inputs</span>` : `<span class="st sim"><i class="mk sim"></i>Structure valid · ${steps.length} planned steps · not executable yet</span>`; };
+    $('#pl-del') && ($('#pl-del').onclick = () => { $('#n-' + id).remove(); delete nodes[id]; for (let k = edges.length - 1; k >= 0; k--) if (edges[k].includes(id)) edges.splice(k, 1); if (lastPlan === id) lastPlan = 'p2'; wfDirty = true; drawEdges(); planBar(); select('skill'); });
+  }
+  function addStep(kind) {
+    const id = 'x' + (++planSeq), prev = $('#n-' + lastPlan), x = prev.offsetLeft + 220, y = prev.offsetTop;
+    nodes[id] = kind === 'skill' ? { plan: true, kind, t: 'PR summarizer', k: 'Skill step', skill: 'pr-summarizer', map: [], onfail: 'stop' } : { plan: true, kind: 'approval', t: 'Human approval', k: 'Approval step' };
+    $('.planlayer').insertAdjacentHTML('beforeend', `<button class="node plan" id="n-${id}" data-n="${id}" style="left:${x}px;top:${y}px;width:180px"><span class="k">${nodes[id].k.toUpperCase()} · PLANNED</span><span class="t">${nodes[id].t}</span><span class="s">${kind === 'skill' ? 'Configure inputs' : 'sre-leads · 30m'}</span></button>`);
+    edges.push([lastPlan, id, 'plan-h']); lastPlan = id; wfDirty = true;
+    $('#canvas').style.width = Math.max(1040, x + 220) + 'px';
+    drawEdges(); planBar(); select(id); $('#cw').scrollLeft = x * scale - 200;
+  }
+  function planBar() { const on = $('#cw').classList.contains('show-plan'); $('#plan-add').hidden = !on; $('#plan-drafts').hidden = !on; const n = Object.values(nodes).filter(x => x.plan).length; $('#plan-sum').hidden = !on; $('#plan-sum').innerHTML = `<i class="mk sim"></i>${wfName ? `<span title="Workflow draft">${S.esc(wfName)}</span>` : 'Unsaved workflow'} · ${n} steps${wfDirty ? ' · unsaved changes' : ''}`; }
+
+  /* workflow drafts: save, reopen, delete */
+  let wfName = S.store.get('wf-current', null), wfDirty = false;
+  const drafts = () => S.store.get('wf-drafts', []);
+  const markWf = () => { wfDirty = true; planBar(); };
+  const sub = n => n.kind === 'branch' ? 'Route on previous output' : n.kind === 'skill' ? (n.map && n.map.length ? 'Inputs: ' + n.map.join(', ') : 'Configure inputs') : 'sre-leads · 30m';
+  function serialize(name) {
+    const ids = Object.keys(nodes).filter(k => nodes[k].plan);
+    return { name, saved: new Date().toISOString(), lastPlan, planSeq, edges: edges.filter(e => e[2] && e[2].startsWith('plan')),
+      nodes: ids.map(id => ({ id, n: JSON.parse(JSON.stringify(nodes[id])), x: parseInt($('#n-' + id).style.left), y: parseInt($('#n-' + id).style.top) })) };
+  }
+  function restore(d) {
+    Object.keys(nodes).filter(k => nodes[k].plan).forEach(k => { $('#n-' + k)?.remove(); delete nodes[k]; });
+    for (let k = edges.length - 1; k >= 0; k--) if (edges[k][2] && edges[k][2].startsWith('plan')) edges.splice(k, 1);
+    let maxX = 1040;
+    d.nodes.forEach(({ id, n, x, y }) => { nodes[id] = n; maxX = Math.max(maxX, x + 220);
+      $('.planlayer').insertAdjacentHTML('beforeend', `<button class="node plan" id="n-${id}" data-n="${id}" style="left:${x}px;top:${y}px;width:180px"><span class="k">${n.k.toUpperCase()} · PLANNED</span><span class="t">${n.t}</span><span class="s">${sub(n)}</span></button>`); });
+    d.edges.forEach(e => edges.push(e)); lastPlan = d.lastPlan; planSeq = d.planSeq;
+    $('#canvas').style.width = maxX + 'px';
+    wfName = d.name; wfDirty = false; S.store.set('wf-current', d.name);
+    drawEdges(); planBar();
+  }
+  const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? 'just now' : m < 60 ? m + 'm ago' : m < 1440 ? Math.round(m / 60) + 'h ago' : new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }); };
+  /* draft diff */
+  const fieldsOf = n => n.kind === 'branch' ? { Condition: n.cond.join(' ') } : n.kind === 'skill' ? { Skill: (S.skills.find(k => k.id === n.skill) || {}).name || n.skill, Inputs: n.map && n.map.length ? n.map.join(', ') : 'none', 'On failure': n.onfail === 'stop' ? 'Stop workflow' : 'Continue' } : { 'Approver group': 'sre-leads', Timeout: '30m' };
+  function chain(snap) {
+    const ids = snap.nodes.map(x => x.id), pe = snap.edges.filter(e => ids.includes(e[1]));
+    let cur = (pe.find(e => !ids.includes(e[0])) || [])[1] || ids[0]; const out = [];
+    while (cur && !out.includes(cur)) { out.push(cur); cur = (pe.find(e => e[0] === cur) || [])[1]; }
+    return out.concat(ids.filter(i => !out.includes(i)));
+  }
+  const snapOf = v => v === '__canvas' ? Object.assign(serialize('Current canvas'), { name: wfName ? `Current canvas (${S.esc(wfName)}${wfDirty ? ', unsaved' : ''})` : 'Current canvas' }) : drafts().find(x => x.name === v);
+  function fillDiffSelects(a, b) {
+    const opts = [['__canvas', wfName ? `Current canvas${wfDirty ? ' · unsaved' : ''}` : 'Current canvas'], ...drafts().map(x => [x.name, S.esc(x.name)])];
+    ['#wf-a', '#wf-b'].forEach((k, i) => { $(k).innerHTML = opts.map(([v, l]) => `<option value="${S.esc(v)}">${l}</option>`).join(''); });
+    $('#wf-a').value = a; $('#wf-b').value = b; renderDiff();
+  }
+  function renderDiff() {
+    const A = snapOf($('#wf-a').value), B = snapOf($('#wf-b').value);
+    if (!A || !B) { $('#wf-diff').innerHTML = '<div class="empty"><h3>Choose two drafts</h3></div>'; return; }
+    if ($('#wf-a').value === $('#wf-b').value) { $('#wf-diff').innerHTML = '<div class="empty"><h3>Same draft on both sides</h3><p>Pick a different draft for A or B.</p></div>'; return; }
+    const na = Object.fromEntries(A.nodes.map(x => [x.id, x.n])), nb = Object.fromEntries(B.nodes.map(x => [x.id, x.n]));
+    const ca = chain(A), cb = chain(B);
+    const added = cb.filter(i => !na[i]), removed = ca.filter(i => !nb[i]);
+    const changed = cb.filter(i => na[i] && (JSON.stringify(fieldsOf(na[i])) !== JSON.stringify(fieldsOf(nb[i])) || na[i].t !== nb[i].t));
+    const common = cb.filter(i => na[i]), orderA = ca.filter(i => nb[i]);
+    const moved = common.filter((i, k) => orderA[k] !== i);
+    const same = common.filter(i => !changed.includes(i) && !moved.includes(i));
+    const chip = (id, n, side) => { const st = side === 'a' ? (removed.includes(id) ? 'del' : changed.includes(id) ? 'chg' : '') : (added.includes(id) ? 'add' : changed.includes(id) ? 'chg' : '');
+      const g = st === 'add' ? '+' : st === 'del' ? '−' : st === 'chg' ? '~' : moved.includes(id) ? '↕' : '';
+      return `<span class="dc ${st}" title="${n.k}${st ? ' · ' + { add: 'added in B', del: 'removed in B', chg: 'changed' }[st] : ''}">${g ? `<span class="g" aria-hidden="true">${g}</span>` : ''}${n.t}</span>`; };
+    const flow = (c, m, side) => `<span class="dc" style="background:transparent;box-shadow:inset 0 0 0 1px var(--border);color:var(--muted)">Triage report</span><span class="ar">→</span>` + c.map(i => chip(i, m[i], side)).join('<span class="ar">→</span>');
+    const rows = [];
+    added.forEach(i => Object.entries(fieldsOf(nb[i])).forEach(([f, v], k) => rows.push([k ? '' : `<span class="dc add"><span class="g">+</span>${nb[i].t}</span>`, f, '<span class="muted">—</span>', `<span class="now">${v}</span>`])));
+    removed.forEach(i => Object.entries(fieldsOf(na[i])).forEach(([f, v], k) => rows.push([k ? '' : `<span class="dc del"><span class="g">−</span>${na[i].t}</span>`, f, `<span class="was">${v}</span>`, '<span class="muted">—</span>'])));
+    changed.forEach(i => { const fa = fieldsOf(na[i]), fb = fieldsOf(nb[i]); let first = true;
+      if (na[i].t !== nb[i].t && na[i].kind !== 'branch') { rows.push([`<span class="dc chg"><span class="g">~</span>${nb[i].t}</span>`, 'Title', `<span class="was">${na[i].t}</span>`, `<span class="now">${nb[i].t}</span>`]); first = false; }
+      Object.keys(fb).forEach(f => { if (fa[f] !== fb[f]) { rows.push([first ? `<span class="dc chg"><span class="g">~</span>${nb[i].t}</span>` : '', f, `<span class="was">${fa[f] ?? '—'}</span>`, `<span class="now">${fb[f]}</span>`]); first = false; } }); });
+    moved.filter(i => !changed.includes(i)).forEach(i => rows.push([`<span class="dc"><span class="g">↕</span>${nb[i].t}</span>`, 'Position in flow', `step ${orderA.indexOf(i) + 1}`, `<span class="now">step ${common.indexOf(i) + 1}</span>`]));
+    const none = !added.length && !removed.length && !changed.length && !moved.length;
+    $('#wf-diff').innerHTML = `
+      <div class="dsum" aria-label="Diff summary">${none ? '<span class="tag" style="font-family:var(--font-body)">No differences</span>' : ''}${added.length ? `<span class="tag">+${added.length} added</span>` : ''}${removed.length ? `<span class="tag">−${removed.length} removed</span>` : ''}${changed.length ? `<span class="tag">~${changed.length} changed</span>` : ''}${moved.length ? `<span class="tag">↕${moved.length} reordered</span>` : ''}<span class="tag" style="font-family:var(--font-body)">${same.length} unchanged</span></div>
+      <div class="stack" style="gap:8px"><span class="lbl">Flow</span>
+        <div class="flowrow"><span class="ab">A</span><div class="chain">${flow(ca, na, 'a')}</div></div>
+        <div class="flowrow"><span class="ab b">B</span><div class="chain">${flow(cb, nb, 'b')}</div></div></div>
+      ${rows.length ? `<div class="panel"><table class="tbl compact dtbl"><thead><tr><th>Step</th><th>Setting</th><th>A · ${S.esc(A.name)}</th><th>B · ${S.esc(B.name)}</th></tr></thead><tbody>${rows.map(r => `<tr><td>${r[0]}</td><td class="small fg2">${r[1]}</td><td class="small">${r[2]}</td><td class="small">${r[3]}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      <div class="row">${$('#wf-b').value !== '__canvas' ? `<button class="btn sm" id="wf-open-b">Open B on canvas</button>` : ''}<span class="small muted" style="margin-left:auto">Steps match by identity, so a renamed step shows as changed, not removed and added.</span></div>`;
+    $('#wf-open-b') && ($('#wf-open-b').onclick = async () => { const x = drafts().find(d => d.name === $('#wf-b').value); if (wfDirty) { $('#wfd').close(); if (!await S.confirm({ title: 'Discard unsaved composition?', body: 'Changes since the last save will be lost.', confirm: 'Discard and open', danger: true })) return; } restore(x); if ($('#wfd').open) $('#wfd').close(); select('skill'); S.toast(`Opened “${x.name}”`); });
+  }
+  function showCompare(a, b) { $('#wf-tab-cmp').click(); fillDiffSelects(a, b); }
+  S.tabs($('#wf-tabs'), t => { if (t === 'cmp' && !$('#wf-a').options.length) { const d = drafts(); fillDiffSelects(d[0] ? d[0].name : '__canvas', '__canvas'); } });
+  ['#wf-a', '#wf-b'].forEach(k => $(k).onchange = renderDiff);
+  $('#wf-swap').innerHTML = S.icon('compare');
+  $('#wf-swap').onclick = () => { const a = $('#wf-a').value; $('#wf-a').value = $('#wf-b').value; $('#wf-b').value = a; renderDiff(); };
+  function listDrafts() {
+    const d = drafts();
+    $('#wf-list tbody').innerHTML = d.length ? d.map((x, i) => `<tr class="${x.name === wfName ? 'sel' : ''}"><td><strong>${S.esc(x.name)}</strong>${x.name === wfName ? ' <span class="tag">open</span>' : ''}</td><td class="r num">${x.nodes.length}</td><td class="r num muted">${ago(x.saved)}</td>
+      <td class="r nowrap"><button class="btn sm tertiary" data-cmp="${i}">Compare</button> <button class="btn sm" data-open="${i}" ${x.name === wfName && !wfDirty ? 'disabled' : ''}>${x.name === wfName ? 'Revert' : 'Open'}</button> <button class="icon-btn" data-del="${i}" aria-label="Delete ${S.esc(x.name)}">${S.icon('x')}</button></td></tr>`).join('')
+      : '<tr><td colspan="4"><div class="empty" style="padding:20px"><h3>No saved drafts</h3><p>Compose steps on the canvas, then save them here.</p></div></td></tr>';
+  }
+  function openDrafts() { $('#wf-name').value = wfName || ''; $('#wf-name').removeAttribute('aria-invalid'); $('#wf-h').className = 'hint'; $('#wf-h').textContent = 'Saved in this browser for the prototype'; listDrafts(); $('[data-tab="list"]', $('#wf-tabs')).click(); $('#wf-a').innerHTML = ''; $('#wfd').showModal(); $('#wf-name').focus(); }
+  async function saveDraft() {
+    const name = $('#wf-name').value.trim();
+    if (name.length < 3) { $('#wf-name').setAttribute('aria-invalid', 'true'); $('#wf-h').className = 'err'; $('#wf-h').textContent = 'Name the draft (3 characters or more).'; $('#wf-name').focus(); return; }
+    const d = drafts(), i = d.findIndex(x => x.name.toLowerCase() === name.toLowerCase());
+    if (i > -1 && d[i].name !== wfName) { $('#wfd').close(); const ok = await S.confirm({ title: `Replace “${d[i].name}”?`, body: 'A draft with this name already exists. Saving replaces its steps and settings.', confirm: 'Replace draft', danger: true }); if (!ok) return openDrafts(); }
+    const rec = serialize(name); if (i > -1) d[i] = rec; else d.unshift(rec);
+    S.store.set('wf-drafts', d); S.store.set('wf-current', name); wfName = name; wfDirty = false; planBar(); listDrafts();
+    if ($('#wfd').open) $('#wfd').close(); S.toast(`Workflow draft “${name}” saved · ${rec.nodes.length} steps`);
+  }
+  $('#wf-save').onclick = saveDraft;
+  $('#wf-name').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); saveDraft(); } };
+  $('#wf-name').oninput = () => { $('#wf-name').removeAttribute('aria-invalid'); $('#wf-h').className = 'hint'; $('#wf-h').textContent = 'Saved in this browser for the prototype'; };
+  $('#wf-close').onclick = () => $('#wfd').close();
+  $('#wf-list').addEventListener('click', async e => {
+    const o = e.target.closest('[data-open]'), del = e.target.closest('[data-del]'), cmp = e.target.closest('[data-cmp]'); const d = drafts();
+    if (cmp) { const x = d[+cmp.dataset.cmp]; const other = x.name === wfName && !wfDirty ? (d.find(y => y.name !== x.name) || {}).name || '__canvas' : '__canvas'; showCompare(x.name, other); return; }
+    if (o) { const x = d[+o.dataset.open]; if (wfDirty) { $('#wfd').close(); if (!await S.confirm({ title: 'Discard unsaved composition?', body: `Changes to ${wfName ? '“' + wfName + '”' : 'the current composition'} since the last save will be lost.`, confirm: 'Discard and open', danger: true })) return openDrafts(); }
+      restore(x); if ($('#wfd').open) $('#wfd').close(); select('skill'); S.toast(`Opened “${x.name}”`); }
+    if (del) { const x = d[+del.dataset.del]; $('#wfd').close(); if (await S.confirm({ title: `Delete “${S.esc(x.name)}”?`, body: 'The draft and its step settings are removed. The canvas keeps what is currently shown.', confirm: 'Delete draft', danger: true })) { d.splice(+del.dataset.del, 1); S.store.set('wf-drafts', d); if (x.name === wfName) { wfName = null; S.store.set('wf-current', null); wfDirty = true; } planBar(); S.toast(`Draft “${x.name}” deleted`); } openDrafts(); }
+  });
+  ['change', 'input'].forEach(ev => $('#config').addEventListener(ev, () => { if ($('.node.plan.sel')) markWf(); }));
+  $('#config').addEventListener('click', e => { if (e.target.closest('[data-of] button') && $('.node.plan.sel')) markWf(); });
+  let curSel = 'skill';
+  function select(id) {
+    $$('.node').forEach(n => n.classList.toggle('sel', n.dataset.n === id));
+    curSel = id;
+    if (window.WB && window.WB.extend && window.WB.extend(id)) return;
+    const n = nodes[id];
+    if (n.plan) { planConfig(id, n); return; }
+    const body = typeof n.body === 'function' ? n.body() : n.body;
+    $('#config').innerHTML = `<div class="sect"><span class="muted small">${n.k}</span><h2>${n.t}</h2>${n.warn ? `<div class="banner p2"><i class="mk p2"></i><span>${n.warn}</span></div>` : ''}</div><div class="sect">${body}</div>
+      ${id === 'skill' ? (OTHER ? WS.lastEvalHtml : `<div class="sect"><span class="lbl">Last evaluation</span><div class="row"><span class="st p1"><i class="mk p1"></i>Regressed</span><span class="num">82.4</span><span class="delta bad">−6.1 vs v3.0</span><a class="btn sm" style="margin-left:auto" href="runs.html">Inspect</a></div></div>`) : ''}`;
+    $$('#config .toggle').forEach(t => t.onclick = () => { t.setAttribute('aria-checked', t.getAttribute('aria-checked') !== 'true'); markDirty(); });
+    $$('#config .seg button').forEach(b => b.onclick = () => { $$('#config .seg button').forEach(x => x.setAttribute('aria-pressed', x === b)); markDirty(); });
+    $$('#config input, #config select').forEach(i => i.addEventListener('input', markDirty));
+    const desc = $('#desc');
+    if (desc) { const upd = () => { const l = desc.value.length; $('#desc-n').textContent = `${l} / 1024 characters`; $('#desc-n').className = l > 1024 ? 'err' : 'hint'; };
+      upd(); desc.oninput = () => { upd(); $('#src').value = $('#src').value.replace(/description: .*/, 'description: ' + desc.value.replace(/\n/g, ' ')); onSrc(); }; }
+  }
+  $('#canvas').addEventListener('click', e => { const n = e.target.closest('.node'); if (n) select(n.dataset.n); });
+  $$('.tree [data-node]').forEach(b => b.onclick = () => { setView('canvas'); select(b.dataset.node); });
+  const REFS = OTHER ? WS.refs : {
+    'severity-matrix.md': `# Severity matrix
+
+| Severity | Customer impact | Example |
+|---|---|---|
+| SEV-1 | Most customers cannot complete a core action | Auth p99 > 5s in all regions |
+| SEV-2 | A segment or region is degraded | checkout-api 5xx > 4% in one region |
+| SEV-3 | Degradation with a workaround | Search latency elevated, results correct |
+
+Partial-region degradation: classify by the share of affected traffic, not by region count.
+`,
+    'escalation-paths.md': `# Escalation paths
+
+- identity → #identity-oncall, then platform lead
+- payments → #payments-oncall, then incident commander
+- ledger → #ledger-oncall
+
+If no owner matches, page the incident commander rotation.
+`,
+    'parse_alert.py': `import json
+
+def parse(payload: str) -> dict:
+    data = json.loads(payload)
+    return {
+        "service": data["service"]["name"],
+        "summary": data["summary"],
+        "triggered_at": data["created_at"],
+    }
+`
+  };
+  let skillBuf = null;
+  $$('.tree [data-file]').forEach(b => b.onclick = () => {
+    $$('.tree button').forEach(x => x.removeAttribute('aria-current')); b.setAttribute('aria-current', 'true');
+    const src = $('#src'), ref = b.dataset.ref;
+    if (ref) { if (skillBuf == null) skillBuf = src.value; src.value = REFS[ref]; src.readOnly = true; $('#ed-file').textContent = 'references/' + ref; $('#ed-ro').hidden = false; }
+    else { if (skillBuf != null) { src.value = skillBuf; skillBuf = null; } src.readOnly = false; $('#ed-file').textContent = 'SKILL.md'; $('#ed-ro').hidden = true; }
+    if (ref && ref.endsWith('.py')) $('#ed-file').textContent = 'scripts/' + ref;
+    gutter(); setView(ref ? 'code' : S.store.get('wb-view', 'canvas') === 'canvas' ? 'code' : S.store.get('wb-view'));
+  });
+
+  // view modes
+  function setView(v) { $$('#view button').forEach(x => x.setAttribute('aria-pressed', x.dataset.v === v)); $('#center').classList.toggle('code-mode', v === 'code'); $('#center').classList.toggle('split-mode', v === 'split'); S.store.set('wb-view', v); requestAnimationFrame(drawEdges); }
+  $$('#view button').forEach(b => b.onclick = () => setView(b.dataset.v));
+  setView(S.store.get('wb-view', 'canvas'));
+
+  $('#plan-t').onclick = e => { const on = e.currentTarget.getAttribute('aria-checked') !== 'true'; e.currentTarget.setAttribute('aria-checked', on); $('#cw').classList.toggle('show-plan', on); S.store.set('wf-on', on); drawEdges(); planBar(); if (on) S.toast('Showing planned workflow composition · not operational'); };
+
+  // source editor + validation
+  function gutter() { const n = $('#src').value.split('\n').length; $('#gut').innerHTML = Array.from({ length: n }, (_, i) => i + 1).join('<br>'); }
+  function validate() {
+    const v = $('#src').value, issues = [];
+    if (!/^---[\s\S]*?\nname:\s*\S+/.test(v)) issues.push(['p1', 'Frontmatter missing required field "name"']);
+    const d = v.match(/description: (.*)/)?.[1] || ''; if (!d) issues.push(['p1', 'Frontmatter missing "description"']); else if (d.length > 1024) issues.push(['p2', `Description is ${d.length} characters · limit 1024`]);
+    if (!OTHER) issues.push(['p2', 'query_pagerduty p95 latency near timeout']);
+    const err = issues.filter(i => i[0] === 'p1').length, warn = issues.length - err;
+    $('#vbar').innerHTML = `${err ? `<span class="st p1"><i class="mk p1"></i>${err} manifest error${err > 1 ? 's' : ''}</span>` : '<span class="st"><i class="mk ok"></i>Manifest valid</span>'}
+      <span class="st p2"><i class="mk p2"></i>${warn} warning${warn > 1 ? 's' : ''}</span><span class="muted">${issues.map(i => i[1]).join(' · ')}</span><span class="spacer"></span><span class="mono muted">v3.1.0 · 33 lines</span>`;
+    const cta = $('[data-od-id="cta-prepare-evaluation"]'); err ? cta.setAttribute('aria-disabled', 'true') : cta.removeAttribute('aria-disabled');
+  }
+  function markDirty() { if ($('#src').readOnly) return; dirty = true; $('#savestate').textContent = 'Unsaved changes'; $('#discard').hidden = false; $('.tree [data-file="skill"]').classList.add('dirty'); S.store.set(wbKey, $('#src').value); }
+  function onSrc() { gutter(); validate(); markDirty(); }
+  $('#src').addEventListener('input', onSrc);
+  $('#src').addEventListener('scroll', () => $('#gut').scrollTop = $('#src').scrollTop);
+  gutter(); validate(); if (dirty) markDirty();
+  $('[data-od-id="cta-prepare-evaluation"]').addEventListener('click', e => { if (e.currentTarget.hasAttribute('aria-disabled')) { e.preventDefault(); S.toast('Fix manifest errors before preparing an evaluation'); } });
+  $('#save').onclick = () => {
+    if (!dirty && !WS.isNew) return S.toast('No changes to save');
+    const text = typeof skillBuf !== 'undefined' && skillBuf != null ? skillBuf : $('#src').value;
+    if (/^---[\s\S]*?\nname:\s*\S+/.test(text) === false) return S.toast('Add a name to the frontmatter before saving');
+    if (WS.isNew) {
+      const id = S.db.slug(text.match(/\nname:\s*(\S+)/)[1]), title = (text.match(/\n#\s+(.+)/) || [])[1] || id;
+      if (!id || id === 'new-skill') return S.toast('Choose a skill name in the frontmatter before saving');
+      if (!S.db.addSkill({ id, name: title.trim(), repo: 'wh/skills', ver: 'v0.1', owner: 'priya.a', note: 'Created in Workbench · not evaluated' })) return S.toast(`A skill named ${id} already exists`);
+      S.db.saveSource(id, text); S.store.del(wbKey); dirty = false;
+      S.simToast(`${title.trim()} created as a draft skill`); location.replace('workbench.html?skill=' + encodeURIComponent(id)); return;
+    }
+    const saved = S.db.saveSource(WS.id, text); BASE = text; dirty = false; S.store.del(wbKey);
+    $('#savestate').textContent = `Saved · revision ${saved.rev}`; $('#discard').hidden = true; $('.tree .dirty')?.classList.remove('dirty');
+    S.simToast(`Revision ${saved.rev} committed to branch savant/${WS.id}`);
+  };
+  $('#discard').onclick = async () => { if (await S.confirm({ title: 'Discard unsaved changes?', body: 'Edits to SKILL.md and node configuration since the last save will be lost.', confirm: 'Discard changes', danger: true })) { $('#src').value = BASE; S.store.del(wbKey); dirty = false; gutter(); validate(); $('#savestate').textContent = 'All changes saved'; $('#discard').hidden = true; $('.tree .dirty')?.classList.remove('dirty'); select('skill'); } };
+  addEventListener('beforeunload', e => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+
+  $('#plan-add').insertAdjacentHTML('afterbegin', S.icon('plus'));
+  $('#plan-add').onclick = e => S.menu(e.currentTarget, [{ hd: 'Planned step types' }, { label: 'Skill step', icon: 'library', act: () => addStep('skill') }, { label: 'Human approval', icon: 'user', act: () => addStep('approval') }]);
+  $('#plan-drafts').insertAdjacentHTML('afterbegin', S.icon('folder'));
+  $('#plan-drafts').onclick = openDrafts;
+  { const cur = drafts().find(x => x.name === wfName); if (cur) restore(cur); else { wfName = null; } }
+  if (S.store.get('wf-on', false)) { $('#plan-t').setAttribute('aria-checked', 'true'); $('#cw').classList.add('show-plan'); planBar(); }
+  addEventListener('beforeunload', e => { if (wfDirty && $('#cw').classList.contains('show-plan')) { e.preventDefault(); e.returnValue = ''; } });
+  window.WB = { nodes, edges, drawEdges: () => drawEdges(), select: id => select(id), selected: () => curSel, extend: null };
+  select('skill');
+  requestAnimationFrame(drawEdges); addEventListener('resize', drawEdges);
+  if (WS.isNew) S.toast('New skill scaffold · edit SKILL.md, then save to create the draft');
+});
+</script>
+<script src="assets/workbench-improve.js"></script>
+</body>
+</html>

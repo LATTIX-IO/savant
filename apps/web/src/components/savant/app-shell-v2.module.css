@@ -272,3 +272,11 @@
 @media (prefers-reduced-motion: reduce) {
   .main, .nav { scroll-behavior: auto; }
 }
+
+/* F1 navigation: link and picker share identical affordances and focus behavior. */
+.navButton { border: 0; width: 100%; background: transparent; text-align: left;
+  font: inherit; cursor: pointer; }
+.navButton:hover { background: var(--sv2-recess); }
+.shortcut { color: var(--sv2-muted); border: 1px solid var(--sv2-border);
+  background: var(--sv2-bg); border-radius: 4px; font: 10px var(--sv2-font-code); padding: 2px 4px; }
+@media (max-width: 900px) { .shortcut { display: none; } }

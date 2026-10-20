@@ -1,0 +1,19 @@
+.palette { min-width: 0; display: grid; gap: 10px; }
+.searchLabel { color: var(--sv2-fg-2); font-size: 12px; }
+.search { width: 100%; height: var(--sv2-control-height); padding: 5px 10px;
+  border: 1px solid var(--sv2-border-strong); border-radius: var(--sv2-radius-control);
+  background: var(--sv2-surface); color: var(--sv2-fg); font: 13px var(--sv2-font-body); }
+.search:focus-visible { outline: 2px solid var(--sv2-focus); outline-offset: 2px; }
+.results { min-width: 0; max-height: min(52dvh, 550px); overflow-y: auto; display: grid; gap: 12px; }
+.results section { display: grid; gap: 2px; }
+.results h3 { margin: 0; padding: 4px 0; font: 600 11px var(--sv2-font-code); color: var(--sv2-muted); }
+.results a { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  text-decoration: none; color: var(--sv2-fg); font-size: 13px;
+  border-radius: var(--sv2-radius-control); padding: 8px 10px; min-width: 0; }
+.results a:hover, .results a:focus-visible { background: var(--sv2-selected); }
+.results a span { overflow-wrap: anywhere; }
+.results small { color: var(--sv2-muted); font: 11px var(--sv2-font-code);
+  overflow-wrap: anywhere; text-align: right; }
+.notice { color: var(--sv2-muted); margin: 0; padding: 10px; font-size: 12px; }
+.fallback { border-top: 1px solid var(--sv2-border); font-weight: 600; }
+@media (max-width: 500px) { .results a { display: grid; gap: 2px; } .results small { text-align: left; } }

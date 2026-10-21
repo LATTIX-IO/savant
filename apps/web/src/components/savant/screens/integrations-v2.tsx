@@ -11,6 +11,7 @@ import {UiV2EmptyState,UiV2Metric,UiV2PageHeader,UiV2StateBanner,
 import {useUiV2WorkspaceSlug} from "@/components/savant/ui-v2/mode";
 import {fetchRepositoryList,fetchAIConnections,fetchConnectorDashboard} from "@/lib/control-plane-client";
 import {inspectUiV2ProviderLanes} from "@/lib/ui-v2-provider-lanes";
+import {ProviderConnectionGuide} from "./provider-connection-guide";
 import {getUiV2RepositoryHealth} from "@/lib/ui-v2-library-model";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
 import styles from "./operational-admin-v2.module.css";
@@ -136,20 +137,10 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
             a production provider or infer production readiness from its status.</p>
         </section>
       </div>
-      <div className={styles.providerAuth} aria-label="Account-based AI authorization">
-        <h3>Connect an account instead of pasting an API key</h3>
-        <p className={styles.note}><strong>ChatGPT / Codex:</strong> OpenAI supports
-          delegated ChatGPT sign-in and eligible plan-backed requests. Savant requires
-          commercial partner enablement before it can offer that account connection.
-          No OAuth authorization is available from this UI today.</p>
-        <UiV2Status state="planned" label="ChatGPT plan sign-in · partner enablement required"/>
-        <p className={styles.note}><strong>Claude Code:</strong> A user may sign into
-          the unmodified Claude Code runtime through Anthropic&apos;s own authentication.
-          Savant cannot collect Claude subscription tokens or expose an independent
-          Claude.ai OAuth sign-in for hosted model inference. Organization-owned Claude
-          API credentials or workload identity are a separate option.</p>
-        <UiV2Status state="unavailable" label="Hosted Claude.ai subscription OAuth not supported"/>
-      </div>
+      <ProviderConnectionGuide executorLabel={lanes.workspaceOpenAiExecutor?.label??null}
+       testAction={<Link href={modelsHref} className={styles.control}>
+        Configure existing test API provider
+       </Link>}/>
       <UiV2StateBanner state="ready" label="API credentials are never returned to this read-only topology."/>
     </>:tab==="clients"?<>
       <h2>Agent clients</h2>

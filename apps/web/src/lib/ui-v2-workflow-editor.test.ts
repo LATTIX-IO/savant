@@ -4,7 +4,7 @@ import type { WorkflowSpecification } from "@savant/types/workflow-specification
 import { parseWorkflowSpecification } from "@savant/schemas/workflow-specification";
 import {
  addWorkflowConnection,addWorkflowPort,editWorkflowPortType,
- removeWorkflowNode,removeWorkflowPort,workflowConnectionWouldCycle,
+ removeWorkflowNode,removeWorkflowPort,workflowConnectionWouldCycle,incompatibleWorkflowConnection,
 } from "./ui-v2-workflow-editor.ts";
 
 function seed():WorkflowSpecification {
@@ -65,4 +65,17 @@ test("deleting node removes dependent edges and preserves unrelated graph",()=>{
  parseWorkflowSpecification(spec);
  assert.deepEqual(spec.nodes.map(n=>n.id),["a","c"]);
  assert.equal(spec.edges.length,0);
+});
+
+test("JSON-edited incompatible port types fail the same gate as UI connections",()=>{
+ const spec=valid(addWorkflowConnection(seed(),"a","out","b","in"));
+ assert.equal(incompatibleWorkflowConnection(spec),null);
+ const changed=editWorkflowPortType(spec,"b","inputs","in","unrelated");
+ assert.equal(changed.ok,true);
+ if(changed.ok)assert.equal(incompatibleWorkflowConnection(changed.document),spec.edges[0]?.id);
+});
+test("human port editing may temporarily clear a type, but schema rejects unsaved empties",()=>{
+ const altered=editWorkflowPortType(seed(),"b","inputs","in","");
+ assert.equal(altered.ok,true);
+ if(altered.ok)assert.throws(()=>parseWorkflowSpecification(altered.document));
 });

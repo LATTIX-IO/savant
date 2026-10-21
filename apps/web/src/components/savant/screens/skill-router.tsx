@@ -1,4 +1,6 @@
 "use client";
+import {useUiV2Mode} from "@/components/savant/ui-v2/mode";
+import {IntegrationsV2} from "./integrations-v2";
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -40,7 +42,7 @@ function setupFor(client: ClientKey, origin: string, token: string): { steps: st
  * Connect AI tools to the workspace's governed skills through the Savant
  * skill router (MCP), and watch the live telemetry it records.
  */
-export function SkillRouterScreen() {
+function ClassicSkillRouterScreen() {
   const [origin, setOrigin] = useState("https://savantskills.app");
   const [client, setClient] = useState<ClientKey>("claude-code");
   const [token, setToken] = useState<string | null>(null);
@@ -198,4 +200,9 @@ export function SkillRouterScreen() {
       </div>
     </div>
   );
+}
+
+export function SkillRouterScreen(){
+ const v2=useUiV2Mode();
+ return v2?<IntegrationsV2 legacy={<ClassicSkillRouterScreen/>}/>:<ClassicSkillRouterScreen/>;
 }

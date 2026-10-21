@@ -17,6 +17,8 @@ import type {
 } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
+import {useUiV2Mode} from "@/components/savant/ui-v2/mode";
+import {InsightsV2} from "./insights-v2";
 import { Delta, Tier } from "@/components/savant/primitives";
 import {
   createTelemetryIngestToken,
@@ -279,7 +281,7 @@ function IngestTokenPanel() {
   );
 }
 
-export function IntelligenceScreen() {
+function ClassicIntelligenceScreen() {
   const pathname = usePathname() || "/";
   const [data, setData] = useState<OrganizationIntelligencePayload | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -438,4 +440,9 @@ export function IntelligenceScreen() {
       </div>
     </div>
   );
+}
+
+export function IntelligenceScreen(){
+ const v2=useUiV2Mode();
+ return v2?<InsightsV2 advanced={<ClassicIntelligenceScreen/>}/>:<ClassicIntelligenceScreen/>;
 }

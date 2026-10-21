@@ -73,3 +73,24 @@ Never claim a rollback happened unless an actual deployment readback proves it.
 **At writing:** PER-1592 production schema/key/restore and PER-1421 real provider/cost
 evidence remain IN PROGRESS; actual authenticated operator Playwright UAT is not recorded.
 Therefore this runbook cannot authorize default-on promotion.
+
+
+## UX-09 — private machine-readable browser capture (not a promotion receipt)
+
+After **all eight authenticated viewport/theme journeys** pass, the same operator
+runner creates `ux-v2-browser-capture.json` in its unique private temporary
+directory. It verifies the 64 expected PNG files (eight operational/administrative
+screens × 390/768/1280/1440 × light/dark), correct PNG viewport dimensions,
+distinct screenshot content, reasonable file bounds, and per-file SHA-256 hashes.
+A missing or duplicate capture fails the run before a JSON file is created.
+The manifest is created with exclusive-write semantics and best-effort `0600`
+permissions. It includes only site/tenant test context, screen names, local
+paths and screenshot hashes; **never browser cookies, OAuth tokens or source text**.
+
+This manifest has `evidenceKind: "authenticated-browser-capture-only"`.
+It is intentionally rejected as a standalone input by
+`ux-v2-cutover-readiness.cjs`. Use it as a private evidence companion when
+independently verifying actual production deployment identity, owner approval,
+negative HTTP cases, screen-reader/WCAG review, restored DB+keys, observed
+provider invoices and the kill-switch rollback. Do not forge a complete
+release receipt by copying these fields without witnessing the other gates.

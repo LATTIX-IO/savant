@@ -9,6 +9,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const { writePrivateBrowserCapture } = require("./ux-v2-browser-capture.cjs");
 
 const REQUIRED = [
   "SAVANT_UAT_BASE_URL",
@@ -302,9 +303,12 @@ async function run(env = process.env) {
         process.stdout.write("PASS " + label + " authenticated eight-workspace read-only journey\n");
       } finally { await context.close(); }
     }
+    assert.equal(completed, CASES.length, "All authenticated viewport/theme journeys required.");
+    const evidence=writePrivateBrowserCapture({output,config,cases:CASES});
     process.stdout.write("PASS " + completed + "/" + CASES.length +
       " authenticated " + (config.productionReadOnly ? "owner production read-only" : "staging") +
-      " viewport/theme journeys; local-only screenshots: " + output + "\n");
+      " viewport/theme journeys; local-only screenshots: " + output +
+      "; private browser-only evidence: " + evidence.path + "\n");
   } finally { await browser.close(); }
 }
 

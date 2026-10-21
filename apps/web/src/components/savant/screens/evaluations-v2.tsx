@@ -135,7 +135,7 @@ export function EvaluationsV2() {
                 {!canAuthor?<UiV2StateBanner state="unavailable"
                   label="Editing disabled until this workspace has an authorized, pinned Git source and role."/>:null}
                 <PersistedTestBench key={slug+":"+skillId} skillId={skillId}
-                  pathname={pathname} readOnly={!canAuthor}/>
+                  pathname={pathname} readOnly={!canAuthor} guided/>
               </>
             )}
           <p className={styles.note}>Reference dataset catalog is not available from the production API.

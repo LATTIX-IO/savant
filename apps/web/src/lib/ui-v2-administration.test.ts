@@ -8,7 +8,7 @@ test("UX-06 uses scoped provider metadata, avoids credential exposure and retain
  const classic=readFileSync(fileURLToPath(new URL("../components/savant/screens/settings.tsx",import.meta.url)),"utf8");
  const router=readFileSync(fileURLToPath(new URL("../components/savant/screens/skill-router.tsx",import.meta.url)),"utf8");
  for(const field of ["fetchRepositoryList","fetchAIConnections","fetchConnectorDashboard",
-   "fetchEvaluationDashboard","workspaceSlug:slug,signal:controller.signal"])assert.ok(integrations.includes(field));
+   "inspectUiV2ProviderLanes","workspaceSlug:slug,signal:controller.signal"])assert.ok(integrations.includes(field));
  assert.match(integrations,/API credentials are never returned/);
  assert.match(integrations,/tenant-scoped agent-client inventory API is not available/);
  assert.match(integrations,/No step uses browser-local simulated state/);

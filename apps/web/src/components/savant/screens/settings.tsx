@@ -799,62 +799,30 @@ function AuthSection({
         </FormRow>
       </SettingsPanel>
 
-      <SettingsPanel title="Group sync" sub="SCIM keeps Savant group membership in lockstep with your IdP.">
-        <FormRow label="SCIM" sub="Last synced 12m ago. 218 members, 12 groups.">
-          <div className="row" style={{ gap: 8 }}>
-            <span className="chip chip-moss">
-              <span className="dot" />
-              active
-            </span>
-            <button type="button" className="btn btn-sm">
-              Rotate token
-            </button>
-            <button type="button" className="btn btn-sm">
-              Sync now
-            </button>
-          </div>
+      <SettingsPanel title="Group synchronization" sub="Provider-backed SCIM synchronization is not configured.">
+        <FormRow label="SCIM" sub="External IdP groups are not imported or mapped by this panel.">
+          <span className="chip chip-paper" aria-label="SCIM synchronization unavailable">
+            Not configured
+          </span>
         </FormRow>
-        <FormRow label="Synced groups" sub="Groups that map from IdP into Savant RBAC.">
-          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-            {[
-              "platform-admins",
-              "legal-readers",
-              "legal-owners",
-              "eng-leads",
-              "security-readers",
-              "sre-oncall",
-              "finance-bp",
-              "se-team",
-              "cs-team",
-              "procurement",
-              "all-employees",
-            ].map((g) => (
-              <span key={g} className="ref">
-                {g}
-              </span>
-            ))}
-          </div>
-        </FormRow>
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+          No last-sync timestamp, group membership, or effective-user permissions are asserted
+          until an authorized provider integration supplies verifiable data. User roles
+          continue to follow the existing server-side tenant authorization.
+        </p>
       </SettingsPanel>
 
       <SettingsPanel
         title="Multi-factor"
-        sub="Required for production releases regardless of IdP policy."
+        sub="Auth0 and the release service own step-up authentication, not this display panel."
       >
-        <FormRow
-          label="Require MFA at release time"
-          sub="Force step-up auth when promoting a skill to production."
-        >
-          <Toggle on={true} />
+        <FormRow label="Release-time MFA" sub="Effective step-up policy requires separate server-side verification.">
+          <span className="chip chip-paper">Not verified in this view</span>
         </FormRow>
-        <FormRow label="Session length" sub="Length of an authenticated session before re-auth.">
-          <select defaultValue="12" style={selectStyle}>
-            <option value="4">4 hours</option>
-            <option value="8">8 hours</option>
-            <option value="12">12 hours</option>
-            <option value="24">24 hours</option>
-          </select>
-        </FormRow>
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+          A configured login session does not prove that approval or promotion enforces
+          a fresh MFA challenge. Do not treat this status as release authorization.
+        </p>
       </SettingsPanel>
     </>
   );

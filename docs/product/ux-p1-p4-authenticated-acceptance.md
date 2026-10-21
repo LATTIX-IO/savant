@@ -39,3 +39,26 @@ Screenshots are placed in a unique **local-only system temporary directory** and
 - Require current-head GitHub Node/TS/lint/build/DB/secret scan/high-critical dependency audit and READY preview for a source-only merge. The sole owner may accept a fully qualified merge; do not claim GitHub protection while live rulesets are absent. Before **enabling v2**, require observed authenticated synthetic-owner browser results, server allowlist/kill-switch and deployment rollback evidence. Full protected staging remains post-pilot hardening.
 
 **Never write a production database migration or enable `SAVANT_UI_V2_WORKSPACES=*` as part of this UX acceptance.** Test Bench database/key activation is separately gated by PER-1592/PER-1421; full staging KMS/DB rehearsal is deferred to PER-1556/PER-1589. A source merge is not default v2 enablement or evidence of production Test Bench readiness.
+
+
+## UX-07 extension — complete v2 navigation UAT (source-qualification only)
+
+The same operator-injected authenticated browser script now additionally navigates all five remaining
+route surfaces, completing the six primary workspaces and two administration areas:
+`/evaluations` (Savant Test Bench lifecycle, Suites/Datasets),
+`/runs` (tenant-owned persisted case inspector),
+`/intelligence` (Compare/Releases/Portfolio),
+`/router` (Integrations source/models/agent clients/distribution/setup),
+and `/settings` (General, Members, Access, Policies, Audit, Billing).
+It checks native command-palette Ctrl+K / Escape, one active navigation landmark and viewport overflow.
+The existing Library/Workbench draft remains **unsubmitted** and scope A/B/denied C tests remain.
+
+The updated runner takes screenshots to a local private temporary directory only. This source
+change does **not** supply an Auth0 session, preprovision three synthetic organizations, make
+a verified backend response, confirm a billed provider receipt, or establish WCAG 2.2 AA compliance.
+It must be run by the owner against the actual READY production revision after UX-03..06 are deployed.
+Then record the exact SHA/host/tenant aliases, per-viewport screenshot manifests, WCAG review and
+read-only HTTP denial evidence in private acceptance records. No credential file is ever committed.
+
+Acceptance additionally needs independently observed 401/403/404/409/429/503 and read-after-save
+provider Test Bench receipts; a no-write UI pass alone cannot satisfy PER-1421 or UX-08 default cutover.

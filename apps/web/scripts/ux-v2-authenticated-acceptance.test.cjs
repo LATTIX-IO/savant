@@ -102,3 +102,17 @@ test("owner-only UAT script is explicitly read-only and stores screenshots local
   assert.match(source, /os\.tmpdir\(\)/);
   assert.doesNotMatch(source, /createProposal\(|\.post\(|\.put\(|\.delete\(/);
 });
+
+test("UX-07 authenticated journey covers every main and administrative workspace without writes", () => {
+  const source=fs.readFileSync(path.join(__dirname,"ux-v2-authenticated-acceptance.cjs"),"utf8");
+  for (const target of ["/dashboard","/skills","/evaluations","/runs","/intelligence",
+    "/router","/settings"]) assert.ok(source.includes(target),target);
+  for (const section of ["Evaluation areas","Observed suite runs","Insights sections",
+    "Integration categories","Settings sections","Search Savant"]) {
+    assert.ok(source.includes(section),section);
+  }
+  assert.match(source,/verifyAdditionalWorkspaces\(page, config, label, output\)/);
+  assert.match(source,/page\.keyboard\.press\("Control\+k"\)/);
+  assert.match(source,/page\.keyboard\.press\("Escape"\)/);
+  assert.doesNotMatch(source,/\.post\(|\.put\(|\.delete\(|createProposal\(|rotateAIConnection\(/);
+});

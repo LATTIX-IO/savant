@@ -37,10 +37,12 @@ test("PER-1605: only active default workspace OpenAI can be described as eligibl
 test("PER-1605: UI has no fake OAuth callback or misleading first-run verification",()=>{
  const ui=readFileSync(fileURLToPath(new URL("../components/savant/screens/integrations-v2.tsx",
    import.meta.url)),"utf8");
+ const guide=readFileSync(fileURLToPath(new URL("../components/savant/screens/provider-connection-guide.tsx",
+   import.meta.url)),"utf8");
  assert.match(ui,/independent production routing not configured/i);
- assert.match(ui,/commercial partner enablement/);
- assert.match(ui,/unmodified Claude Code runtime/);
- assert.match(ui,/Hosted Claude.ai subscription OAuth not supported/);
+ assert.match(guide,/commercial partner/);
+ assert.match(guide,/unmodified Claude Code runtime/);
+ assert.match(guide,/cannot proxy Claude.ai subscription OAuth/);
  assert.match(ui,/Provider-backed completion not verified/);
  assert.doesNotMatch(ui,/fetchEvaluationDashboard|firstEvaluation/);
  assert.doesNotMatch(ui,/oauth\/callback|window\.location\.assign\(|localStorage|sessionStorage/);

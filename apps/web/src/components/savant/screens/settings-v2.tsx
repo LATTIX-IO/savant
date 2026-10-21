@@ -5,14 +5,16 @@ import type {Route} from "next";
 import {usePathname} from "next/navigation";
 import {useEffect,useState,type ReactNode} from "react";
 import type {WorkspaceSettingsPayload} from "@savant/types";
+import {inspectUiV2ProviderLanes} from "@/lib/ui-v2-provider-lanes";
+import {ProviderConnectionGuide} from "./provider-connection-guide";
 import {UiV2EmptyState,UiV2Metric,UiV2PageHeader,UiV2StateBanner,
  UiV2Status,UiV2TableViewport} from "@/components/savant/ui-v2";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
 import styles from "./operational-admin-v2.module.css";
 
-type Section="general"|"members"|"access"|"policies"|"audit"|"billing"|"advanced";
+type Section="general"|"ai"|"members"|"access"|"policies"|"audit"|"billing"|"advanced";
 const SECTIONS:[Section,string][]=[
- ["general","General"],["members","Members"],["access","Access and roles"],
+ ["general","General"],["ai","AI providers"],["members","Members"],["access","Access and roles"],
  ["policies","Policies"],["audit","Audit log"],["billing","Billing"],["advanced","Manage settings"],
 ];
 export function SettingsV2({settings,legacy}:{settings:WorkspaceSettingsPayload;legacy:ReactNode}){
@@ -29,6 +31,7 @@ export function SettingsV2({settings,legacy}:{settings:WorkspaceSettingsPayload;
  const policyHref=buildTenantAwareAppPath(pathname,"/policies") as Route;
  const integrationsHref=buildTenantAwareAppPath(pathname,"/router") as Route;
  const members=settings.members;
+ const executor=inspectUiV2ProviderLanes(settings.aiConnections).workspaceOpenAiExecutor;
  return <div className={styles.page}>
   <UiV2PageHeader eyebrow="Workspace / administration" title="Settings"
    description="Identity, membership, policy, operational security and billing."/>
@@ -51,6 +54,14 @@ export function SettingsV2({settings,legacy}:{settings:WorkspaceSettingsPayload;
       <button type="button" className={styles.control} onClick={()=>setTab("advanced")}>
         Change verified workspace settings
       </button>
+    </>:tab==="ai"?<>
+      <h2>AI provider connections</h2>
+      <p className={styles.note}>Test inference, production inference and
+       enterprise workspace integrations have distinct authorizations. Planned
+       actions are disabled until the provider and server-side contracts exist.</p>
+      <ProviderConnectionGuide executorLabel={executor?.label??null}
+       testAction={<button type="button" className={styles.control}
+        onClick={()=>setTab("advanced")}>Manage existing test API credentials</button>}/>
     </>:tab==="members"?<>
       <h2>Members</h2>
       {members.length===0?<UiV2EmptyState message="No member records returned."/>:

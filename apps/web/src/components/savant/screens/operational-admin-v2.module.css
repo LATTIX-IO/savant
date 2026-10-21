@@ -57,7 +57,7 @@
 .providerGuideHeader{display:flex;align-items:flex-start;justify-content:space-between;
  flex-wrap:wrap;gap:12px;width:100%;min-width:0}
 .providerGuide h3{font:600 14px var(--sv2-font-body);margin:5px 0 0;color:var(--sv2-fg)}
-.providerGuide small{color:var(--sv2-muted);font:500 10px var(--sv2-font-mono);letter-spacing:.07em}
+.providerGuide small{color:var(--sv2-muted);font:500 10px var(--sv2-font-code);letter-spacing:.07em}
 .providerGuide .note{margin:0}
 .providerGuideActions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
 .providerGuideActions .control{text-decoration:none}

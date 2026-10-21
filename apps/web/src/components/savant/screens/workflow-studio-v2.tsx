@@ -3,14 +3,14 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { RepositoryListItem } from "@savant/types";
 import type { WorkflowSpecification, WorkflowNodeKind } from "@savant/types/workflow-specification";
 import { parseWorkflowSpecification } from "@savant/schemas/workflow-specification";
 import { fetchRepositoryList } from "@/lib/control-plane-client";
 import { buildTenantAwareAppPath, withWorkspaceSlugQuery } from "@/lib/tenant-paths";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { workflowDocumentPath, workflowIdValid, workflowSaveGate } from "@/lib/ui-v2-workflow-model";
+import { workflowDocumentPath, workflowIdValid, workflowSaveGate, layoutWorkflowGraph } from "@/lib/ui-v2-workflow-model";
 import styles from "./workflow-studio-v2.module.css";
 
 type WorkflowRecord = {
@@ -21,10 +21,12 @@ type WorkflowRecord = {
 type Inventory = { scope: string; phase: "loading"|"ready"|"error"; data: RepositoryListItem[]; message: string };
 type Loaded = { key: string; phase: "idle"|"loading"|"ready"|"missing"|"error"; record: WorkflowRecord|null; message: string };
 type EditMode = "graph"|"json";
+type IndexedWorkflow = {workflowId:string;version:string;sourceCommitSha:string;indexedAt:string};
+type IndexLoad = {key:string;phase:"idle"|"loading"|"ready"|"error";items:IndexedWorkflow[];message:string};
+const NO_INDEX:IndexLoad={key:"",phase:"idle",items:[],message:""};
 const EMPTY: Inventory = {scope:"",phase:"loading",data:[],message:""};
 const NONE: Loaded = {key:"",phase:"idle",record:null,message:""};
 const KINDS: readonly WorkflowNodeKind[]=["agent","skill","tool","model","decision","subworkflow","opaque"];
-const slugPattern=/^[a-z0-9](?:[a-z0-9._-]{0,78}[a-z0-9])?$/;
 
 function initialSpec(id:string):WorkflowSpecification {
   return {schemaVersion:1,workflowId:id,version:"0.1.0",
@@ -62,6 +64,8 @@ export function WorkflowStudioV2(){
   const slug=useUiV2WorkspaceSlug()??"";
   const pathname=usePathname()||"/";
   const [inventory,setInventory]=useState<Inventory>(EMPTY);
+  const [indexed,setIndexed]=useState<IndexLoad>(NO_INDEX);
+  const readRef=useRef<AbortController|null>(null);
   const [repositoryId,setRepositoryId]=useState("");
   const [workflowId,setWorkflowId]=useState("");
   const [loaded,setLoaded]=useState<Loaded>(NONE);
@@ -79,6 +83,9 @@ export function WorkflowStudioV2(){
   const active=loaded.key===scopeKey?loaded:NONE;
   const repo=inventory.scope===slug?inventory.data.find(r=>r.id===repositoryId):null;
   const source=draft?JSON.stringify(draft):"";
+  const graph=useMemo(()=>draft?layoutWorkflowGraph(draft):null,[draft]);
+  const listKey=`${slug}:${repositoryId}`;
+  const visibleIndex=indexed.key===listKey?indexed:NO_INDEX;
   const dirty=draft!==null && (source!==baseline || Boolean(jsonError));
   const safeId=workflowIdValid(workflowId);
   const available=repo?.provider==="github";

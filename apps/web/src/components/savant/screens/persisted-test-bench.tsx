@@ -189,8 +189,8 @@ export function PersistedTestBench({
                   onChange={e=>change(index,"kind",e.target.value)}>
                   {KINDS.map(kind=><option key={kind} value={kind}>{kind}</option>)}
                 </select>
-              </div>
-              <div className="field">
+              </div>}
+              {(!guided||step===2)&&<div className="field">
                 <label className="field-label" htmlFor={`bench-prompt-${index}`}>User request or test prompt</label>
                 <textarea id={`bench-prompt-${index}`} rows={3} maxLength={2000} value={item.prompt}
                   disabled={!editable} onChange={e=>change(index,"prompt",e.target.value)} />
@@ -208,7 +208,7 @@ export function PersistedTestBench({
             </div>
           ))}
           <div className="row" style={{gap:8,flexWrap:"wrap"}}>
-            <button type="button" className="btn btn-sm btn-ghost"
+            {(!guided||step===2)&&<button type="button" className="btn btn-sm btn-ghost"
               disabled={!editable||cases.length>=8} onClick={()=>{
                 requestId.current=null;setCases(current=>[...current,newCase()]);
               }}>Add case ({cases.length}/8)</button>}

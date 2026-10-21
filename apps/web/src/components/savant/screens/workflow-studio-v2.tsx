@@ -186,6 +186,17 @@ export function WorkflowStudioV2(){
     if(!draft)return;
     replaceDraft({...draft,nodes:draft.nodes.map(n=>n.id===id?{...n,...values}:n)});
   }
+  function changeNodeKind(kind:WorkflowNodeKind){
+    if(!draft||!selected)return;
+    const nodes=draft.nodes.map(node=>{
+      if(node.id!==selected.id)return node;
+      if(kind==="opaque")return {...node,kind,native:node.native??{kind:"external"}};
+      const value={...node};
+      delete value.native;
+      return {...value,kind};
+    });
+    replaceDraft({...draft,nodes});
+  }
   function addNode(){
     if(!draft||draft.nodes.length>=1000)return;
     const id=nextId("step",draft.nodes);
@@ -204,6 +215,9 @@ export function WorkflowStudioV2(){
     const from=draft.nodes.find(n=>n.id===fromId),to=draft.nodes.find(n=>n.id===toId);
     const output=from?.outputs?.[0],input=to?.inputs?.[0];
     if(!output||!input){setMessage("Both steps require an output and an input port.");return;}
+    if(output.dataType!=="any"&&input.dataType!=="any"&&output.dataType!==input.dataType){
+      setMessage("The selected ports have incompatible data types.");return;
+    }
     if(draft.edges.some(e=>e.from.nodeId===fromId&&e.to.nodeId===toId)){
       setMessage("That connection already exists.");return;
     }
@@ -346,10 +360,7 @@ export function WorkflowStudioV2(){
             <label>Step ID<input value={selected.id} readOnly title="Stable immutable node identity"/></label>
             <label>Title<input value={selected.label??""} maxLength={2048}
               onChange={e=>changeNode(selected.id,{label:e.target.value})}/></label>
-            <label>Kind<select value={selected.kind} onChange={e=>{
-              const kind=e.target.value as WorkflowNodeKind;
-              changeNode(selected.id,kind==="opaque"?{kind,native:{kind:"external"}}:{kind,native:undefined});
-            }}>{KINDS.map(k=><option key={k} value={k}>{k}</option>)}</select></label>
+            <label>Kind<select value={selected.kind} onChange={e=>changeNodeKind(e.target.value as WorkflowNodeKind)}>{KINDS.map(k=><option key={k} value={k}>{k}</option>)}</select></label>
             <p>Port metadata and provider-native payloads can be inspected and edited in JSON source. Native operations are never executed here.</p>
             <button type="button" onClick={removeNode} disabled={busy}>Remove step and connections</button>
           </div>:<p>Select a graph step to edit its metadata.</p>}

@@ -176,6 +176,74 @@ async function performMainJourney(page, config, label, output) {
   await assertNoOuterOverflow(page);
 }
 
+
+/**
+ * UX-07: read-only authenticated navigation of the remaining workspaces.
+ * No backend stubs, synthetic routes, fixture claims, client token issuance,
+ * suite writes, provider calls or release approval clicks.
+ */
+async function verifyAdditionalWorkspaces(page, config, label, output) {
+  const root = tenantPath(config, config.workspaceA, "");
+  const routes = [
+    ["/evaluations", "Evaluations"],
+    ["/runs", "Runs"],
+    ["/intelligence", "Insights"],
+    ["/router", "Integrations"],
+    ["/settings", "Settings"],
+  ];
+  for (const [suffix, title] of routes) {
+    await page.goto(config.origin + root + suffix, { waitUntil: "domcontentloaded" });
+    await waitForV2(page);
+    await page.getByRole("heading", { name: title, exact: true })
+      .first().waitFor({state:"visible",timeout:20000});
+    await assertNoOuterOverflow(page);
+    const nav = page.locator('aside[aria-label="Application navigation"] [aria-current="page"]');
+    assert.equal(await nav.count(),1,
+      title + " must have one active navigation destination.");
+    assert.match((await nav.textContent()) || "",new RegExp(title));
+    if (suffix === "/evaluations") {
+      await page.getByRole("tablist", { name: "Evaluation areas" }).waitFor({state:"visible"});
+      await page.getByRole("tab", { name: "Datasets" }).click();
+      await page.getByRole("tab", { name: "Suites" }).click();
+      await page.locator('[aria-label="Definition, execution and results lifecycle"]')
+        .waitFor({state:"visible"});
+    }
+    if (suffix === "/runs") {
+      await page.getByRole("navigation", { name: "Observed suite runs" })
+        .waitFor({state:"visible"});
+      await page.getByRole("region", { name: "Run inspector" }).waitFor({state:"visible"});
+    }
+    if (suffix === "/intelligence") {
+      const tabs=page.getByRole("tablist", { name: "Insights sections" });
+      await tabs.waitFor({state:"visible"});
+      await page.getByRole("tab", { name: "Releases", exact:true }).click();
+      await page.getByRole("tab", { name: "Portfolio", exact:true }).click();
+      await page.getByRole("tab", { name: "Compare versions" }).click();
+    }
+    if (suffix === "/router") {
+      await page.getByRole("tablist", { name: "Integration categories" }).waitFor({state:"visible"});
+      for (const tab of ["Model providers","Agent clients","Distribution","Setup guide","Source control"]) {
+        await page.getByRole("tab", { name:tab,exact:true }).click();
+      }
+    }
+    if (suffix === "/settings") {
+      await page.getByRole("navigation", { name:"Settings sections" }).waitFor({state:"visible"});
+      for (const tab of ["Members","Access and roles","Policies","Audit log","Billing","General"]) {
+        await page.getByRole("navigation", { name:"Settings sections" })
+          .getByRole("button", {name:tab,exact:true}).click();
+      }
+    }
+    await assertNoOuterOverflow(page);
+    await page.screenshot({path:path.join(output,label+"-"+title.toLowerCase()+".png")});
+  }
+  // A genuine native command palette must open via the keyboard and close via Escape.
+  await page.keyboard.press("Control+k");
+  const palette=page.getByRole("dialog", { name: "Search Savant" });
+  await palette.waitFor({state:"visible",timeout:15000});
+  await page.keyboard.press("Escape");
+  await palette.waitFor({state:"hidden"});
+}
+
 async function verifyTenantBoundaries(page, config) {
   const aSkill = tenantPath(config, config.workspaceA,
     "/skills/" + encodeURIComponent(config.skillId));
@@ -225,12 +293,13 @@ async function run(env = process.env) {
         await setTheme(page, variant.theme);
         const label = variant.theme + "-" + variant.width;
         await performMainJourney(page, config, label, output);
+        await verifyAdditionalWorkspaces(page, config, label, output);
         if (variant.width === 1280 && variant.theme === "light") {
           await verifyTenantBoundaries(page, config);
         }
         assert.equal(errors, 0, "Unexpected client JavaScript exceptions.");
         completed++;
-        process.stdout.write("PASS " + label + " authenticated overview/library/workbench\n");
+        process.stdout.write("PASS " + label + " authenticated eight-workspace read-only journey\n");
       } finally { await context.close(); }
     }
     process.stdout.write("PASS " + completed + "/" + CASES.length +

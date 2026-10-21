@@ -1,0 +1,49 @@
+.page{display:grid;gap:16px;padding:20px;min-width:0;color:var(--sv2-fg)}
+.measures{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));background:var(--sv2-surface);
+ border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-panel);overflow:hidden}
+.measures>*{padding:12px;border-right:1px solid var(--sv2-border)}
+.measures>*:last-child{border:0}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+.filters label{display:grid;gap:6px;min-width:min(180px,100%);font-size:12px;color:var(--sv2-fg-2)}
+.filters select,.filters input{height:34px;min-width:0;width:100%;border:1px solid var(--sv2-border-strong);
+ border-radius:var(--sv2-radius-control);background:var(--sv2-surface);color:var(--sv2-fg);padding:6px}
+.control,.backLink{border:1px solid var(--sv2-border-strong);border-radius:var(--sv2-radius-control);
+ background:var(--sv2-surface);color:var(--sv2-fg);padding:8px 12px;font:12px var(--sv2-font-body);
+ text-decoration:none;cursor:pointer}
+.split{display:grid;grid-template-columns:280px minmax(0,1fr);border:1px solid var(--sv2-border);
+ border-radius:var(--sv2-radius-panel);min-width:0;min-height:440px;background:var(--sv2-surface);overflow:hidden}
+.runList{border-right:1px solid var(--sv2-border);max-height:85dvh;overflow:auto}
+.runList h2{margin:0;padding:14px;font:600 12px var(--sv2-font-body);position:sticky;top:0;
+ background:var(--sv2-surface);border-bottom:1px solid var(--sv2-border)}
+.runList button{display:grid;gap:5px;text-align:left;padding:12px;width:100%;cursor:pointer;
+ background:transparent;color:var(--sv2-fg);border:0;border-bottom:1px solid var(--sv2-border);font:12px var(--sv2-font-body)}
+.runList button:hover,.runList button[aria-current="true"]{background:var(--sv2-selected)}
+.runList button[aria-current="true"]{box-shadow:inset 3px 0 0 var(--sv2-accent)}
+.runList small{font:10px var(--sv2-font-code);color:var(--sv2-muted);overflow-wrap:anywhere}
+.runList span{color:var(--sv2-fg-2)}
+.inspector{padding:20px;min-width:0;overflow:auto;display:grid;align-content:start;gap:16px}
+.inspectorTitle{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.inspectorTitle h2{font-size:20px;margin:5px 0 0}
+.inspectorTitle small{font:11px var(--sv2-font-code);color:var(--sv2-muted)}
+.gates{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px}
+.gates>div{min-width:0;display:grid;gap:6px;padding:10px;background:var(--sv2-recess);border-radius:var(--sv2-radius-control);font-size:12px}
+.gates strong{font-weight:500;color:var(--sv2-muted)}
+.gates code{overflow-wrap:anywhere;font:11px var(--sv2-font-code)}
+.progress{width:100%;accent-color:var(--sv2-accent)}
+.panelTitle{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--sv2-border)}
+.panelTitle h3{margin:0 0 8px;font:600 13px var(--sv2-font-body)}
+.panelTitle span{color:var(--sv2-muted);font-size:12px}
+.matrix{display:flex;flex-wrap:wrap;gap:6px}
+.matrix button{border-radius:var(--sv2-radius-control);border:1px solid var(--sv2-border-strong);
+ padding:8px 10px;font:11px var(--sv2-font-code);cursor:pointer;color:var(--sv2-fg)}
+.ok{background:var(--sv2-recess)}.warn{background:var(--sv2-warn-bg)}
+.fail{background:var(--sv2-critical-bg)}
+.matrix button[aria-pressed="true"]{outline:2px solid var(--sv2-accent);outline-offset:1px}
+.caseDetail{display:grid;grid-template-columns:minmax(110px,1fr) minmax(0,3fr);gap:10px;font-size:12px}
+.caseDetail dt{color:var(--sv2-muted)}.caseDetail dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.output{white-space:pre-wrap;overflow-wrap:anywhere;max-height:350px;overflow:auto;
+ padding:12px;background:var(--sv2-recess);font:11px/1.6 var(--sv2-font-code)}
+.note{font-size:12px;color:var(--sv2-muted);line-height:1.5;max-width:70ch}
+@media(max-width:900px){.split{grid-template-columns:minmax(0,1fr)}.runList{max-height:250px;
+ border-right:0;border-bottom:1px solid var(--sv2-border)}.measures{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:500px){.page,.inspector{padding:12px}.gates{grid-template-columns:minmax(0,1fr)}}

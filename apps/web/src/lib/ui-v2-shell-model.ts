@@ -55,6 +55,10 @@ export function resolveUiV2Route(appPath: string): UiV2RouteResolution {
     return unavailable;
   }
   const normalized = appPath === "/" ? "/dashboard" : appPath;
+  // UX-04: real tenant-owned /runs route; preserve the 12-entry classic route registry.
+  if (normalized === "/runs") return {
+    kind: "collection", navId: "evaluations", appPath: "/runs", resourceId: null,
+  };
   const route = NAVIGATION.find(item => item.appPath === normalized);
   if (route) return { kind: "collection", navId: route.id,
     appPath: normalized, resourceId: null };
@@ -79,6 +83,8 @@ export function buildUiV2RouteCrumbs(
       ["Workspace", null], ["Page unavailable", "current"],
     ]);
   }
+  if (route.kind === "collection" && appPath === "/runs") return buildUiV2Crumbs(workspaceSlug,
+    [["Workspace", null], ["Runs", "current"]]);
   if (route.kind === "detail" && route.navId === "catalog") {
     return buildUiV2Crumbs(workspaceSlug, [
       ["Workspace", null], ["Marketplace", "/catalog"], ["Skill", "current"],
@@ -138,7 +144,7 @@ export function isUiV2EnabledForWorkspace(
 /**
  * Reference navigation is six operational workspaces and two administrative areas.
  * Canonical routes above remain unchanged for deep-link and governance parity.
- * Workbench/Runs are authenticated pickers until dedicated source-backed list pages ship.
+ * Workbench is a picker; Runs has an authorized tenant route.
  */
 export type UiV2WorkspaceNavId =
   "overview" | "library" | "workbench" | "evaluations" | "runs" | "insights" |
@@ -164,9 +170,9 @@ export function getUiV2WorkspaceNavigation(
     { id: "workbench", label: "Workbench", group: "primary", href: null,
       picker: "workbench", active: active === "skills" && detail, count: null },
     { id: "evaluations", label: "Evaluations", group: "primary", href: link("/evaluations"),
-      picker: null, active: active === "evaluations" && !detail, count: counts.evaluations },
-    { id: "runs", label: "Runs", group: "primary", href: null,
-      picker: "runs", active: active === "evaluations" && detail, count: null },
+      picker: null, active: active === "evaluations" && !detail && appPath !== "/runs", count: counts.evaluations },
+    { id: "runs", label: "Runs", group: "primary", href: link("/runs"),
+      picker: null, active: appPath === "/runs" || (active === "evaluations" && detail), count: null },
     { id: "insights", label: "Insights", group: "primary", href: link("/intelligence"),
       picker: null, active: ["intelligence","releases"].includes(active ?? ""), count: null },
     { id: "integrations", label: "Integrations", group: "admin", href: link("/router"),

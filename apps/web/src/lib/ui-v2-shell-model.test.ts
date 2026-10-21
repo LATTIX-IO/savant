@@ -115,7 +115,7 @@ test("UX-02 unknown and hostile tenant paths never spoof an active section or re
     "/skills/..", "/skills/%2e%2e", "/skills/%2Fsecret", "/skills/a%00b",
     "/skills/one?tab=private", "/settings#secret", "/settings/../skills",
     "//evil.test/x", "https://evil.test/skills", "/\\evil.test/skills",
-    "/runs", "/workflows", "/discovery", "/reports", "/not-real",
+    "/workflows", "/discovery", "/reports", "/not-real",
   ]) {
     assert.equal(resolveUiV2Route(path).kind, "unavailable", path);
     assert.equal(getUiV2Navigation("a",path,EMPTY_SAVANT_SHELL_DATA.counts,true)
@@ -164,27 +164,28 @@ test("F1 reference IA has six primary workspaces, two admin areas and no invente
   assert.deepEqual(list.filter(x => x.group === "admin").map(x => x.label),
     ["Integrations","Settings"]);
   assert.equal(list.find(x => x.id === "workbench")?.picker, "workbench");
-  assert.equal(list.find(x => x.id === "runs")?.picker, "runs");
+  assert.equal(list.find(x => x.id === "runs")?.picker, null);
+  assert.equal(list.find(x => x.id === "runs")?.href, "/o/tenant%20one/runs");
   for (const item of list) {
     if (item.href) {
       assert.match(item.href, /^\/o\/tenant%20one\//);
       assert.equal(resolveUiV2Route(item.href.replace(/^\/o\/tenant%20one/, "")).kind, "collection");
     } else {
-      assert.ok(item.picker === "workbench" || item.picker === "runs");
+      assert.equal(item.picker, "workbench");
     }
   }
 });
 test("F1 active state reflects detail modes and preserves legacy contextual admin routes", () => {
   for (const [path, id] of [
     ["/skills", "library"], ["/repositories", "library"], ["/catalog/example", "library"],
-    ["/skills/source-id", "workbench"], ["/evaluations", "evaluations"],
+    ["/skills/source-id", "workbench"], ["/evaluations", "evaluations"], ["/runs","runs"],
     ["/evaluations/run-id", "runs"], ["/releases", "insights"],
     ["/connectors", "integrations"], ["/policies", "settings"],
   ] as const) {
     const items = getUiV2WorkspaceNavigation("org", path, EMPTY_SAVANT_SHELL_DATA.counts);
     assert.deepEqual(items.filter(x => x.active).map(x => x.id), [id], path);
   }
-  for (const invalid of ["/runs", "/workflows", "//evil", "/skills/%2e%2e"]) {
+  for (const invalid of ["/runs/run-private", "/workflows", "//evil", "/skills/%2e%2e"]) {
     assert.equal(getUiV2WorkspaceNavigation("org", invalid, EMPTY_SAVANT_SHELL_DATA.counts)
       .filter(x => x.active).length, 0);
   }
@@ -199,4 +200,21 @@ test("F1 keyboard palette may show only real navigable, tenant-owned URLs and do
   assert.match(source, /buildTenantAppPath/);
   assert.match(source, /getUiV2Navigation/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|dangerouslySetInnerHTML|\.innerHTML\s*=|fake|mockRun|window\.location/);
+});
+
+test("UX-04 Runs path is real, tenant-owned and preserves hostile path denial", () => {
+  assert.equal(resolveUiV2Route("/runs").kind,"collection");
+  assert.equal(buildUiV2WorkspaceSwitchPath("tenant-b","/runs"),"/o/tenant-b/runs");
+  assert.deepEqual(getUiV2WorkspaceNavigation("mine","/runs",EMPTY_SAVANT_SHELL_DATA.counts)
+    .filter(x=>x.active).map(x=>x.id),["runs"]);
+  for(const unsafe of ["/runs/private-id", "/runs/../skills", "/runs?run=foreign",
+    "/runs%2fother", "//evil/runs"]) {
+    assert.equal(resolveUiV2Route(unsafe).kind,"unavailable",unsafe);
+    assert.equal(buildUiV2WorkspaceSwitchPath("other",unsafe),"/o/other/dashboard");
+  }
+  assert.equal(existsSync(fileURLToPath(new URL("../app/o/[workspaceSlug]/runs/page.tsx",
+    import.meta.url))),true);
+  assert.deepEqual(buildUiV2RouteCrumbs("mine","/runs"),[
+    {label:"Workspace",href:null,current:false},{label:"Runs",href:null,current:true},
+  ]);
 });

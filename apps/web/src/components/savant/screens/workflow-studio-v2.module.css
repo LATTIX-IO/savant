@@ -56,3 +56,15 @@
 .footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--sv2-muted);font-size:11px}
 @media(max-width:1150px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1 / -1;max-height:330px;border-top:1px solid var(--sv2-border);border-left:0}}
 @media(max-width:750px){.page{padding:10px;min-height:auto}.layout{grid-template-columns:minmax(0,1fr)}.sidebar{border-right:0;border-bottom:1px solid var(--sv2-border);max-height:220px}.inspector{grid-column:1;max-height:400px}.graph{min-height:350px}.selector label,.selector label:first-child{flex:1;min-width:100%}.source{min-height:350px}.nodes button{width:min(100%,240px)}}
+
+/* Human-editable typed data-flow ports remain accessible at narrow widths. */
+.portRow { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(0,1.4fr) auto;
+  align-items:end; gap:6px; padding:8px 0; border-bottom:1px solid var(--sv2-border); }
+.portRow code { overflow-wrap:anywhere; font:10px var(--sv2-font-code); }
+.portRow label { min-width:0; }
+.portRow label input { width:100%; min-width:0; }
+.portRow button { min-width:0; }
+@media(max-width:750px) {
+  .portRow { grid-template-columns:minmax(0,1fr) auto; }
+  .portRow label { grid-column:1 / -1; grid-row:2; }
+}

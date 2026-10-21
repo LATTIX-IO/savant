@@ -11,6 +11,8 @@ import { fetchRepositoryList } from "@/lib/control-plane-client";
 import { buildTenantAwareAppPath, withWorkspaceSlugQuery } from "@/lib/tenant-paths";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { workflowDocumentPath, workflowIdValid, workflowSaveGate, layoutWorkflowGraph } from "@/lib/ui-v2-workflow-model";
+import { addWorkflowConnection, addWorkflowPort, editWorkflowPortType,
+  removeWorkflowNode, removeWorkflowPort } from "@/lib/ui-v2-workflow-editor";
 import styles from "./workflow-studio-v2.module.css";
 
 type WorkflowRecord = {
@@ -79,7 +81,9 @@ export function WorkflowStudioV2(){
   const [message,setMessage]=useState("");
   const [busy,setBusy]=useState(false);
   const [fromId,setFromId]=useState("");
+  const [fromPort,setFromPort]=useState("");
   const [toId,setToId]=useState("");
+  const [toPort,setToPort]=useState("");
   const scopeKey=`${slug}:${repositoryId}:${workflowId}`;
   const active=loaded.key===scopeKey?loaded:NONE;
   const repo=inventory.scope===slug?inventory.data.find(r=>r.id===repositoryId):null;
@@ -99,6 +103,8 @@ export function WorkflowStudioV2(){
   const gate=workflowSaveGate({hasRecord:active.phase==="ready",canCreate:active.phase==="missing",
     valid:validation.valid,dirty,repositorySupported:available});
   const selected=draft?.nodes.find(n=>n.id===selectedId)||null;
+  const fromNode=draft?.nodes.find(n=>n.id===fromId)||null;
+  const toNode=draft?.nodes.find(n=>n.id===toId)||null;
   const libraryHref=buildTenantAwareAppPath(pathname,"/skills") as Route;
 
   useEffect(()=>{
@@ -207,23 +213,30 @@ export function WorkflowStudioV2(){
   }
   function removeNode(){
     if(!draft||!selected)return;
-    replaceDraft({...draft,nodes:draft.nodes.filter(n=>n.id!==selected.id),
-      edges:draft.edges.filter(e=>e.from.nodeId!==selected.id&&e.to.nodeId!==selected.id)});
+    if(!window.confirm(`Remove ${selected.label||selected.id} and its connections?`))return;
+    replaceDraft(removeWorkflowNode(draft,selected.id));
     setSelectedId("");
   }
+  function modifyPort(direction:"inputs"|"outputs",portId:string,type:string){
+    if(!draft||!selected)return;
+    const result=editWorkflowPortType(draft,selected.id,direction,portId,type);
+    if(result.ok)replaceDraft(result.document);else setMessage(result.reason);
+  }
+  function insertPort(direction:"inputs"|"outputs"){
+    if(!draft||!selected)return;
+    const result=addWorkflowPort(draft,selected.id,direction);
+    if(result.ok)replaceDraft(result.document);else setMessage(result.reason);
+  }
+  function deletePort(direction:"inputs"|"outputs",portId:string){
+    if(!draft||!selected)return;
+    if(!window.confirm("Remove this port and all connections referencing it?"))return;
+    const result=removeWorkflowPort(draft,selected.id,direction,portId);
+    if(result.ok)replaceDraft(result.document);else setMessage(result.reason);
+  }
   function addEdge(){
-    if(!draft||!fromId||!toId||fromId===toId)return;
-    const from=draft.nodes.find(n=>n.id===fromId),to=draft.nodes.find(n=>n.id===toId);
-    const output=from?.outputs?.[0],input=to?.inputs?.[0];
-    if(!output||!input){setMessage("Both steps require an output and an input port.");return;}
-    if(output.dataType!=="any"&&input.dataType!=="any"&&output.dataType!==input.dataType){
-      setMessage("The selected ports have incompatible data types.");return;
-    }
-    if(draft.edges.some(e=>e.from.nodeId===fromId&&e.to.nodeId===toId)){
-      setMessage("That connection already exists.");return;
-    }
-    replaceDraft({...draft,edges:[...draft.edges,{id:nextId("edge",draft.edges),
-      from:{nodeId:fromId,portId:output.id},to:{nodeId:toId,portId:input.id}}]});
+    if(!draft)return;
+    const result=addWorkflowConnection(draft,fromId,fromPort,toId,toPort);
+    if(result.ok)replaceDraft(result.document);else setMessage(result.reason);
   }
   async function save(){
     if(!slug||!repositoryId||!draft||!gate.allowed||busy||active.key!==scopeKey)return;
@@ -372,11 +385,19 @@ export function WorkflowStudioV2(){
               replaceDraft({...draft,edges:draft.edges.filter(e=>e.id!==edge.id)})}>Remove</button>
           </li>)}</ul>
           <div className={styles.connect}>
-            <label>From<select value={fromId} onChange={e=>setFromId(e.target.value)}><option value="">Step</option>
+            <label>From<select value={fromId} onChange={e=>{setFromId(e.target.value);setFromPort("");}}><option value="">Step</option>
               {draft.nodes.map(n=><option key={n.id} value={n.id}>{n.label||n.id}</option>)}</select></label>
-            <label>To<select value={toId} onChange={e=>setToId(e.target.value)}><option value="">Step</option>
+            <label>From output<select value={fromPort} onChange={e=>setFromPort(e.target.value)}>
+              <option value="">Port</option>
+              {(fromNode?.outputs??[]).map(p=><option key={p.id} value={p.id}>{p.id} · {p.dataType}</option>)}
+            </select></label>
+            <label>To<select value={toId} onChange={e=>{setToId(e.target.value);setToPort("");}}><option value="">Step</option>
               {draft.nodes.map(n=><option key={n.id} value={n.id}>{n.label||n.id}</option>)}</select></label>
-            <button type="button" onClick={addEdge} disabled={!fromId||!toId||busy}>Connect steps</button>
+            <label>To input<select value={toPort} onChange={e=>setToPort(e.target.value)}>
+              <option value="">Port</option>
+              {(toNode?.inputs??[]).map(p=><option key={p.id} value={p.id}>{p.id} · {p.dataType}</option>)}
+            </select></label>
+            <button type="button" onClick={addEdge} disabled={!fromId||!fromPort||!toId||!toPort||busy}>Connect steps</button>
           </div>
         </section>
         <aside className={styles.inspector} aria-label="Step inspector">
@@ -386,7 +407,23 @@ export function WorkflowStudioV2(){
             <label>Title<input value={selected.label??""} maxLength={2048}
               onChange={e=>changeNode(selected.id,{label:e.target.value})}/></label>
             <label>Kind<select value={selected.kind} onChange={e=>changeNodeKind(e.target.value as WorkflowNodeKind)}>{KINDS.map(k=><option key={k} value={k}>{k}</option>)}</select></label>
-            <p>Port metadata and provider-native payloads can be inspected and edited in JSON source. Native operations are never executed here.</p>
+            <h3>Typed input ports</h3>
+            {(selected.inputs??[]).map(p=><div key={p.id} className={styles.portRow}>
+              <code>{p.id}</code>
+              <label>Data type<input aria-label={`Type for input ${p.id}`}
+                value={p.dataType} onChange={e=>modifyPort("inputs",p.id,e.target.value)}/></label>
+              <button type="button" onClick={()=>deletePort("inputs",p.id)}>Remove</button>
+            </div>)}
+            <button type="button" onClick={()=>insertPort("inputs")} disabled={(selected.inputs?.length??0)>=100}>Add input</button>
+            <h3>Typed output ports</h3>
+            {(selected.outputs??[]).map(p=><div key={p.id} className={styles.portRow}>
+              <code>{p.id}</code>
+              <label>Data type<input aria-label={`Type for output ${p.id}`}
+                value={p.dataType} onChange={e=>modifyPort("outputs",p.id,e.target.value)}/></label>
+              <button type="button" onClick={()=>deletePort("outputs",p.id)}>Remove</button>
+            </div>)}
+            <button type="button" onClick={()=>insertPort("outputs")} disabled={(selected.outputs?.length??0)>=100}>Add output</button>
+            <p>Opaque provider-native extensions and edge conditions can be edited as JSON. Savant never executes them.</p>
             <button type="button" onClick={removeNode} disabled={busy}>Remove step and connections</button>
           </div>:<p>Select a graph step to edit its metadata.</p>}
           <h3>Version</h3>

@@ -4,13 +4,13 @@ import Link from "next/link";
 import type {Route} from "next";
 import {usePathname} from "next/navigation";
 import {useEffect,useState,type ReactNode} from "react";
-import type {AIConnectionSummary,ConnectorDashboardPayload,EvaluationDashboardPayload,
+import type {AIConnectionSummary,ConnectorDashboardPayload,
  RepositoryListItem} from "@savant/types";
 import {UiV2EmptyState,UiV2Metric,UiV2PageHeader,UiV2StateBanner,
  UiV2Status,UiV2TableViewport} from "@/components/savant/ui-v2";
 import {useUiV2WorkspaceSlug} from "@/components/savant/ui-v2/mode";
-import {fetchRepositoryList,fetchAIConnections,fetchConnectorDashboard,
- fetchEvaluationDashboard} from "@/lib/control-plane-client";
+import {fetchRepositoryList,fetchAIConnections,fetchConnectorDashboard} from "@/lib/control-plane-client";
+import {inspectUiV2ProviderLanes} from "@/lib/ui-v2-provider-lanes";
 import {getUiV2RepositoryHealth} from "@/lib/ui-v2-library-model";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
 import styles from "./operational-admin-v2.module.css";
@@ -18,9 +18,9 @@ import styles from "./operational-admin-v2.module.css";
 type Section="source"|"models"|"clients"|"distribution"|"setup"|"router";
 type IntegrationEvidence={scope:string;loading:boolean;repositories:readonly RepositoryListItem[]|null;
  models:readonly AIConnectionSummary[]|null;connectors:ConnectorDashboardPayload|null;
- evaluations:EvaluationDashboardPayload|null;errors:readonly string[]};
+ errors:readonly string[]};
 const EMPTY:IntegrationEvidence={scope:"",loading:true,repositories:null,models:null,
- connectors:null,evaluations:null,errors:[]};
+ connectors:null,errors:[]};
 
 export function IntegrationsV2({legacy}:{legacy:ReactNode}){
  const slug=useUiV2WorkspaceSlug()??"";
@@ -36,19 +36,16 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
     fetchRepositoryList({workspaceSlug:slug,signal:controller.signal}),
     fetchAIConnections({workspaceSlug:slug,signal:controller.signal}),
     fetchConnectorDashboard({workspaceSlug:slug,signal:controller.signal}),
-    fetchEvaluationDashboard({workspaceSlug:slug,signal:controller.signal}),
-  ]).then(([repositories,models,connectors,evaluations])=>{
+  ]).then(([repositories,models,connectors])=>{
     if(controller.signal.aborted)return;
     setEvidence({scope:slug,loading:false,
       repositories:repositories.status==="fulfilled"?repositories.value.data:null,
       models:models.status==="fulfilled"?models.value.data:null,
       connectors:connectors.status==="fulfilled"?connectors.value.data:null,
-      evaluations:evaluations.status==="fulfilled"?evaluations.value.data:null,
       errors:[
        ...(repositories.status==="rejected"?["Repository connections unavailable."]:[]),
        ...(models.status==="rejected"?["Model connections unavailable or forbidden."]:[]),
        ...(connectors.status==="rejected"?["Distribution connectors unavailable."]:[]),
-       ...(evaluations.status==="rejected"?["Evaluation readiness unknown."]:[]),
       ]});
   });
   return ()=>controller.abort();
@@ -62,8 +59,8 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
  const status=(model:AIConnectionSummary)=>model.status==="active"?"ready":
    model.status==="revoked"?"failed":"warning";
  const repoIndexed=live.repositories?.filter(r=>getUiV2RepositoryHealth(r)==="ready").length??null;
- const providerReady=live.models?.some(m=>m.status==="active"&&m.supportsExecution)??false;
- const firstEvaluation=live.evaluations?.runs.length??null;
+ const lanes=inspectUiV2ProviderLanes(live.models);
+ const providerReady=lanes.workspaceOpenAiExecutor!==null;
  return <div className={styles.page}>
   <UiV2PageHeader title="Integrations" eyebrow="Workspace / connected systems"
    description="Real source connections, authorized model metadata, router controls, and distribution."
@@ -114,6 +111,45 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
             <td>{model.lastRotated||"Not available"}</td>
             <td><UiV2Status state={status(model)} label={model.status}/></td>
           </tr>)}</tbody></table></UiV2TableViewport>}
+      <div className={styles.providerLanes} aria-label="AI provider execution contexts">
+        <section>
+          <h3>Evaluation executor</h3>
+          {lanes.workspaceOpenAiExecutor
+            ? <UiV2Status state="ready" label={lanes.workspaceOpenAiExecutor.label+" · default workspace OpenAI metadata"}/>
+            : <UiV2Status state="unavailable" label="No active default workspace OpenAI executor"/>}
+          <p className={styles.note}>The current saved Test Bench supports platform NIM or
+            a tenant-owned OpenAI executor. A saved connection is not proof of a successful
+            provider call, restored schema, or recoverable encryption key.</p>
+        </section>
+        <section>
+          <h3>Evaluation judge</h3>
+          <UiV2Status state="warning" label="Platform JEV judge · separate service"/>
+          <p className={styles.note}>{lanes.defaultJudgeCount} active BYO judge default(s)
+            recorded as metadata. Test Bench does not dynamically route judging through
+            that setting, so it cannot authorize a change of judge here.</p>
+        </section>
+        <section>
+          <h3>Production AI serving</h3>
+          <UiV2Status state="unavailable" label="Independent production routing not configured"/>
+          <p className={styles.note}>Live end-user AI inference has no separately enforced
+            tenant default in this integration. Do not reuse the evaluation executor as
+            a production provider or infer production readiness from its status.</p>
+        </section>
+      </div>
+      <div className={styles.providerAuth} aria-label="Account-based AI authorization">
+        <h3>Connect an account instead of pasting an API key</h3>
+        <p className={styles.note}><strong>ChatGPT / Codex:</strong> OpenAI supports
+          delegated ChatGPT sign-in and eligible plan-backed requests. Savant requires
+          commercial partner enablement before it can offer that account connection.
+          No OAuth authorization is available from this UI today.</p>
+        <UiV2Status state="planned" label="ChatGPT plan sign-in · partner enablement required"/>
+        <p className={styles.note}><strong>Claude Code:</strong> A user may sign into
+          the unmodified Claude Code runtime through Anthropic&apos;s own authentication.
+          Savant cannot collect Claude subscription tokens or expose an independent
+          Claude.ai OAuth sign-in for hosted model inference. Organization-owned Claude
+          API credentials or workload identity are a separate option.</p>
+        <UiV2Status state="unavailable" label="Hosted Claude.ai subscription OAuth not supported"/>
+      </div>
       <UiV2StateBanner state="ready" label="API credentials are never returned to this read-only topology."/>
     </>:tab==="clients"?<>
       <h2>Agent clients</h2>
@@ -143,19 +179,23 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
            href:repositoryHref,action:"Open repository inventory"},
           {title:"3 · Index skills",ok:repoIndexed!==null&&repoIndexed>0,
            href:repositoryHref,action:"Inspect index state"},
-          {title:"4 · Connect an execution model",ok:providerReady,
-           href:modelsHref,action:"Manage model providers"},
-          {title:"5 · Run a first evaluation",ok:firstEvaluation!==null&&firstEvaluation>0,
-           href:evaluationsHref,action:"Open Evaluations"},
+          {title:"4 · Configure a supported evaluation executor",ok:providerReady,
+           href:modelsHref,action:"Manage model providers",unverified:false},
+          {title:"5 · Verify a real Test Bench run",ok:false,
+           href:evaluationsHref,action:"Inspect provider-backed results",unverified:true},
         ]).map(item=><div key={item.title}>
           <strong>{item.title}</strong><UiV2Status
-            state={item.ok?"ready":"warning"} label={item.ok?"Observed":"Action / evidence required"}/>
+            state={item.unverified?"unavailable":item.ok?"ready":"warning"}
+            label={item.unverified?"Provider-backed completion not verified":
+              item.ok?"Connection metadata observed · runtime not verified":
+              "Action / evidence required"}/>
           <Link href={item.href}>{item.action}</Link>
         </div>)}
       </div>
-      <p className={styles.note}>An indexed evaluation record is not proof of a Test Bench provider-backed
-         case execution. Saved suites, recoverable keys, billing receipts and live provider
-         acceptance remain separate gates. No step uses browser-local simulated state.</p>
+      <p className={styles.note}>An indexed or imported evaluation never completes step 5.
+         It requires a verified provider-backed case receipt, which this tenant-scoped
+         setup read model does not supply. Saved suites, recoverable keys, billing receipts
+         and live provider acceptance remain separate gates. No step uses browser-local simulated state.</p>
       <Link href={defaultHref}>Workspace settings</Link>
     </>:<div className={styles.legacy}>
       <UiV2StateBanner state="warning"

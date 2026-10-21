@@ -1,4 +1,6 @@
 "use client";
+import {useUiV2Mode} from "@/components/savant/ui-v2/mode";
+import {SettingsV2} from "./settings-v2";
 
 import type {
   AIConnectionStatus,
@@ -38,7 +40,7 @@ const SECTIONS: { id: SettingsSectionId; label: string; sub: string }[] = [
   { id: "billing", label: "Billing", sub: "Plan & usage" },
 ];
 
-export function SettingsScreen({
+function ClassicSettingsScreen({
   viewer,
   settings,
 }: {
@@ -1836,4 +1838,11 @@ function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
       </SettingsPanel>
     </>
   );
+}
+
+/** Fallback keeps all existing credential, billing and role-gated mutation paths. */
+export function SettingsScreen(props:{viewer:AuthViewer;settings:WorkspaceSettingsPayload}) {
+ const v2=useUiV2Mode();
+ return v2?<SettingsV2 settings={props.settings} legacy={<ClassicSettingsScreen {...props}/>}/>
+  :<ClassicSettingsScreen {...props}/>;
 }

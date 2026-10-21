@@ -137,6 +137,7 @@ export function WorkflowStudioV2(){
     readRef.current?.abort();readRef.current=null;
     queueMicrotask(()=>{setBusy(false);setLoaded({...NONE,key:scopeKey});setDraft(null);setBaseline("");
       setSelectedId("");setMessage("");setJsonError("");setMode("graph");setText("");});
+    return ()=>{readRef.current?.abort();};
   },[scopeKey]);
 
   useEffect(()=>{
@@ -230,6 +231,8 @@ export function WorkflowStudioV2(){
     try{spec=parseWorkflowSpecification(draft);}catch(e){
       setMessage(e instanceof Error?e.message:"Invalid graph.");return;
     }
+    const directCommit=active.phase==="ready"?"update":"create";
+    if(!window.confirm(`Commit this workflow directly to the selected Git repository (${directCommit})? Savant will not open a review proposal or execute the workflow.`))return;
     setBusy(true);setMessage("");
     try{
       const result=await requestWorkflow("PUT",slug,repositoryId,workflowId,{
@@ -250,6 +253,14 @@ export function WorkflowStudioV2(){
         :e instanceof Error?e.message:"Save failed. Draft retained.");
     }finally{setBusy(false);}
   }
+  function changeMode(){
+    if(mode==="json" && jsonError){
+      if(!window.confirm("Invalid JSON has not been applied to the graph. Discard those invalid edits?"))return;
+      if(draft)setText(JSON.stringify(draft,null,2));
+      setJsonError("");
+    }
+    setMode(value=>value==="graph"?"json":"graph");
+  }
   function onJsonChange(value:string){
     setText(value);
     try{
@@ -265,10 +276,10 @@ export function WorkflowStudioV2(){
         <h1>Workflow Studio</h1>
         <p>Model versioned, non-executable workflow specifications backed by authorized Git repositories.</p></div>
       <div className={styles.actions}>
-        <button type="button" onClick={()=>setMode(mode==="graph"?"json":"graph")} disabled={!draft}>
+        <button type="button" onClick={changeMode} disabled={!draft}>
           {mode==="graph"?"JSON source":"Graph and inspector"}
         </button>
-        <button type="button" onClick={()=>void save()} disabled={busy||!gate.allowed}>Save to Git</button>
+        <button type="button" onClick={()=>void save()} disabled={busy||!gate.allowed}>Commit to Git</button>
       </div>
     </header>
     <div className={styles.selector}>

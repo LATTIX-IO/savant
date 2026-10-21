@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { workflowIdValid, workflowDocumentPath, workflowSaveGate } from "./ui-v2-workflow-model.ts";
+import { workflowIdValid, workflowDocumentPath, workflowSaveGate, layoutWorkflowGraph } from "./ui-v2-workflow-model.ts";
 
 test("Workflow Studio uses only the server's restricted workflow IDs, never a user path", () => {
   for (const id of ["a","triage","incident-response","workflow_1.2","workflow-7"]) {
@@ -42,4 +42,46 @@ test("Workflow Studio is a version-pinned Git read/write UI, not a fake runtime"
   assert.match(source,/reconciliationRequired/);
   assert.match(route,/WorkflowStudioEntry/);
   assert.doesNotMatch(source,/localStorage|sessionStorage|dangerouslySetInnerHTML|fakeWorkflow|mockRun/);
+});
+
+test("directed graph layout reflects only authored nodes and exact edges",()=>{
+  const graph=layoutWorkflowGraph({
+    nodes:[{id:"first"},{id:"second"},{id:"third"}],
+    edges:[{id:"a",from:{nodeId:"first"},to:{nodeId:"second"}},
+      {id:"b",from:{nodeId:"second"},to:{nodeId:"third"}}],
+  });
+  assert.deepEqual(graph.nodes.map(x=>x.id),["first","second","third"]);
+  assert.equal(graph.edges.length,2);
+  assert.ok(graph.nodes[1]!.x>graph.nodes[0]!.x);
+  assert.ok(graph.nodes[2]!.x>graph.nodes[1]!.x);
+  assert.match(graph.edges[0]!.path,/^M /);
+  assert.equal(graph.truncated,false);
+  const capped=layoutWorkflowGraph({
+    nodes:Array.from({length:230},(_,n)=>({id:"n-"+n})),edges:[],
+  });
+  assert.equal(capped.nodes.length,200);
+  assert.equal(capped.truncated,true);
+});
+test("workflow source UI has active rev-pinned Git save and no browser-only persistence",()=>{
+  const source=readFileSync(fileURLToPath(new URL("../components/savant/screens/workflow-studio-v2.tsx",import.meta.url)),"utf8");
+  assert.match(source,/incompatibleWorkflowConnection/);
+  assert.match(source,/addWorkflowConnection/);
+  assert.match(source,/removeWorkflowPort/);
+  assert.match(source,/window.confirm\(.*Commit this workflow directly/);
+  assert.match(source,/readRef\.current\?\.abort/);
+  assert.match(source,/workflowSaveGate/);
+  assert.doesNotMatch(source,/localStorage|sessionStorage|dangerouslySetInnerHTML|faker|mockWorkflow/);
+});
+test("backend workflow routes authorize tenant and explicit repository/artifact policy before content",()=>{
+  const route=readFileSync(fileURLToPath(new URL("../app/api/workflows/[workflowId]/route.ts",import.meta.url)),"utf8");
+  const list=readFileSync(fileURLToPath(new URL("../server/workflows/inventory.ts",import.meta.url)),"utf8");
+  const idx=route.indexOf("authorizeCapabilityArtifact");
+  const read=route.indexOf("workflowArtifacts.get(");
+  assert.ok(idx>0&&read>idx,"Artifact checks must precede any workflow Git GET");
+  const put=route.indexOf("workflowArtifacts.save(");
+  const second=route.lastIndexOf("authorizeCapabilityArtifact");
+  assert.ok(put>second&&second>read,"Mutation authorization must precede any Git PUT");
+  assert.match(list,/authorizeCapabilityRepository/);
+  assert.match(list,/authorizeCapabilityArtifact/);
+  assert.match(list,/organization_id=\$\{actor\.organizationId\}/);
 });

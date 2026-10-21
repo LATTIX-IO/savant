@@ -65,6 +65,7 @@ export function WorkflowStudioV2(){
   const pathname=usePathname()||"/";
   const [inventory,setInventory]=useState<Inventory>(EMPTY);
   const [indexed,setIndexed]=useState<IndexLoad>(NO_INDEX);
+  const [indexRetry,setIndexRetry]=useState(0);
   const readRef=useRef<AbortController|null>(null);
   const [repositoryId,setRepositoryId]=useState("");
   const [workflowId,setWorkflowId]=useState("");
@@ -129,7 +130,7 @@ export function WorkflowStudioV2(){
       }).catch(error=>{if(!controller.signal.aborted)setIndexed({key,phase:"error",items:[],
         message:error instanceof Error?error.message:"Workflow index unavailable."});});
     return ()=>controller.abort();
-  },[slug,repositoryId,available]);
+  },[slug,repositoryId,available,indexRetry]);
 
   useEffect(()=>{
     // Never reuse another tenant, repository or workflow's mutable state.
@@ -224,6 +225,7 @@ export function WorkflowStudioV2(){
       setLoaded({key:scopeKey,phase:"ready",record:result,message:""});
       replaceDraft(result.specification);
       setBaseline(JSON.stringify(result.specification));
+      setIndexRetry(value=>value+1);
       setMessage(result.reconciliationRequired
         ?"Git saved the workflow, but its database index needs reconciliation."
         :`Saved to Git revision ${result.commitSha.slice(0,12)}. This does not run or publish the workflow.`);
@@ -257,20 +259,38 @@ export function WorkflowStudioV2(){
     </header>
     <div className={styles.selector}>
       <label>Repository
-        <select value={repositoryId} onChange={e=>setRepositoryId(e.target.value)} disabled={inventory.phase!=="ready"||busy}>
+        <select value={repositoryId} onChange={e=>setRepositoryId(e.target.value)} disabled={inventory.phase!=="ready"||busy||draft!==null}>
           <option value="">Select connected repository</option>
           {inventory.data.map(r=><option key={r.id} value={r.id}>{r.name} · {r.provider}</option>)}
         </select>
       </label>
       <label>Workflow ID
         <input value={workflowId} onChange={e=>setWorkflowId(e.target.value.trim().toLowerCase())}
-          placeholder="incident-response" maxLength={80} disabled={busy} />
+          placeholder="incident-response" maxLength={80} disabled={busy||draft!==null} />
       </label>
-      <button type="button" disabled={!safeId||!repositoryId||!available||busy} onClick={()=>void open()}>
+      <button type="button" disabled={!safeId||!repositoryId||!available||busy||draft!==null} onClick={()=>void open()}>
         Open from Git
       </button>
-      {active.phase==="missing"&&<button type="button" disabled={busy} onClick={create}>Create draft</button>}
+      {active.phase==="missing"&&draft===null&&<button type="button" disabled={busy} onClick={create}>Create draft</button>}
+      {draft&&<button type="button" disabled={busy} onClick={close}>Close workflow</button>}
     </div>
+    {repo&&available&&<div className={styles.selector}>
+      <label>Indexed workflows (discovery, not verified Git source)
+        <select value={visibleIndex.items.some(item=>item.workflowId===workflowId)?workflowId:""}
+          onChange={e=>setWorkflowId(e.target.value)} disabled={busy||draft!==null||visibleIndex.phase!=="ready"}>
+          <option value="">Choose indexed workflow</option>
+          {visibleIndex.items.map(item=><option key={item.workflowId} value={item.workflowId}>
+            {item.workflowId} · {item.version}
+          </option>)}
+        </select>
+      </label>
+      {visibleIndex.phase==="error"?<p role="alert" className={styles.error}>{visibleIndex.message}</p>:
+        visibleIndex.phase==="loading"?<p>Loading authorized index…</p>:
+        visibleIndex.phase==="ready"&&visibleIndex.items.length===0?
+          <p className={styles.help}>No readable indexed workflows. A Git workflow may still exist without an index record; use its ID to open.</p>:
+          <p className={styles.help}>Open an indexed artifact to verify the current Git contents. This list is not execution evidence.</p>}
+      <button type="button" onClick={()=>setIndexRetry(value=>value+1)} disabled={busy||!available}>Refresh index</button>
+    </div>}
     {inventory.phase==="error"&&<p role="alert" className={styles.error}>{inventory.message}</p>}
     {repo&&!available&&<p role="status" className={styles.warning}>Workflow Git writes currently support GitHub only; {repo.provider} is unsupported.</p>}
     {!safeId&&workflowId&&<p className={styles.warning}>Use a lowercase workflow ID of 1–80 safe characters, without traversal or path separators.</p>}

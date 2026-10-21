@@ -69,6 +69,8 @@ test("workflow source UI has active rev-pinned Git save and no browser-only pers
   assert.match(source,/removeWorkflowPort/);
   assert.match(source,/window.confirm\(.*Commit this workflow directly/);
   assert.match(source,/readRef\.current\?\.abort/);
+  assert.match(source,/document\.addEventListener\("click",guardClientLink,true\)/);
+  assert.match(source,/beforeunload/);
   assert.match(source,/workflowSaveGate/);
   assert.doesNotMatch(source,/localStorage|sessionStorage|dangerouslySetInnerHTML|faker|mockWorkflow/);
 });

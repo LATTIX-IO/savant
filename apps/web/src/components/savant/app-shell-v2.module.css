@@ -280,3 +280,10 @@
 .shortcut { color: var(--sv2-muted); border: 1px solid var(--sv2-border);
   background: var(--sv2-bg); border-radius: 4px; font: 10px var(--sv2-font-code); padding: 2px 4px; }
 @media (max-width: 900px) { .shortcut { display: none; } }
+
+/* PER-1609: subordinate Workbench destination, not an additional workspace. */
+.navSubItem { margin-left: 24px; padding-left: 10px; min-height: 30px; font-size: 11px; }
+.navSubActive { background: var(--sv2-selected); color: var(--sv2-fg); }
+@media(max-width:900px) {
+  .navSubItem { margin-left: 0; height: 50px; min-width: 84px; font-size: 10px; }
+}

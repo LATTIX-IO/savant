@@ -93,7 +93,7 @@ test("capture writer is local-only and never extracts authenticated session mate
  const script=fs.readFileSync(path.join(__dirname,"ux-v2-browser-capture.cjs"),"utf8");
  const runner=fs.readFileSync(path.join(__dirname,"ux-v2-authenticated-acceptance.cjs"),"utf8");
  assert.match(runner,/writePrivateBrowserCapture/);
- assert.match(runner,/completed===CASES\.length/);
+ assert.match(runner,/assert\.equal\(completed, CASES\.length/);
  assert.doesNotMatch(script,/readFileSync\(config\.statePath|token\.value|document\.cookie|fetch\(|axios|\.post\(/);
  assert.doesNotMatch(script,/process\.env\.SAVANT_UI_V2_ENABLED\s*=/);
 });

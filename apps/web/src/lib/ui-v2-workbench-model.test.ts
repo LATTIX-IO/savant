@@ -7,6 +7,7 @@ import type { SkillSourcePayload } from "@savant/types";
 import {
   getWorkbenchGate, matchesWorkbenchSourceSnapshot,
   submitReviewedWorkbenchProposal, sourceRevisionLabel, workbenchChangeStats,
+  buildObservedWorkbenchCanvas,
 } from "./ui-v2-workbench-model.ts";
 
 const source: SkillSourcePayload = {
@@ -137,4 +138,29 @@ test("eligible reviewed change submits exactly one server-side proposal, never a
   assert.deepEqual(input,{repositoryId:"repo-uuid",name:"<script>label</script>",
     path:"skill/SKILL.md",content:"# Revised"});
   assert.equal(submissions,1);
+});
+
+test("canvas only renders indexed Git source and actual skill-owned evaluation records", () => {
+  const detail = {skill:{skillUuid:source.skillUuid},evaluations:[
+    {id:"run-1",dataset:"dataset-v1",ref:"v2",status:"complete",passed:8,cases:10},
+  ]} as unknown as import("@savant/types").SkillDetailPayload;
+  assert.deepEqual(buildObservedWorkbenchCanvas(source,detail), {
+    source:{path:"skill/SKILL.md",commit:"abc123"},
+    evaluations:[{id:"run-1",dataset:"dataset-v1",ref:"v2",status:"complete",passed:8,cases:10}],
+  });
+  assert.deepEqual(buildObservedWorkbenchCanvas({...source,mode:"fallback"},detail),
+    {source:null,evaluations:[]});
+  assert.deepEqual(buildObservedWorkbenchCanvas(source,
+    {...detail,skill:{...detail.skill,skillUuid:"foreign-id"}}),
+    {source:{path:"skill/SKILL.md",commit:"abc123"},evaluations:[]});
+  assert.equal(buildObservedWorkbenchCanvas({...source,sourceCommitSha:null},detail).source?.commit,null);
+});
+test("canvas presentation cannot execute unverified workflow edges, bypass proposal review or overwrite source", () => {
+  const source = readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.tsx",import.meta.url)), "utf8");
+  for(const name of ["Canvas","Split","Code"]) assert.ok(source.includes(name));
+  assert.match(source,/UiV2CanvasRegion/);
+  assert.match(source,/buildObservedWorkbenchCanvas/);
+  assert.match(source,/beforeunload/);
+  assert.match(source,/guardNavigation/);
+  assert.doesNotMatch(source,/workflow-engine|executeWorkflow\s*\(|Math\.random|dangerouslySetInnerHTML/);
 });

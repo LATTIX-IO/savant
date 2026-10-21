@@ -122,7 +122,7 @@ async function performMainJourney(page, config, label, output) {
   const root = tenantPath(config, config.workspaceA, "");
   await page.goto(config.origin + root + "/dashboard", { waitUntil: "domcontentloaded" });
   await waitForV2(page);
-  await page.getByRole("heading", { name: "Operational overview" }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Overview", exact: true }).waitFor({ state: "visible" });
   await assertNoOuterOverflow(page);
   await page.screenshot({ path: path.join(output, label + "-overview.png") });
 
@@ -141,6 +141,7 @@ async function performMainJourney(page, config, label, output) {
   await page.locator('a[href="' + root + '/skills/' +
     encodeURIComponent(config.skillId) + '"]').first().click();
   await waitForV2(page);
+  await page.getByRole("button", { name: "Code", exact: true }).click();
   const editor = page.getByRole("textbox", { name: "SKILL.md Markdown source" });
   await editor.waitFor({ state: "visible", timeout: 20000 });
   assert.equal(await editor.isEnabled(), true, "Verified source must load.");
@@ -160,15 +161,16 @@ async function performMainJourney(page, config, label, output) {
 
   // Same-tenant deep links and client-side browser history must remain stable.
   // No writes: the draft above is reviewed but never submitted.
-  const active = page.locator('aside[aria-label="Application navigation"] a[aria-current="page"]');
-  assert.equal(await active.count(), 1, "Workbench must keep Skills as the active section.");
-  assert.equal(await active.getAttribute("href"), root + "/skills");
+  const active = page.locator('aside[aria-label="Application navigation"] [aria-current="page"]');
+  assert.equal(await active.count(), 1, "Workbench must have exactly one active workspace.");
+  assert.match((await active.textContent()) || "", /Workbench/);
 
   await page.goBack({ waitUntil: "domcontentloaded" });
   await waitForV2(page);
   await page.getByRole("heading", { name: "Library", exact: true }).waitFor({ state: "visible" });
   await page.goForward({ waitUntil: "domcontentloaded" });
   await waitForV2(page);
+  await page.getByRole("button", { name: "Code", exact: true }).click();
   await page.getByRole("textbox", { name: "SKILL.md Markdown source" })
     .waitFor({ state: "visible" });
   await assertNoOuterOverflow(page);
@@ -184,7 +186,7 @@ async function verifyTenantBoundaries(page, config) {
   await page.locator('a[href="' + bHome + '"]').click();
   await page.waitForURL("**" + bHome);
   await waitForV2(page);
-  await page.getByRole("heading", { name: "Operational overview" }).waitFor({ state: "visible" });
+  await page.getByRole("heading", { name: "Overview", exact: true }).waitFor({ state: "visible" });
 
   await page.goto(config.origin + tenantPath(config, config.workspaceB,
     "/skills/" + encodeURIComponent(config.skillId)), { waitUntil: "domcontentloaded" });

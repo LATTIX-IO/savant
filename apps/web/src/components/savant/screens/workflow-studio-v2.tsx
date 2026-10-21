@@ -114,6 +114,24 @@ export function WorkflowStudioV2(){
   },[slug]);
 
   useEffect(()=>{
+    if(!slug||!repositoryId||!available)return;
+    const controller=new AbortController();
+    const key=`${slug}:${repositoryId}`;
+    queueMicrotask(()=>{if(!controller.signal.aborted)setIndexed({key,phase:"loading",items:[],message:""});});
+    const path=withWorkspaceSlugQuery("/api/workflows",slug)+`&repositoryId=${encodeURIComponent(repositoryId)}`;
+    void fetch(path,{credentials:"same-origin",cache:"no-store",signal:controller.signal})
+      .then(async response=>{
+        const payload:unknown=await response.json().catch(()=>null);
+        if(!response.ok)throw new Error(errorMessage(payload,`Workflow index failed (${response.status}).`));
+        if(!payload||typeof payload!=="object"||!("data" in payload)||!Array.isArray(payload.data))
+          throw new Error("Workflow index response was invalid.");
+        if(!controller.signal.aborted)setIndexed({key,phase:"ready",items:payload.data as IndexedWorkflow[],message:""});
+      }).catch(error=>{if(!controller.signal.aborted)setIndexed({key,phase:"error",items:[],
+        message:error instanceof Error?error.message:"Workflow index unavailable."});});
+    return ()=>controller.abort();
+  },[slug,repositoryId,available]);
+
+  useEffect(()=>{
     // Never reuse another tenant, repository or workflow's mutable state.
     queueMicrotask(()=>{setLoaded({...NONE,key:scopeKey});setDraft(null);setBaseline("");
       setSelectedId("");setMessage("");setJsonError("");setMode("graph");setText("");});

@@ -29,7 +29,7 @@ test("v2 authoring composes existing encrypted server CRUD and role-gated source
   assert.match(screen,/listPersistedTestBenches/);
   assert.match(screen,/PersistedTestBench/);
   assert.match(screen,/workspaceSlug.*signal:controller.signal/);
-  assert.match(screen,/source\.canSave/);
+  assert.match(screen,/indexed\.canSave/);
   assert.match(screen,/Reference dataset catalog is not available/);
   assert.doesNotMatch(screen,/localStorage|sessionStorage|Math\.random|dangerouslySetInnerHTML|execWorkflow/);
   const classic=readFileSync(fileURLToPath(new URL("../components/savant/screens/evaluations.tsx",import.meta.url)),"utf8");

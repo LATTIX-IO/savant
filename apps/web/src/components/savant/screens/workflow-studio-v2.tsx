@@ -12,7 +12,7 @@ import { buildTenantAwareAppPath, withWorkspaceSlugQuery } from "@/lib/tenant-pa
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { workflowDocumentPath, workflowIdValid, workflowSaveGate, layoutWorkflowGraph } from "@/lib/ui-v2-workflow-model";
 import { addWorkflowConnection, addWorkflowPort, editWorkflowPortType,
-  removeWorkflowNode, removeWorkflowPort } from "@/lib/ui-v2-workflow-editor";
+  removeWorkflowNode, removeWorkflowPort, incompatibleWorkflowConnection } from "@/lib/ui-v2-workflow-editor";
 import styles from "./workflow-studio-v2.module.css";
 
 type WorkflowRecord = {
@@ -97,7 +97,12 @@ export function WorkflowStudioV2(){
   const validation=useMemo(()=>{
     if(!draft)return {valid:false,reason:"Open or create a workflow to edit."};
     if(jsonError)return {valid:false,reason:jsonError};
-    try{parseWorkflowSpecification(draft);return {valid:true,reason:"DAG schema valid."};}
+    try{
+      parseWorkflowSpecification(draft);
+      const mismatch=incompatibleWorkflowConnection(draft);
+      if(mismatch)return {valid:false,reason:`Connection ${mismatch} has incompatible or missing ports.`};
+      return {valid:true,reason:"DAG and typed data-flow ports valid."};
+    }
     catch(e){return {valid:false,reason:e instanceof Error?e.message:"Invalid graph."};}
   },[draft,jsonError]);
   const gate=workflowSaveGate({hasRecord:active.phase==="ready",canCreate:active.phase==="missing",

@@ -19,10 +19,22 @@ const newCase=():TestBenchCase=>({
 const KINDS:TestBenchCaseKind[]=["positive","negative","edge","escalation"];
 /** Durable case definitions; intentionally has no Run button until an actual executor ships. */
 export function PersistedTestBench({
-  skillId,pathname,readOnly,
-}:{skillId:string;pathname:string;readOnly:boolean}){
+  skillId,pathname,readOnly,guided=false,
+}:{skillId:string;pathname:string;readOnly:boolean;guided?:boolean}){
   const slug=extractWorkspaceSlugFromPathname(pathname);
   const [definitions,setDefinitions]=useState<TestBenchDefinition[]>([]);
+  const [step,setStep]=useState(0);
+  const STEP_NAMES=["Select suite","Name","Cases","Criteria","Review","Save and execute"] as const;
+  const [stepError,setStepError]=useState<string|null>(null);
+  function validForNext():boolean {
+    if(step===1 && (name.trim().length<1 || name.length>100)) return false;
+    if(step===2 && (cases.length<1||cases.length>8 ||
+      cases.some(c=>!c.prompt.trim()||c.prompt.length>2000))) return false;
+    if(step===3 || step===4) {
+      try { parseTestBenchCases(cases); }catch{return false;}
+    }
+    return true;
+  }
   const [selected,setSelected]=useState<TestBenchDefinition|null>(null);
   const [name,setName]=useState("My Test Bench cases");
   const [cases,setCases]=useState<TestBenchCase[]>([{caseId:"case-1",kind:"positive",prompt:"",context:null,expectedBehavior:""}]);
@@ -59,11 +71,13 @@ export function PersistedTestBench({
   function startNew(){
     if(!editable)return;
     requestId.current=null;setSelected(null);setName("New Test Bench");
+    if(guided) setStep(1);
     setCases([newCase()]);setNotice(null);setError(null);
   }
   function select(item:TestBenchDefinition){
     if(busy)return;
     requestId.current=null;setSelected(item);setName(item.name);
+    if(guided) setStep(1);
     setCases(item.cases.map(c=>({...c})));setNotice(null);setError(null);
   }
   function change(index:number,key:keyof TestBenchCase,value:string){
@@ -108,7 +122,7 @@ export function PersistedTestBench({
     <section className="panel" aria-label="Workspace Test Bench case suites">
       <div className="panel-hd">
         <div>
-          <div className="panel-title">Workspace Test Bench case suites</div>
+          <div className="panel-title">{guided?"Suite builder · persisted Test Bench":"Workspace Test Bench case suites"}</div>
           <div className="subtle" style={{fontSize:11.5}}>
             Versioned, encrypted case definitions shared across devices, pinned to one Git commit.
           </div>
@@ -128,7 +142,17 @@ export function PersistedTestBench({
             New case suite
           </button>
         </div>
-        {definitions.length?(
+        {guided?<nav aria-label="Suite builder steps" style={{display:"grid",gap:4,
+          gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))"}}>
+          {STEP_NAMES.map((title,index)=><button type="button" key={title}
+            aria-current={step===index?"step":undefined}
+            className="btn btn-sm btn-ghost" disabled={busy||index>step}
+            onClick={()=>{setStep(index);setStepError(null);}}
+            style={{textAlign:"left",borderBottom:step===index?"2px solid var(--sv2-accent)":"2px solid transparent"}}>
+            {index+1}. {title}
+          </button>)}
+        </nav>:null}
+        {(!guided||step===0)&&definitions.length?(
           <div style={{display:"grid",gap:6}}>
             {definitions.map(item=>(
               <button key={item.id} type="button" className="btn btn-sm btn-ghost"
@@ -138,19 +162,19 @@ export function PersistedTestBench({
               </button>
             ))}
           </div>
-        ):(!loading?<p className="subtle" style={{margin:0}}>No saved workspace case suites.</p>:null)}
+        ):(!loading&&(!guided||step===0)?<p className="subtle" style={{margin:0}}>No saved workspace case suites.</p>:null)}
         <div style={{borderTop:"1px solid var(--rule)",paddingTop:14,display:"grid",gap:12}}>
-          <div className="field">
+          {(!guided||step===1)&&<div className="field">
             <label className="field-label" htmlFor="test-bench-suite-name">Suite name</label>
             <input id="test-bench-suite-name" value={name} maxLength={100} disabled={!editable}
               onChange={e=>{requestId.current=null;setName(e.target.value);}} />
-          </div>
+          </div>}
           {selected?(
             <div className="subtle mono" style={{fontSize:11,overflowWrap:"anywhere"}}>
               Source: {selected.sourceCommitSha} · Revision {selected.revision}
             </div>
           ):null}
-          {cases.map((item,index)=>(
+          {(!guided||step===2||step===3)&&cases.map((item,index)=>(
             <div key={item.caseId} style={{border:"1px solid var(--rule)",borderRadius:6,padding:12,display:"grid",gap:10}}>
               <div className="row" style={{justifyContent:"space-between",alignItems:"center"}}>
                 <strong style={{fontSize:12}}>Case {index+1}</strong>
@@ -159,50 +183,69 @@ export function PersistedTestBench({
                     requestId.current=null;setCases(current=>current.filter((_,i)=>i!==index));
                   }}>Remove</button>
               </div>
-              <div className="field">
+              {(!guided||step===2)&&<div className="field">
                 <label className="field-label" htmlFor={`bench-kind-${index}`}>Scenario</label>
                 <select id={`bench-kind-${index}`} value={item.kind} disabled={!editable}
                   onChange={e=>change(index,"kind",e.target.value)}>
                   {KINDS.map(kind=><option key={kind} value={kind}>{kind}</option>)}
                 </select>
-              </div>
-              <div className="field">
+              </div>}
+              {(!guided||step===2)&&<div className="field">
                 <label className="field-label" htmlFor={`bench-prompt-${index}`}>User request or test prompt</label>
                 <textarea id={`bench-prompt-${index}`} rows={3} maxLength={2000} value={item.prompt}
                   disabled={!editable} onChange={e=>change(index,"prompt",e.target.value)} />
-              </div>
-              <div className="field">
+              </div>}
+              {(!guided||step===3)&&<div className="field">
                 <label className="field-label" htmlFor={`bench-expected-${index}`}>Expected behavior</label>
                 <textarea id={`bench-expected-${index}`} rows={2} maxLength={1000} value={item.expectedBehavior}
                   disabled={!editable} onChange={e=>change(index,"expectedBehavior",e.target.value)} />
-              </div>
-              <div className="field">
+              </div>}
+              {(!guided||step===2)&&<div className="field">
                 <label className="field-label" htmlFor={`bench-context-${index}`}>Optional safe context</label>
                 <textarea id={`bench-context-${index}`} rows={2} maxLength={1500} value={item.context??""}
                   disabled={!editable} onChange={e=>change(index,"context",e.target.value)} />
-              </div>
+              </div>}
             </div>
           ))}
           <div className="row" style={{gap:8,flexWrap:"wrap"}}>
-            <button type="button" className="btn btn-sm btn-ghost"
+            {(!guided||step===2)&&<button type="button" className="btn btn-sm btn-ghost"
               disabled={!editable||cases.length>=8} onClick={()=>{
                 requestId.current=null;setCases(current=>[...current,newCase()]);
-              }}>Add case ({cases.length}/8)</button>
-            <button type="button" className="btn btn-sm btn-primary" disabled={!editable}
-              onClick={()=>void save()}>{busy?"Saving…":selected?"Save revision":"Save new suite"}</button>
-            {selected?(
+              }}>Add case ({cases.length}/8)</button>}
+            {(!guided||step===5)&&<button type="button" className="btn btn-sm btn-primary" disabled={!editable}
+              onClick={()=>void save()}>{busy?"Saving…":selected?"Save revision":"Save new suite"}</button>}
+            {selected&&(!guided||step===5)?(
               <button type="button" className="btn btn-sm btn-ghost" disabled={!editable}
                 onClick={()=>void archive()}>Archive suite</button>
             ):null}
           </div>
+          {guided&&step===4?<div role="region" aria-label="Definition review" style={{display:"grid",gap:8}}>
+            <strong>Review persisted definition</strong>
+            <span>Suite: {name} · {cases.length} case(s)</span>
+            <span>Case kinds: {cases.map(c=>c.kind).join(", ")}</span>
+            <span>All cases require a prompt and expected behavior.</span>
+            <span>No actual provider price estimate is available at definition time.</span>
+            <span>Save requires a pinned Git revision and server-side RBAC, encryption and CAS validation.</span>
+            {validForNext()?<p role="status">Definition fields satisfy the supported case schema.</p>:
+              <p role="alert">Correct the missing or invalid case fields before saving.</p>}
+          </div>:null}
+          {guided?<div className="row" style={{gap:8,flexWrap:"wrap"}}>
+            <button type="button" className="btn btn-sm btn-ghost" disabled={step===0||busy}
+              onClick={()=>{setStep(x=>Math.max(0,x-1));setStepError(null);}}>Back</button>
+            <button type="button" className="btn btn-sm btn-primary"
+              disabled={step===5||busy||!validForNext()}
+              onClick={()=>{if(validForNext()){setStep(x=>Math.min(5,x+1));setStepError(null);}
+                else setStepError("Complete required fields before continuing.");}}>Continue</button>
+            {stepError?<span role="alert">{stepError}</span>:null}
+          </div>:null}
         </div>
         {(!slug||error)?<p role="alert" style={{fontSize:12,color:"var(--blood)",margin:0}}>{slug?error:"A workspace is required to load Test Bench cases."}</p>:null}
         {notice?<p role="status" style={{fontSize:12,margin:0}}>{notice}</p>:null}
-        {selected&&slug?(
+        {selected&&slug&&(!guided||step===5)?(
           <ObservedTestBenchRunPanel key={selected.id} skillId={skillId}
             definition={selected} workspaceSlug={slug} readOnly={readOnly}/>
         ):null}
-        {slug?<ObservedRunComparisonPanel skillId={skillId} workspaceSlug={slug}/>:null}
+        {slug&&(!guided||step===5)?<ObservedRunComparisonPanel skillId={skillId} workspaceSlug={slug}/>:null}
       </div>
     </section>
   );

@@ -12,6 +12,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
 import { Ic } from "@/components/savant/icons";
+import { useUiV2Mode } from "@/components/savant/ui-v2/mode";
+import { EvaluationsV2 } from "./evaluations-v2";
 import { Delta, Facet } from "@/components/savant/primitives";
 import {
   ControlPlaneClientError,
@@ -29,7 +31,7 @@ type RegressionLeader = {
   latestRunId: string;
 };
 
-export function EvaluationsScreen() {
+function ClassicEvaluationsScreen() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dashboard, setDashboard] = useState<EvaluationDashboardResponse["data"] | null>(null);
   const [loadState, setLoadState] = useState<LoadState>("loading");
@@ -646,4 +648,10 @@ function RunningDot() {
       }}
     />
   );
+}
+
+/** Feature-flagged v2 composition; classic Test Bench remains the rollback path. */
+export function EvaluationsScreen() {
+  const v2=useUiV2Mode();
+  return v2?<EvaluationsV2/>:<ClassicEvaluationsScreen/>;
 }

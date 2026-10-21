@@ -115,7 +115,7 @@ test("UX-02 unknown and hostile tenant paths never spoof an active section or re
     "/skills/..", "/skills/%2e%2e", "/skills/%2Fsecret", "/skills/a%00b",
     "/skills/one?tab=private", "/settings#secret", "/settings/../skills",
     "//evil.test/x", "https://evil.test/skills", "/\\evil.test/skills",
-    "/workflows", "/discovery", "/reports", "/not-real",
+    "/workflows/unknown", "/discovery", "/reports", "/not-real",
   ]) {
     assert.equal(resolveUiV2Route(path).kind, "unavailable", path);
     assert.equal(getUiV2Navigation("a",path,EMPTY_SAVANT_SHELL_DATA.counts,true)

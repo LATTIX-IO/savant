@@ -186,6 +186,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
         <div className={styles.actions}>
           <Link className={styles.linkButton} href={catalogHref} onClick={guardNavigation}>Back to Library</Link>
           <Link className={styles.linkButton} href={evaluationDetailHref} onClick={guardNavigation}>Evaluations</Link>
+          <Link className={styles.linkButton} href={buildTenantAwareAppPath(pathname,"/workflows") as Route} onClick={guardNavigation}>Workflow Studio</Link>
           <UiV2Button variant="tertiary" disabled={saveBusy}
             onClick={() => {
               if (comparison?.changed && !window.confirm("Discard the unsent draft and reload the current repository source?")) return;

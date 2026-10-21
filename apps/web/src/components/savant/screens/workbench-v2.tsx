@@ -251,8 +251,11 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
 
           <div className={`${styles.workArea} ${workspaceView === "split" ? styles.workAreaSplit : ""}`}>
             {workspaceView !== "code" ? <UiV2CanvasRegion label="Indexed skill and observed evaluation canvas"
-              unavailable={currentSource.phase !== "ready" ? "Indexed SKILL.md is not available" :
-                !observedCanvas.source ? "No verified indexed repository source" : undefined}>
+              {...(currentSource.phase !== "ready"
+                ? { unavailable: "Indexed SKILL.md is not available" }
+                : !observedCanvas.source
+                  ? { unavailable: "No verified indexed repository source" }
+                  : {})}>
               <div className={styles.visualCanvas}>
                 <p className={styles.canvasLane}>Indexed source · Git-owned artifact</p>
                 {observedCanvas.source ? <button type="button" className={styles.canvasSource}

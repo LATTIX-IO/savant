@@ -111,3 +111,16 @@ test("tenant-scoped live API paths carry explicit workspace selector, not the br
   assert.ok(!a.includes("ws+beta"));
   assert.ok(!b.includes("ws+alpha"));
 });
+
+test("reference library facets filter the already-authorized collection without inventing results", () => {
+  const skills = [
+    {name:"Contract review", description:"Legal", owner:"owner", team:"Legal", repo:"legal/skills",
+      tier:1, channel:"production", status:"healthy"},
+    {name:"Incident triage", description:"Ops", owner:"owner", team:"SRE", repo:"ops/skills",
+      tier:2, channel:"draft", status:"candidate"},
+  ] as unknown as SkillListItem[];
+  assert.deepEqual(filterUiV2Skills(skills, "", "all", {tier:1}).map(x=>x.name), ["Contract review"]);
+  assert.deepEqual(filterUiV2Skills(skills, "", "all", {repository:"ops/skills"}).map(x=>x.name), ["Incident triage"]);
+  assert.deepEqual(filterUiV2Skills(skills, "", "all", {tier:1, repository:"ops/skills"}), []);
+  assert.deepEqual(filterUiV2Skills(skills, "nonexistent", "all", {}), []);
+});

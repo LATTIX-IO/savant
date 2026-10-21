@@ -3,11 +3,11 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { SkillDetailPayload, SkillSourcePayload } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
-import { UiV2Button, UiV2EmptyState, UiV2Status } from "@/components/savant/ui-v2";
+import { UiV2Button, UiV2CanvasRegion, UiV2EmptyState, UiV2StateBanner, UiV2Status } from "@/components/savant/ui-v2";
 import { useUiV2Mode, useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
 import { proposeFileEdits } from "@/lib/git-connections-client";
@@ -15,7 +15,7 @@ import { parseMarkdownPreviewBlocks } from "@/lib/skill-builder";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
   getWorkbenchGate, submitReviewedWorkbenchProposal,
-  sourceRevisionLabel, workbenchChangeStats,
+  sourceRevisionLabel, workbenchChangeStats, buildObservedWorkbenchCanvas,
 } from "@/lib/ui-v2-workbench-model";
 import styles from "./workbench-v2.module.css";
 
@@ -41,6 +41,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reviewed, setReviewed] = useState<{ scope: string; text: string; base: string } | null>(null);
   const [mode, setMode] = useState<"edit" | "preview" | "review">("edit");
+  const [workspaceView, setWorkspaceView] = useState<"canvas" | "split" | "code">("canvas");
   const [saveBusy, setSaveBusy] = useState(false);
   const savingRef = useRef(false);
   const liveScopeRef = useRef("");
@@ -79,6 +80,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
         setSource({ scope, phase: "ready", data: result.data, error: null });
         setDraft({ scope, text: result.data.content });
         setMode("edit");
+        setWorkspaceView("canvas");
       }
     }).catch(error => {
       if (active && !controller.signal.aborted) setSource({
@@ -101,6 +103,22 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
     reviewed.base === sourceData?.content;
   const comparison = sourceData ? workbenchChangeStats(sourceData.content, editorText) : null;
   const blocks = useMemo(() => parseMarkdownPreviewBlocks(editorText), [editorText]);
+  const observedCanvas = useMemo(() =>
+    buildObservedWorkbenchCanvas(sourceData,
+      currentDetail.phase === "ready" ? currentDetail.data : null),
+    [sourceData, currentDetail]);
+  useEffect(() => {
+    if (!comparison?.changed || pending) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [comparison?.changed, pending]);
+  const guardNavigation = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (comparison?.changed &&
+        !window.confirm("Leave Workbench and discard the unsubmitted draft?")) {
+      event.preventDefault();
+    }
+  };
   const latestEvaluation = currentDetail.phase === "ready"
     ? currentDetail.data.evaluations[0] ?? null : null;
   const evaluationDetailHref = latestEvaluation
@@ -166,8 +184,8 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
           </p>
         </div>
         <div className={styles.actions}>
-          <Link className={styles.linkButton} href={catalogHref}>Back to Library</Link>
-          <Link className={styles.linkButton} href={evaluationDetailHref}>Evaluations</Link>
+          <Link className={styles.linkButton} href={catalogHref} onClick={guardNavigation}>Back to Library</Link>
+          <Link className={styles.linkButton} href={evaluationDetailHref} onClick={guardNavigation}>Evaluations</Link>
           <UiV2Button variant="tertiary" disabled={saveBusy}
             onClick={() => {
               if (comparison?.changed && !window.confirm("Discard the unsent draft and reload the current repository source?")) return;
@@ -198,21 +216,73 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
             </div>
           ) : <p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
           <p className={styles.note}>Only the indexed SKILL.md is available through the production source API. Other files and graph dependencies are not editable here.</p>
+          {observedCanvas.evaluations.length > 0 ? <>
+            <h2>Recorded evaluation assets</h2>
+            {observedCanvas.evaluations.map(run =>
+              <Link key={run.id} className={styles.assetLink} onClick={guardNavigation}
+                href={buildTenantAwareAppPath(pathname,
+                  `/evaluations/${encodeURIComponent(run.id)}`) as Route}>
+                <Ic.Eval className={styles.icon} aria-hidden="true" />{run.dataset}
+              </Link>)}
+          </> : null}
         </aside>
 
         <section className={styles.editorPanel} aria-label="SKILL.md source editor">
           <div className={styles.editorToolbar}>
+            <div className={styles.tabs} role="group" aria-label="Workbench layout">
+              {(["canvas", "split", "code"] as const).map(view =>
+                <UiV2Button key={view} size="small"
+                  variant={workspaceView === view ? "primary" : "default"}
+                  aria-pressed={workspaceView === view}
+                  onClick={() => setWorkspaceView(view)}>
+                  {view === "canvas" ? "Canvas" : view === "split" ? "Split" : "Code"}
+                </UiV2Button>)}
+            </div>
             <div className={styles.tabs} role="group" aria-label="Workbench viewing mode">
               <UiV2Button size="small" variant={mode === "edit" ? "primary" : "default"} aria-pressed={mode === "edit"}
-                onClick={() => setMode("edit")}>Edit</UiV2Button>
+                onClick={() => { setMode("edit"); setWorkspaceView("code"); }}>Edit</UiV2Button>
               <UiV2Button size="small" variant={mode === "preview" ? "primary" : "default"} aria-pressed={mode === "preview"}
-                onClick={() => setMode("preview")}>Preview</UiV2Button>
+                onClick={() => { setMode("preview"); setWorkspaceView("code"); }}>Preview</UiV2Button>
               <UiV2Button size="small" variant={mode === "review" ? "primary" : "default"} aria-pressed={mode === "review"}
-                onClick={() => setMode("review")}>Compare</UiV2Button>
+                onClick={() => { setMode("review"); setWorkspaceView("code"); }}>Compare</UiV2Button>
             </div>
             {comparison ? <span className={styles.muted}>Original {comparison.originalLines} lines · Draft {comparison.proposedLines} lines</span> : null}
           </div>
 
+          <div className={`${styles.workArea} ${workspaceView === "split" ? styles.workAreaSplit : ""}`}>
+            {workspaceView !== "code" ? <UiV2CanvasRegion label="Indexed skill and observed evaluation canvas"
+              {...(currentSource.phase !== "ready"
+                ? { unavailable: "Indexed SKILL.md is not available" }
+                : !observedCanvas.source
+                  ? { unavailable: "No verified indexed repository source" }
+                  : {})}>
+              <div className={styles.visualCanvas}>
+                <p className={styles.canvasLane}>Indexed source · Git-owned artifact</p>
+                {observedCanvas.source ? <button type="button" className={styles.canvasSource}
+                  onClick={() => { setWorkspaceView("code"); setMode("edit"); }}>
+                  <span className={styles.canvasType}>SKILL.md · indexed source</span>
+                  <strong>{observedCanvas.source.path}</strong>
+                  <span>Revision: {observedCanvas.source.commit ?? "Not reported"}</span>
+                  <span>Open source editor</span>
+                </button> : null}
+                <p className={styles.canvasLane}>Recorded evaluations associated with this skill</p>
+                {observedCanvas.evaluations.length === 0
+                  ? <UiV2EmptyState message="No evaluation summaries recorded for this skill." />
+                  : <div className={styles.canvasEvaluations}>{observedCanvas.evaluations.map(run =>
+                      <Link key={run.id} className={styles.canvasEval} onClick={guardNavigation}
+                        href={buildTenantAwareAppPath(pathname,
+                          `/evaluations/${encodeURIComponent(run.id)}`) as Route}>
+                        <span className={styles.canvasType}>Evaluation · {run.status}</span>
+                        <strong>{run.dataset}</strong>
+                        <span>{run.ref} · {run.passed}/{run.cases} cases passed</span>
+                      </Link>)}</div>}
+                <p className={styles.note}>Evaluation association is skill-level only. A run is not proved
+                  to have used the currently indexed source revision.</p>
+                <UiV2StateBanner state="unavailable"
+                  label="Tool and dependency graph not provided by the source API" />
+              </div>
+            </UiV2CanvasRegion> : null}
+            {workspaceView !== "canvas" ? <div className={styles.sourceArea}>
           {currentSource.phase === "loading" ? (
             <p className={styles.status} role="status">Loading indexed SKILL.md from the repository…</p>
           ) : currentSource.phase === "error" ? (
@@ -250,6 +320,9 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
             </label>
           )}
 
+
+            </div> : null}
+          </div>
           <div className={styles.footer}>
             <p id="sv2-workbench-gate" className={styles.note}>{gate.message}</p>
             <div className={styles.actions}>
@@ -266,6 +339,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                 onClick={() => {
                   if (sourceData) {
                     setMode("review");
+                    setWorkspaceView("code");
                     setReviewed({ scope, text: editorText, base: sourceData.content });
                   }
                 }}>Review changes</UiV2Button>

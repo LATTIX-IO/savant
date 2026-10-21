@@ -1,4 +1,4 @@
-import type { SkillSourcePayload } from "@savant/types";
+import type { SkillDetailPayload, SkillSourcePayload } from "@savant/types";
 import { MAX_SKILL_SOURCE_LENGTH } from "./skill-builder.ts";
 
 export type WorkbenchGate =
@@ -88,4 +88,28 @@ export async function submitReviewedWorkbenchProposal(options: {
     content: options.draft,
   });
   return { kind: "created", proposalId: created.id, status: created.status };
+}
+
+/**
+ * Read-only Canvas: relationships are at skill level, not source-commit-level.
+ * Do not infer edges, tools, provider spans or a run's source revision.
+ */
+export type WorkbenchObservedCanvas = {
+  source: { path: string; commit: string | null } | null;
+  evaluations: ReadonlyArray<{
+    id: string; dataset: string; ref: string; status: string; passed: number; cases: number;
+  }>;
+};
+export function buildObservedWorkbenchCanvas(
+  source: SkillSourcePayload | null, detail: SkillDetailPayload | null,
+): WorkbenchObservedCanvas {
+  if (!source || source.mode !== "repository") return { source: null, evaluations: [] };
+  const related = detail?.skill.skillUuid === source.skillUuid ? detail.evaluations : [];
+  return {
+    source: { path: source.sourcePath, commit: source.sourceCommitSha },
+    evaluations: related.slice(0, 12).map(run => ({
+      id: run.id, dataset: run.dataset, ref: run.ref, status: run.status,
+      passed: run.passed, cases: run.cases,
+    })),
+  };
 }

@@ -64,3 +64,35 @@
   .comparison > div { border-bottom: 1px solid var(--sv2-border); border-right: 0; }
   .footer > p { max-width: none; }
 }
+
+/* PER-1596: read-only source/evaluation relationship canvas, native layout controls. */
+.assetLink { display:flex; align-items:center; gap:7px; padding:8px; color:var(--sv2-fg-2);
+  text-decoration:none; font:11px var(--sv2-font-code); overflow-wrap:anywhere; }
+.assetLink:hover, .assetLink:focus-visible { background:var(--sv2-recess); color:var(--sv2-fg); }
+.workArea { display:grid; grid-template-rows:minmax(0,1fr); min-width:0; min-height:0; overflow:hidden; }
+.workAreaSplit { grid-template-rows:minmax(220px,1fr) minmax(280px,1fr); }
+.workArea > [role="region"] { overflow:auto; min-width:0; min-height:0; }
+.sourceArea { display:grid; min-height:0; min-width:0; overflow:auto; border-top:1px solid var(--sv2-border); }
+.sourceArea .editorLabel { height:100%; min-height:0; }
+.sourceArea .editor { min-height:300px; }
+.visualCanvas { display:grid; justify-items:start; align-content:start; gap:14px; padding:20px; min-width:0; }
+.canvasLane { color:var(--sv2-muted); font:600 11px var(--sv2-font-code); }
+.canvasSource { display:grid; gap:5px; min-width:min(240px,100%); max-width:100%; padding:12px 16px;
+  border:1px solid var(--sv2-fg); border-radius:var(--sv2-radius-control);
+  background:var(--sv2-fg); color:var(--sv2-surface); text-align:left; cursor:pointer;
+  overflow-wrap:anywhere; }
+.canvasSource:hover { box-shadow:0 0 0 2px var(--sv2-focus); }
+.canvasType { font:500 11px var(--sv2-font-code); opacity:.8; }
+.canvasSource strong, .canvasEval strong { font:600 13px/1.4 var(--sv2-font-body); }
+.canvasSource span:last-child, .canvasEval span:last-child { font:11px var(--sv2-font-code); overflow-wrap:anywhere; }
+.canvasEvaluations { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+  gap:8px; width:100%; }
+.canvasEval { display:grid; align-content:start; gap:5px; padding:12px; min-width:0;
+  border:1px solid var(--sv2-border-strong); border-radius:var(--sv2-radius-control);
+  background:var(--sv2-surface); color:var(--sv2-fg); text-decoration:none; }
+.canvasEval:hover, .canvasEval:focus-visible { background:var(--sv2-selected); }
+.visualCanvas > .note { max-width:70ch; }
+@media (max-width:780px) {
+  .workAreaSplit { grid-template-rows:minmax(180px,1fr) minmax(280px,1fr); }
+  .visualCanvas { padding:12px; }
+}

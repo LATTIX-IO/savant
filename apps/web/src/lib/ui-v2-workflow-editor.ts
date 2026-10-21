@@ -25,7 +25,7 @@ export function addWorkflowPort(
 export function editWorkflowPortType(
   spec:WorkflowSpecification,nodeId:string,direction:"inputs"|"outputs",portId:string,value:string,
 ):WorkflowEditResult{
-  if(!value.trim()||value.length>128)return {ok:false,reason:"Port types must contain 1–128 characters."};
+  if(value.length>128)return {ok:false,reason:"Port types cannot exceed 128 characters."};
   const node=spec.nodes.find(n=>n.id===nodeId);
   if(!node||!node[direction]?.some(p=>p.id===portId))
     return {ok:false,reason:"Port not found."};
@@ -86,4 +86,17 @@ export function addWorkflowConnection(
 export function removeWorkflowNode(spec:WorkflowSpecification,nodeId:string):WorkflowSpecification {
   return {...spec,nodes:spec.nodes.filter((n:WorkflowNode)=>n.id!==nodeId),
     edges:spec.edges.filter(e=>e.from.nodeId!==nodeId&&e.to.nodeId!==nodeId)};
+}
+
+/** A typed data-flow mismatch cannot be promoted even through JSON source edits. */
+export function incompatibleWorkflowConnection(spec:WorkflowSpecification):string|null{
+  const nodes=new Map(spec.nodes.map(node=>[node.id,node]));
+  for(const edge of spec.edges){
+    const source=nodes.get(edge.from.nodeId)?.outputs?.find(p=>p.id===edge.from.portId);
+    const target=nodes.get(edge.to.nodeId)?.inputs?.find(p=>p.id===edge.to.portId);
+    if(!source||!target)return edge.id;
+    if(source.dataType!=="any"&&target.dataType!=="any"&&source.dataType!==target.dataType)
+      return edge.id;
+  }
+  return null;
 }

@@ -16,8 +16,7 @@ function seed():WorkflowSpecification {
  ],edges:[]};
 }
 function valid(result:ReturnType<typeof addWorkflowConnection>):WorkflowSpecification{
- assert.equal(result.ok,true, "Graph operation rejected unexpectedly.");
- if(!result.ok)throw Error(result.reason);
+ if(!result.ok)assert.fail("Graph operation rejected: "+result.reason);
  return parseWorkflowSpecification(result.document);
 }
 test("typed compatible connections serialize and graph cycles fail before persisting",()=>{
@@ -34,7 +33,7 @@ test("port type mismatches, missing IDs and self-connections fail without mutati
  for(const [from,fp,to,tp] of [
   ["a","out","z","in"],["a","bad","b","in"],["b","in","c","in"],
   ["a","out","a","out"],
- ]){
+ ] as const){
   const result=addWorkflowConnection(spec,from,fp,to,tp);
   assert.equal(result.ok,false);
   assert.deepEqual(spec,seed());

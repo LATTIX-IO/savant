@@ -154,8 +154,21 @@ export function WorkflowStudioV2(){
   useEffect(()=>{
     if(!dirty)return;
     const guard=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue="";};
+    // Next.js client-side <Link> navigations do not raise beforeunload.
+    const guardClientLink=(event:MouseEvent)=>{
+      if(event.defaultPrevented||event.metaKey||event.ctrlKey||event.altKey||event.shiftKey)return;
+      const target=event.target;
+      if(!(target instanceof Element)||!target.closest("a[href]"))return;
+      if(!window.confirm("Leave Workflow Studio and discard unsaved changes?")){
+        event.preventDefault();event.stopPropagation();
+      }
+    };
     window.addEventListener("beforeunload",guard);
-    return ()=>window.removeEventListener("beforeunload",guard);
+    document.addEventListener("click",guardClientLink,true);
+    return ()=>{
+      window.removeEventListener("beforeunload",guard);
+      document.removeEventListener("click",guardClientLink,true);
+    };
   },[dirty]);
 
   function replaceDraft(value:WorkflowSpecification){

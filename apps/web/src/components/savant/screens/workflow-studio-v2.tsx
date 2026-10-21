@@ -133,7 +133,8 @@ export function WorkflowStudioV2(){
 
   useEffect(()=>{
     // Never reuse another tenant, repository or workflow's mutable state.
-    queueMicrotask(()=>{setLoaded({...NONE,key:scopeKey});setDraft(null);setBaseline("");
+    readRef.current?.abort();readRef.current=null;
+    queueMicrotask(()=>{setBusy(false);setLoaded({...NONE,key:scopeKey});setDraft(null);setBaseline("");
       setSelectedId("");setMessage("");setJsonError("");setMode("graph");setText("");});
   },[scopeKey]);
 
@@ -148,24 +149,33 @@ export function WorkflowStudioV2(){
     setDraft(value);setText(JSON.stringify(value,null,2));setJsonError("");setMessage("");
   }
   async function open(){
-    if(!slug||!repositoryId||!safeId||!available||busy||dirty&&!window.confirm("Discard unsaved workflow changes?"))return;
+    if(!slug||!repositoryId||!safeId||!available||busy||draft!==null)return;
     const key=scopeKey;
+    const controller=new AbortController();
+    readRef.current?.abort();readRef.current=controller;
     setBusy(true);setLoaded({key,phase:"loading",record:null,message:""});setMessage("");
     try{
-      const record=await requestWorkflow("GET",slug,repositoryId,workflowId);
-      if(key!==`${slug}:${repositoryId}:${workflowId}`)return;
+      const record=await requestWorkflow("GET",slug,repositoryId,workflowId,undefined,controller.signal);
+      if(controller.signal.aborted)return;
       const value=parseWorkflowSpecification(record.specification);
       setLoaded({key,phase:"ready",record,message:""});
       replaceDraft(value);setBaseline(JSON.stringify(value));setSelectedId("");
     }catch(e){
+      if(controller.signal.aborted)return;
       const status=(e as {status?:number}).status;
       if(status===404){
-        setLoaded({key,phase:"missing",record:null,message:"No readable workflow at this path. A new workflow may be created only with write permission."});
+        setLoaded({key,phase:"missing",record:null,message:"No readable workflow at this path. Creating requires an authorized write."});
       }else{
         setLoaded({key,phase:"error",record:null,message:e instanceof Error?e.message:"Could not open workflow."});
       }
       setDraft(null);setBaseline("");setSelectedId("");
-    }finally{setBusy(false);}
+    }finally{if(readRef.current===controller){readRef.current=null;setBusy(false);}}
+  }
+  function close(){
+    if(dirty&&!window.confirm("Discard unsaved workflow edits?"))return;
+    readRef.current?.abort();readRef.current=null;
+    setDraft(null);setBaseline("");setLoaded({...NONE,key:scopeKey});
+    setMessage("");setSelectedId("");setJsonError("");setText("");setMode("graph");
   }
   function create(){
     if(!available||!safeId||busy||!repositoryId||active.phase!=="missing")return;

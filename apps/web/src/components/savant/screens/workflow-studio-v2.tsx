@@ -334,12 +334,26 @@ export function WorkflowStudioV2(){
         <section className={styles.graph} aria-label="Workflow dependency graph">
           <h2>Directed flow</h2>
           <p className={styles.help}>Select a step to edit it. Connections are persisted as typed DAG edges; loops are rejected.</p>
-          <div className={styles.nodes}>{draft.nodes.map(node=>
-            <button key={node.id} type="button" onClick={()=>setSelectedId(node.id)}
-              className={selectedId===node.id?styles.nodeSelected:styles.node}
-              aria-pressed={selectedId===node.id}>
-              <small>{node.kind}</small><strong>{node.label||node.id}</strong><span>{node.id}</span>
-            </button>)}</div>
+          {graph&&<div className={styles.flowPlane} style={{width:graph.width,height:graph.height}}>
+            <svg className={styles.wires} width={graph.width} height={graph.height} aria-hidden="true">
+              <defs><marker id="sv2-workflow-arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+                <path d="M 0 0 L 7 3.5 L 0 7 z" fill="currentColor"/></marker></defs>
+              {graph.edges.map(edge=><path key={edge.id} d={edge.path} fill="none"
+                stroke="currentColor" strokeWidth={1.5} markerEnd="url(#sv2-workflow-arrow)"/>) }
+            </svg>
+            {graph.nodes.map(point=>{
+              const node=draft.nodes.find(candidate=>candidate.id===point.id);
+              if(!node)return null;
+              return <button key={node.id} type="button" onClick={()=>setSelectedId(node.id)}
+                style={{left:point.x,top:point.y}}
+                className={selectedId===node.id?styles.nodeSelected:styles.node}
+                aria-pressed={selectedId===node.id}>
+                <small>{node.kind}</small><strong>{node.label||node.id}</strong><span>{node.id}</span>
+              </button>;
+            })}
+          </div>}
+          {graph?.truncated&&<p className={styles.warning}>Diagram shows the first 200 nodes. The validated JSON source retains the entire graph.</p>}
+          {draft.nodes.length===0&&<p>No workflow nodes have been modeled yet. Add a step to begin.</p>}
           <h3>Connections</h3>
           <ul className={styles.edges}>{draft.edges.map(edge=><li key={edge.id}>
             <span>{edge.from.nodeId}.{edge.from.portId} → {edge.to.nodeId}.{edge.to.portId}</span>

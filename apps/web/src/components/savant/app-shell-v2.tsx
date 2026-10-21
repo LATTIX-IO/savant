@@ -19,28 +19,19 @@ import {
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
 import { stripTenantPathPrefix } from "@/lib/tenant-paths";
 import {
-  buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath, getUiV2Navigation,
-  resolveUiV2Route, UI_V2_NAV_GROUPS, type UiV2NavGroup, type UiV2NavId,
+  buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath, getUiV2WorkspaceNavigation,
+  resolveUiV2Route, type UiV2WorkspaceNavId,
 } from "@/lib/ui-v2-shell-model";
+import { SavantCommandPalette, type PaletteIntent } from "@/components/savant/savant-command-palette";
 import { isGovernanceFeatureEnabled } from "@/lib/workspace-features";
 
 import styles from "./app-shell-v2.module.css";
 
-const iconById: Record<UiV2NavId, (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element> = {
-  overview: Ic.Overview,
-  skills: Ic.Skills,
-  repositories: Ic.Repo,
-  catalog: Ic.Skills,
-  evaluations: Ic.Eval,
-  intelligence: Ic.Eval,
-  releases: Ic.Release,
-  router: Ic.Connectors,
-  connectors: Ic.Connectors,
-  policies: Ic.Policy,
-  audit: Ic.Audit,
-  settings: Ic.Settings,
+const iconById: Record<UiV2WorkspaceNavId, (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element> = {
+  overview: Ic.Overview, library: Ic.Skills, workbench: Ic.Repo, evaluations: Ic.Eval,
+  runs: Ic.Clock, insights: Ic.Eval, integrations: Ic.Connectors, settings: Ic.Settings,
 };
-const groups: UiV2NavGroup[] = ["workspace", "library", "quality", "integrations", "governance", "system"];
+const groups = [{ id: "primary", label: "Workspaces" }, { id: "admin", label: "Administration" }] as const;
 
 export function SavantShellV2({
   children, viewer, shellData, workspace, memberships,
@@ -54,7 +45,8 @@ export function SavantShellV2({
   const pathname = usePathname() || "/";
   const appPath = stripTenantPathPrefix(pathname);
   const counts = shellData?.counts ?? EMPTY_SAVANT_SHELL_DATA.counts;
-  const navItems = getUiV2Navigation(workspace.slug, appPath, counts, isGovernanceFeatureEnabled());
+  const navItems = getUiV2WorkspaceNavigation(workspace.slug, appPath, counts);
+  const [paletteIntent, setPaletteIntent] = useState<PaletteIntent | null>(null);
   const { resolvedTheme, values, set } = useTweaks();
   const toggle = buildBinaryThemeToggleState(resolvedTheme);
   const dashboardHref = buildUiV2WorkspaceSwitchPath(workspace.slug, "/dashboard") as Route;
@@ -63,6 +55,16 @@ export function SavantShellV2({
   const activeSkill = route.kind === "detail" && route.navId === "skills" ? route.resourceId : "";
   const mainRef = useRef<HTMLElement>(null);
   const previousLocation = useRef(`${workspace.slug}:${pathname}`);
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteIntent("all");
+      }
+    };
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, []);
 
   // Keep tab order and screen-reader location aligned after actual client-side
   // route changes. Do not steal focus on initial hydration or override scroll
@@ -160,11 +162,13 @@ export function SavantShellV2({
           ))}
         </nav>
         <div className={styles.topActions}>
-          <Link href={buildUiV2WorkspaceSwitchPath(workspace.slug, "/skills") as Route}
-            className={styles.actionLink} title="Find a skill" aria-label="Browse and find skills">
+          <button type="button" className={styles.actionLink} aria-keyshortcuts="Control+K Meta+K"
+            title="Search authorized skills, runs and sections (Ctrl K)" aria-label="Search Savant"
+            onClick={() => setPaletteIntent("all")}>
             <Ic.Search className={styles.icon} aria-hidden="true" />
-            <span className={styles.searchLabel}>Find skills</span>
-          </Link>
+            <span className={styles.searchLabel}>Search</span>
+            <kbd className={styles.shortcut}>Ctrl K</kbd>
+          </button>
           <button type="button" className={styles.iconButton}
             aria-label={toggle.title} title={toggle.title} aria-pressed={toggle.isDark}
             onClick={() => set("theme", toggle.nextTheme)}>
@@ -179,27 +183,36 @@ export function SavantShellV2({
       <aside className={styles.sidebar} aria-label="Application navigation">
         <nav className={styles.nav} aria-label="Savant sections">
           {groups.map(group => {
-            const items = navItems.filter(it => it.group === group);
-            if (items.length === 0) return null;
-            return (
-              <div key={group} className={styles.navGroup}>
-                <div className={styles.navGroupTitle}>{UI_V2_NAV_GROUPS[group]}</div>
-                {items.map(it => {
-                  const Icon = iconById[it.id];
-                  return (
-                    <Link key={it.id} href={it.href as Route}
-                      className={`${styles.navItem} ${it.active ? styles.navActive : ""}`}
-                      aria-current={it.active ? "page" : undefined}
-                      title={it.label}>
-                      <Icon className={styles.icon} aria-hidden="true" />
-                      <span>{it.label}</span>
-                      {it.count !== null ? <span className={styles.count}>{it.count}</span> : null}
-                    </Link>
-                  );
-                })}
-              </div>
-            );
+            const items = navItems.filter(item => item.group === group.id);
+            return <div key={group.id} className={styles.navGroup}>
+              <div className={styles.navGroupTitle}>{group.label}</div>
+              {items.map(it => {
+                const Icon = iconById[it.id];
+                const content = <>
+                  <Icon className={styles.icon} aria-hidden="true" />
+                  <span>{it.label}</span>
+                  {it.count !== null ? <span className={styles.count}>{it.count}</span> : null}
+                </>;
+                if (it.picker) return <button key={it.id} type="button"
+                  className={`${styles.navItem} ${styles.navButton} ${it.active ? styles.navActive : ""}`}
+                  aria-current={it.active ? "page" : undefined}
+                  onClick={() => setPaletteIntent(it.picker)}
+                  title={`Choose ${it.id === "workbench" ? "a skill" : "an evaluation run"}`}>
+                  {content}
+                </button>;
+                return <Link key={it.id} href={it.href as Route}
+                  className={`${styles.navItem} ${it.active ? styles.navActive : ""}`}
+                  aria-current={it.active ? "page" : undefined} title={it.label}>
+                  {content}
+                </Link>;
+              })}
+            </div>;
           })}
+          <button type="button" className={`${styles.navItem} ${styles.navButton}`}
+            onClick={() => setPaletteIntent("all")} title="Find tools and administrative sections">
+            <Ic.Search className={styles.icon} aria-hidden="true" />
+            <span>All sections</span>
+          </button>
         </nav>
         <div className={styles.profile} title={viewer.displayName}>
           <span className={styles.profileAvatar} aria-hidden="true">{viewer.initials}</span>
@@ -209,6 +222,9 @@ export function SavantShellV2({
       <main ref={mainRef} id="sv2-content" className={`page ${styles.main}`} tabIndex={-1}>
         <UiV2ModeProvider workspaceSlug={workspace.slug}>{children}</UiV2ModeProvider>
       </main>
+      <SavantCommandPalette open={paletteIntent !== null} intent={paletteIntent ?? "all"}
+        onClose={() => setPaletteIntent(null)} workspaceSlug={workspace.slug}
+        counts={counts} governanceEnabled={isGovernanceFeatureEnabled()} />
     </UiV2Surface>
   );
 }

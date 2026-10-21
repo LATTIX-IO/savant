@@ -134,3 +134,44 @@ export function isUiV2EnabledForWorkspace(
   const allowed = config.workspaces.split(",").map(slug => slug.trim()).filter(Boolean);
   return allowed.includes("*") || allowed.includes(workspaceSlug);
 }
+
+/**
+ * Reference navigation is six operational workspaces and two administrative areas.
+ * Canonical routes above remain unchanged for deep-link and governance parity.
+ * Workbench/Runs are authenticated pickers until dedicated source-backed list pages ship.
+ */
+export type UiV2WorkspaceNavId =
+  "overview" | "library" | "workbench" | "evaluations" | "runs" | "insights" |
+  "integrations" | "settings";
+export type UiV2WorkspaceNavItem = {
+  id: UiV2WorkspaceNavId; label: string; group: "primary" | "admin";
+  href: string | null; picker: "workbench" | "runs" | null; active: boolean;
+  count: number | null;
+};
+export function getUiV2WorkspaceNavigation(
+  workspaceSlug: string, appPath: string, counts: SavantShellCounts,
+): UiV2WorkspaceNavItem[] {
+  const route = resolveUiV2Route(appPath);
+  const active = route.navId;
+  const detail = route.kind === "detail";
+  const link = (path: string) => buildTenantAppPath(workspaceSlug, path);
+  return [
+    { id: "overview", label: "Overview", group: "primary", href: link("/dashboard"),
+      picker: null, active: active === "overview", count: null },
+    { id: "library", label: "Library", group: "primary", href: link("/skills"),
+      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail),
+      count: counts.skills },
+    { id: "workbench", label: "Workbench", group: "primary", href: null,
+      picker: "workbench", active: active === "skills" && detail, count: null },
+    { id: "evaluations", label: "Evaluations", group: "primary", href: link("/evaluations"),
+      picker: null, active: active === "evaluations" && !detail, count: counts.evaluations },
+    { id: "runs", label: "Runs", group: "primary", href: null,
+      picker: "runs", active: active === "evaluations" && detail, count: null },
+    { id: "insights", label: "Insights", group: "primary", href: link("/intelligence"),
+      picker: null, active: ["intelligence","releases"].includes(active ?? ""), count: null },
+    { id: "integrations", label: "Integrations", group: "admin", href: link("/router"),
+      picker: null, active: ["router","connectors"].includes(active ?? ""), count: null },
+    { id: "settings", label: "Settings", group: "admin", href: link("/settings"),
+      picker: null, active: ["settings","policies","audit"].includes(active ?? ""), count: null },
+  ];
+}

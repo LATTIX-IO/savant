@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { EMPTY_SAVANT_SHELL_DATA } from "./shell-state.ts";
 import {
   buildUiV2Crumbs, buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath,
-  getUiV2Navigation, resolveUiV2Route,
+  getUiV2Navigation, getUiV2WorkspaceNavigation, resolveUiV2Route,
   isUiV2EnabledForWorkspace, UI_V2_NAV_GROUPS,
 } from "./ui-v2-shell-model.ts";
 
@@ -155,4 +155,48 @@ test("UX-02 route changes restore content focus, with keyboard-closable workspac
   assert.match(source,/event\.key === "Escape"/);
   assert.match(source,/aria-current=\{it\.active \? "page" : undefined\}/);
   assert.doesNotMatch(source,/router\.push\(|history\.replaceState\(|dangerouslySetInnerHTML|sessionStorage|localStorage/);
+});
+
+test("F1 reference IA has six primary workspaces, two admin areas and no invented route", () => {
+  const list = getUiV2WorkspaceNavigation("tenant one", "/skills", EMPTY_SAVANT_SHELL_DATA.counts);
+  assert.deepEqual(list.filter(x => x.group === "primary").map(x => x.label),
+    ["Overview","Library","Workbench","Evaluations","Runs","Insights"]);
+  assert.deepEqual(list.filter(x => x.group === "admin").map(x => x.label),
+    ["Integrations","Settings"]);
+  assert.equal(list.find(x => x.id === "workbench")?.picker, "workbench");
+  assert.equal(list.find(x => x.id === "runs")?.picker, "runs");
+  for (const item of list) {
+    if (item.href) {
+      assert.match(item.href, /^\/o\/tenant%20one\//);
+      assert.equal(resolveUiV2Route(item.href.replace(/^\/o\/tenant%20one/, "")).kind, "collection");
+    } else {
+      assert.ok(item.picker === "workbench" || item.picker === "runs");
+    }
+  }
+});
+test("F1 active state reflects detail modes and preserves legacy contextual admin routes", () => {
+  for (const [path, id] of [
+    ["/skills", "library"], ["/repositories", "library"], ["/catalog/example", "library"],
+    ["/skills/source-id", "workbench"], ["/evaluations", "evaluations"],
+    ["/evaluations/run-id", "runs"], ["/releases", "insights"],
+    ["/connectors", "integrations"], ["/policies", "settings"],
+  ] as const) {
+    const items = getUiV2WorkspaceNavigation("org", path, EMPTY_SAVANT_SHELL_DATA.counts);
+    assert.deepEqual(items.filter(x => x.active).map(x => x.id), [id], path);
+  }
+  for (const invalid of ["/runs", "/workflows", "//evil", "/skills/%2e%2e"]) {
+    assert.equal(getUiV2WorkspaceNavigation("org", invalid, EMPTY_SAVANT_SHELL_DATA.counts)
+      .filter(x => x.active).length, 0);
+  }
+  const counts = { ...EMPTY_SAVANT_SHELL_DATA.counts, skills: 0, evaluations: 3 };
+  assert.equal(getUiV2WorkspaceNavigation("org","/skills",counts).find(x=>x.id==="library")?.count,0);
+  assert.equal(getUiV2WorkspaceNavigation("org","/evaluations",counts).find(x=>x.id==="evaluations")?.count,3);
+});
+test("F1 keyboard palette may show only real navigable, tenant-owned URLs and does not create mock runs", () => {
+  const source = readFileSync(fileURLToPath(new URL("../components/savant/savant-command-palette.tsx", import.meta.url)), "utf8");
+  assert.match(source, /fetchSkillList/);
+  assert.match(source, /fetchEvaluationDashboard/);
+  assert.match(source, /buildTenantAppPath/);
+  assert.match(source, /getUiV2Navigation/);
+  assert.doesNotMatch(source, /localStorage|sessionStorage|dangerouslySetInnerHTML|\.innerHTML\s*=|fake|mockRun|window\.location/);
 });

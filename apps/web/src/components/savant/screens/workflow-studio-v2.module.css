@@ -32,10 +32,14 @@
 .sidebar .selected,.nodeSelected{border-color:var(--sv2-accent);background:var(--sv2-selected)}
 .graph{min-width:0;min-height:0;overflow:auto;padding:12px;background:var(--sv2-bg);background-image:radial-gradient(var(--sv2-border) .7px,transparent .7px);background-size:16px 16px}
 .help{color:var(--sv2-muted);font-size:11px}
-.nodes{display:flex;flex-wrap:wrap;gap:12px;min-height:100px;margin:16px 0}
-.nodes button{display:grid;gap:4px;width:194px;min-height:76px;text-align:left;align-content:start;overflow-wrap:anywhere}
-.nodes button strong{font-size:12px}
-.nodes button span{font:10px var(--sv2-font-code);color:var(--sv2-muted)}
+.flowPlane{position:relative;min-width:300px;min-height:210px;margin:14px 0;isolation:isolate}
+.wires{position:absolute;inset:0;color:var(--sv2-fg-2);pointer-events:none}
+.flowPlane>.node,.flowPlane>.nodeSelected{position:absolute;display:grid;gap:4px;
+ width:196px;height:80px;padding:10px;text-align:left;align-content:start;overflow:hidden;
+ overflow-wrap:anywhere;background:var(--sv2-surface)}
+.flowPlane>.node strong,.flowPlane>.nodeSelected strong{font-size:12px;max-height:35px;overflow:hidden}
+.flowPlane>.node span,.flowPlane>.nodeSelected span{font:10px var(--sv2-font-code);color:var(--sv2-muted)}
+.flowPlane>.nodeSelected{border:2px solid var(--sv2-accent);background:var(--sv2-selected)}
 .edges{list-style:none;padding:0;margin:10px 0;display:grid;gap:5px;max-width:100%}
 .edges li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control);font:11px var(--sv2-font-code)}
 .edges li>span{overflow-wrap:anywhere}

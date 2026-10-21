@@ -3,157 +3,164 @@
 import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
-import type { OverviewKpi, OverviewPayload, SourceOfTruth } from "@savant/types";
+import { useEffect, useState } from "react";
+import type {
+  EvaluationDashboardPayload, OverviewPayload, SkillListItem, SourceOfTruth,
+} from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
 import { useOnboarding } from "@/components/savant/onboarding-context";
+import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import {
-  UiV2Button, UiV2EmptyState, UiV2Metric, UiV2Status, UiV2TableViewport,
+  UiV2Button, UiV2EmptyState, UiV2Metric, UiV2PageHeader,
+  UiV2StateBanner, UiV2Status, UiV2TableViewport,
 } from "@/components/savant/ui-v2";
-import { getUiV2Kpi, safeUiV2Count, getUiV2RepositoryHealth } from "@/lib/ui-v2-library-model";
+import { fetchEvaluationDashboard, fetchSkillList } from "@/lib/control-plane-client";
+import { getUiV2Kpi, safeUiV2Count } from "@/lib/ui-v2-library-model";
+import { buildUiV2Attention, medianObservedQuality, observedInFlight } from "@/lib/ui-v2-overview-model";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import styles from "./ui-v2-pages.module.css";
 
-const kpiKeys: ReadonlyArray<OverviewKpi["key"]> = [
-  "skills-in-production", "eval-coverage", "first-pass-acceptance", "release-turnaround",
-];
-const kpiLabels: Record<OverviewKpi["key"], string> = {
-  "skills-in-production": "Skills in production",
-  "eval-coverage": "Evaluation coverage",
-  "first-pass-acceptance": "First-pass acceptance",
-  "release-turnaround": "Release turnaround",
+type Evidence = {
+  scope: string; phase: "loading" | "ready";
+  skills: readonly SkillListItem[] | null; dashboard: EvaluationDashboardPayload | null;
+  errors: readonly string[];
 };
+const EMPTY: Evidence = { scope:"", phase:"loading", skills:null, dashboard:null, errors:[] };
 
 export function OverviewV2({ overview, sourceOfTruth }: {
   overview: OverviewPayload; sourceOfTruth?: SourceOfTruth | undefined;
 }) {
   const pathname = usePathname() || "/";
+  const scope = useUiV2WorkspaceSlug() ?? "";
   const { show } = useOnboarding();
-  const skillsHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
-  const repositoryHref = buildTenantAwareAppPath(pathname, "/repositories") as Route;
-  const evaluationsHref = buildTenantAwareAppPath(pathname, "/evaluations") as Route;
-  const releasesHref = buildTenantAwareAppPath(pathname, "/releases") as Route;
+  const [evidence, setEvidence] = useState<Evidence>(EMPTY);
+  useEffect(() => {
+    if (!scope) return;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setEvidence({ ...EMPTY, scope });
+    });
+    void Promise.allSettled([
+      fetchSkillList(undefined, { workspaceSlug:scope, signal:controller.signal }),
+      fetchEvaluationDashboard({ workspaceSlug:scope, signal:controller.signal }),
+    ]).then(results => {
+      if (controller.signal.aborted) return;
+      const skills = results[0], dashboard = results[1];
+      setEvidence({
+        scope, phase:"ready",
+        skills: skills.status === "fulfilled" ? skills.value.data : null,
+        dashboard: dashboard.status === "fulfilled" ? dashboard.value.data : null,
+        errors: [
+          ...(skills.status === "rejected" ? ["Skill health data is unavailable."] : []),
+          ...(dashboard.status === "rejected" ? ["Evaluation activity is unavailable."] : []),
+        ],
+      });
+    });
+    return () => controller.abort();
+  }, [scope]);
+  const live = evidence.scope === scope ? evidence : EMPTY;
+  const skillQuality = live.skills ? medianObservedQuality(live.skills) : null;
+  const evalCoverage = getUiV2Kpi(overview, "eval-coverage");
+  const medianPass = live.dashboard?.kpis.find(metric => metric.key === "median-pass-rate");
+  const attention = buildUiV2Attention(overview);
+  const inFlight = observedInFlight(live.dashboard?.runs ?? []);
+  const skillHref = buildTenantAwareAppPath(pathname, "/skills") as Route;
+  const reposHref = buildTenantAwareAppPath(pathname, "/repositories") as Route;
+  const evalHref = buildTenantAwareAppPath(pathname, "/evaluations") as Route;
+  const releaseHref = buildTenantAwareAppPath(pathname, "/releases") as Route;
+  const auditHref = buildTenantAwareAppPath(pathname, "/audit") as Route;
+  return <div className={styles.page}>
+    <UiV2PageHeader title="Overview" eyebrow="Workspace / operational health"
+      description={`${overview.counts.skillsUnderGovernance} governed skills · ${overview.counts.connectedRepositories} connected repositories`}
+      actions={<>
+        <Link href={skillHref} className={styles.secondaryLink}>Open Library</Link>
+        <UiV2Button onClick={show}><Ic.Repo className={styles.icon} aria-hidden="true" />Connect repository</UiV2Button>
+        <Link href={evalHref} className={styles.secondaryLink}>New evaluation</Link>
+      </>} />
+    {sourceOfTruth ? <p className={styles.provenance}>Source: {sourceOfTruth}</p> : null}
 
-  return (
-    <div className={styles.page}>
-      <div className={styles.heading}>
-        <div>
-          <div className={styles.eyebrow}>Overview / Workspace health</div>
-          <h1>Operational overview</h1>
-          <p>Evidence from this workspace&apos;s control plane. Unavailable signals are not estimated.</p>
-        </div>
-        <div className={styles.actions}>
-          <Link className={styles.secondaryLink} href={skillsHref}>Open Library</Link>
-          <UiV2Button variant="primary" onClick={show}>Connect repository</UiV2Button>
-        </div>
-      </div>
+    <section className={styles.referenceMetrics} aria-label="Workspace quality measures">
+      <div><UiV2Metric label="Governed skills" value={safeUiV2Count(overview.counts.skillsUnderGovernance)} /></div>
+      <div><UiV2Metric label="Evaluation coverage" value={evalCoverage ? `${evalCoverage.value}${evalCoverage.unit ?? ""}` : null} /></div>
+      <div><UiV2Metric label="Median skill quality" value={skillQuality === null ? null : skillQuality.toFixed(1)} /></div>
+      <div><UiV2Metric label="Open regressions" value={safeUiV2Count(overview.counts.activeRegressionAlerts)} /></div>
+      <div><UiV2Metric label="Mean provider cost/run" value={null} />
+        <small className={styles.subtext}>No qualified cost aggregation source</small></div>
+    </section>
 
-      {sourceOfTruth ? <p className={styles.provenance}>Data source: {sourceOfTruth}</p> : null}
+    {live.errors.map(error => <UiV2StateBanner key={error} state="unavailable" label={error} />)}
 
-      <div className={styles.metrics}>
-        <UiV2Metric label="Governed skills" value={safeUiV2Count(overview.counts.skillsUnderGovernance)} />
-        <UiV2Metric label="Pending approvals" value={safeUiV2Count(overview.counts.pendingApprovals)} />
-        <UiV2Metric label="Regression alerts" value={safeUiV2Count(overview.counts.activeRegressionAlerts)} />
-        <UiV2Metric label="Connected repositories" value={safeUiV2Count(overview.counts.connectedRepositories)} />
-      </div>
-
+    <div className={styles.referenceColumns}>
       <section className={styles.panel}>
-        <div className={styles.panelHeading}><h2>Quality signals</h2><Link href={evaluationsHref}>View evaluations</Link></div>
-        <div className={styles.kpis}>
-          {kpiKeys.map(key => {
-            const kpi = getUiV2Kpi(overview, key);
-            return <div className={styles.kpi} key={key}>
-              <UiV2Metric label={kpi?.label || kpiLabels[key]}
-                value={kpi ? `${kpi.value}${kpi.unit ?? ""}` : null} />
-              <span className={styles.subtext}>{kpi?.deltaLabel || "No recorded trend"}</span>
-            </div>;
-          })}
-        </div>
+        <div className={styles.panelHeading}><h2>Needs attention</h2><Link href={evalHref}>All evaluations</Link></div>
+        {attention.length === 0 ? <UiV2EmptyState message="No issues or approvals awaiting action in this workspace." /> :
+          <UiV2TableViewport label="Priority attention queue"><table className={styles.table}>
+            <thead><tr><th>Priority</th><th>Item</th><th>Decision</th></tr></thead>
+            <tbody>{attention.map(item => <tr key={item.id}>
+              <td><UiV2Status state={item.priority === "P1" ? "failed" : "warning"} label={item.priority} /></td>
+              <td><strong>{item.title}</strong><span className={styles.subtext}>{item.detail}</span></td>
+              <td><Link className={styles.primaryLink} href={item.kind === "repository" ? reposHref :
+                item.kind === "approval" ? releaseHref : evalHref}>Inspect</Link></td>
+            </tr>)}</tbody>
+          </table></UiV2TableViewport>}
       </section>
-
-      <div className={styles.columns}>
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}><h2>Awaiting approval</h2><Link href={skillsHref}>View skills</Link></div>
-          {overview.approvals.length === 0 ? (
-            <UiV2EmptyState message="No approvals currently pending in this workspace." />
-          ) : (
-            <UiV2TableViewport label="Pending skill approvals">
-              <table className={styles.table}>
-                <thead><tr><th>Skill</th><th>Version</th><th>Blocking gate</th><th>Requested</th></tr></thead>
-                <tbody>{overview.approvals.map(item => (
-                  <tr key={`${item.id}-${item.version}`}>
-                    <td><Link className={styles.primaryLink}
-                      href={buildTenantAwareAppPath(pathname, `/skills/${encodeURIComponent(item.id)}`) as Route}>
-                      {item.skill}</Link><span className={styles.subtext}>{item.change}</span></td>
-                    <td className={styles.mono}>{item.version}</td>
-                    <td><UiV2Status state="warning" label={item.blocking} /></td>
-                    <td>{item.when}</td>
-                  </tr>
-                ))}</tbody>
-              </table>
-            </UiV2TableViewport>
-          )}
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}><h2>Regression alerts</h2><Link href={evaluationsHref}>Investigate</Link></div>
-          {overview.regressions.length === 0 ? (
-            <UiV2EmptyState message="No regression alerts currently recorded." />
-          ) : <ul className={styles.rows}>
-            {overview.regressions.map((item, index) => (
-              <li key={`${item.skill}-${item.metric}-${index}`}>
-                <div><strong>{item.skill}</strong><span className={styles.subtext}>{item.metric} · {item.from}{item.unit ?? ""} → {item.to}{item.unit ?? ""}</span></div>
-                <UiV2Status state={item.severity === "critical" ? "failed" : "warning"} label={item.severity} />
-              </li>
-            ))}
-          </ul>}
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}><h2>Source repositories</h2><Link href={repositoryHref}>Manage</Link></div>
-          {overview.repositories.length === 0 ? (
-            <UiV2EmptyState message="No repositories connected to this workspace." />
-          ) : <ul className={styles.rows}>
-            {overview.repositories.slice(0, 6).map(item => {
-              const health = getUiV2RepositoryHealth(item);
-              return <li key={item.id}>
-                <div><strong>{item.name}</strong><span className={styles.subtext}>
-                  {item.provider} · {item.projection.indexedAt ? "Indexed" : "Not indexed"}
-                </span></div>
-                <UiV2Status state={health === "ready" ? "ready" : health === "action-required" ? "warning" :
-                  health === "indexing" ? "running" : "unavailable"}
-                  label={health === "action-required" ? "Attention" : health === "not-indexed" ? "Not indexed" : health} />
-              </li>;
-            })}
-          </ul>}
-        </section>
-
-        <section className={styles.panel}>
-          <div className={styles.panelHeading}><h2>Recent changes and releases</h2><Link href={releasesHref}>View releases</Link></div>
-          {overview.recentChanges.length === 0 && overview.releaseQueue.length === 0 ? (
-            <UiV2EmptyState message="No recent changes or queued releases in this workspace." />
-          ) : <ul className={styles.rows}>
-            {overview.recentChanges.slice(0, 4).map((item, index) => (
-              <li key={`change-${index}`}>
-                <div><strong>{item.skill}</strong><span className={styles.subtext}>Commit {item.ref} · {item.who}</span></div>
-                <span className={styles.mono}>{item.when}</span>
-              </li>
-            ))}
-            {overview.releaseQueue.slice(0, 4).map(item => (
-              <li key={`release-${item.id}`}>
-                <div><strong>{item.skill}</strong><span className={styles.subtext}>
-                  Release to {item.toEnv} · approvals {item.approvalsDone}/{item.approvalsRequired}
-                </span></div>
-                <UiV2Status state={item.approvalsBlocked ? "warning" : "running"}
-                  label={item.approvalsBlocked ? "Blocked" : "In queue"} />
-              </li>
-            ))}
-          </ul>}
-        </section>
-      </div>
-      <p className={styles.help}><Ic.Lock className={styles.icon} aria-hidden="true" />
-        The control plane and workspace membership determine access; this screen never authorizes changes.
-      </p>
+      <section className={styles.panel}>
+        <div className={styles.panelHeading}><h2>In flight</h2><Link href={evalHref}>All runs</Link></div>
+        {live.phase === "loading" ? <p className={styles.message} role="status">Loading evaluation activity…</p> :
+          live.dashboard === null ? <UiV2EmptyState message="Evaluation activity unavailable." /> :
+          inFlight.length === 0 ? <UiV2EmptyState message="No observed evaluations currently running." /> :
+          <ul className={styles.rows}>{inFlight.slice(0, 8).map(run => <li key={run.id}>
+            <div><Link className={styles.primaryLink} href={buildTenantAwareAppPath(pathname,
+              `/evaluations/${encodeURIComponent(run.id)}`) as Route}>{run.skill}</Link>
+              <span className={styles.subtext}>{run.ref} · {run.passed + run.failed}/{run.cases} cases reported</span></div>
+            <UiV2Status state="running" label="Running" />
+          </li>)}</ul>}
+      </section>
     </div>
-  );
+
+    <div className={styles.referenceColumns}>
+      <section className={styles.panel}>
+        <div className={styles.panelHeading}><h2>Evaluation coverage by tier</h2><Link href={evalHref}>Suites</Link></div>
+        {live.dashboard ? <div className={styles.tierBars}>
+          {live.dashboard.coverageByTier.map(tier => <div className={styles.tierBarRow} key={tier.tier}>
+            <strong>Tier {tier.tier}</strong>
+            <div className={styles.tierBarTrack}><i style={{width:`${Math.max(0,Math.min(100,
+              Number.isFinite(tier.coveragePct) ? tier.coveragePct : 0))}%`}} /></div>
+            <span>{tier.evaluatedSkills}/{tier.totalSkills}</span>
+          </div>)}
+          <p className={styles.subtext}>Coverage is not a quality score; historical quality trends need a separate observed source.</p>
+          {medianPass && Number.isFinite(medianPass.value) ? <p className={styles.subtext}>
+            Median case pass rate: {medianPass.value}{medianPass.unit ?? ""}
+          </p> : null}
+        </div> : <UiV2EmptyState message="No qualified tier coverage evidence available." />}
+      </section>
+      <section className={styles.panel}>
+        <div className={styles.panelHeading}><h2>Activity</h2><Link href={auditHref}>Audit log</Link></div>
+        {overview.auditHighlights.length === 0 ? <UiV2EmptyState message="No recorded audit activity." /> :
+          <ul className={styles.rows}>{overview.auditHighlights.slice(0, 8).map((event,index) =>
+            <li key={index}><div><strong>{event.action}</strong>
+              <span className={styles.subtext}>{event.who} · {event.target}</span></div>
+              <time className={styles.mono}>{event.when}</time></li>)}</ul>}
+      </section>
+    </div>
+
+    <section className={styles.panel}>
+      <div className={styles.panelHeading}><h2>Skill health</h2><Link href={skillHref}>Open Library</Link></div>
+      {live.skills === null ? <UiV2EmptyState message="Authorized skill-health inventory not available." /> :
+        live.skills.length === 0 ? <UiV2EmptyState message="No governed skills indexed." /> :
+        <UiV2TableViewport label="Observed skill health"><table className={styles.table}>
+          <thead><tr><th>Skill</th><th>Tier</th><th>Quality</th><th>Status</th><th>Last eval</th><th>Source revision</th></tr></thead>
+          <tbody>{live.skills.slice(0, 25).map(skill => <tr key={skill.skillUuid}>
+            <td><Link className={styles.primaryLink} href={buildTenantAwareAppPath(pathname,
+              `/skills/${encodeURIComponent(skill.skillUuid)}`) as Route}>{skill.name}</Link></td>
+            <td>Tier {skill.tier}</td>
+            <td className={styles.mono}>{skill.score !== null && Number.isFinite(skill.score)
+              ? skill.score.toFixed(1) : "Not available"}</td>
+            <td>{skill.status}</td><td>{skill.lastEval || "Not available"}</td>
+            <td className={styles.mono}>{skill.projection.sourceCommitSha ?? "Not indexed"}</td>
+          </tr>)}</tbody>
+        </table></UiV2TableViewport>}
+    </section>
+  </div>;
 }

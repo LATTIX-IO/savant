@@ -4,16 +4,17 @@ import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import type { RepositoryListItem, SkillListItem } from "@savant/types";
+import type { RepositoryListItem, SkillDetailPayload, SkillListItem } from "@savant/types";
 
 import { Ic } from "@/components/savant/icons";
 import { useOnboarding } from "@/components/savant/onboarding-context";
 import { SkillCreateModal } from "@/components/savant/skill-create-modal";
 import {
-  UiV2Button, UiV2EmptyState, UiV2Metric, UiV2Status, UiV2TableViewport,
+  UiV2Button, UiV2EmptyState, UiV2InspectorDrawer, UiV2Metric, UiV2PageHeader,
+  UiV2StateBanner, UiV2Status, UiV2TableViewport,
 } from "@/components/savant/ui-v2";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { fetchRepositoryList, fetchSkillList } from "@/lib/control-plane-client";
+import { fetchRepositoryList, fetchSkillDetail, fetchSkillList } from "@/lib/control-plane-client";
 import { buildSkillDetailPath } from "@/lib/skill-paths";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
@@ -36,6 +37,13 @@ export function LibraryV2() {
   const [section, setSection] = useState<LibrarySection>("skills");
   const [term, setTerm] = useState("");
   const [stage, setStage] = useState<LibraryStage>("all");
+  const [tierFilter, setTierFilter] = useState<"all" | 1 | 2 | 3>("all");
+  const [repoFilter, setRepoFilter] = useState("");
+  const [detailView, setDetailView] = useState(false);
+  const [selected, setSelected] = useState<{ scope: string; skill: SkillListItem } | null>(null);
+  const [inspectorTab, setInspectorTab] = useState<"summary" | "versions" | "usage" | "dependencies">("summary");
+  const [skillDetail, setSkillDetail] = useState<{ scope: string; id: string; data: SkillDetailPayload | null;
+    loading: boolean; error: string | null }>({ scope: "", id: "", data: null, loading: false, error: null });
   const [skills, setSkills] = useState<SourceState<SkillListItem>>(initialSkills);
   const [repositories, setRepositories] = useState<SourceState<RepositoryListItem>>(initialRepositories);
   const [retry, setRetry] = useState(0);
@@ -79,33 +87,57 @@ export function LibraryV2() {
   // A late response from a previous tenant must never appear in the next tenant's UI.
   const skillState = skills.scope === scope ? skills : initialSkills;
   const repoState = repositories.scope === scope ? repositories : initialRepositories;
+  const repositoryOptions = useMemo(() =>
+    [...new Set((skillState.data ?? []).map(skill => skill.repo))].sort(),
+    [skillState.data]);
   const filteredSkills = useMemo(
-    () => filterUiV2Skills(skillState.data ?? [], term, stage),
-    [skillState.data, term, stage],
+    () => filterUiV2Skills(skillState.data ?? [], term, stage, {
+      tier: tierFilter, repository: repoFilter,
+    }),
+    [skillState.data, term, stage, tierFilter, repoFilter],
   );
   const filteredRepositories = useMemo(
     () => filterUiV2Repositories(repoState.data ?? [], term),
     [repoState.data, term],
   );
+  const activeSelection = selected?.scope === scope ? selected.skill : null;
+  const selectedId = activeSelection?.skillUuid ?? "";
+  useEffect(() => {
+    if (!scope || !selectedId) return;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setSkillDetail({
+        scope, id: selectedId, data: null, loading: true, error: null,
+      });
+    });
+    void fetchSkillDetail(selectedId, { workspaceSlug: scope, signal: controller.signal })
+      .then(response => {
+        if (!controller.signal.aborted) setSkillDetail({
+          scope, id: selectedId, data: response.data, loading: false, error: null,
+        });
+      }).catch(error => {
+        if (!controller.signal.aborted) setSkillDetail({
+          scope, id: selectedId, data: null, loading: false,
+          error: error instanceof Error ? error.message : "Skill detail is unavailable.",
+        });
+      });
+    return () => controller.abort();
+  }, [scope, selectedId]);
+  const detailState = skillDetail.scope === scope && skillDetail.id === selectedId
+    ? skillDetail : { scope, id: selectedId, data: null, loading: true, error: null };
   const detailHref = buildTenantAwareAppPath(pathname, "/repositories") as Route;
   const marketplaceHref = buildTenantAwareAppPath(pathname, "/catalog") as Route;
 
   return (
     <div className={styles.page}>
-      <div className={styles.heading}>
-        <div>
-          <div className={styles.eyebrow}>Library / Governed assets</div>
-          <h1>Library</h1>
-          <p>Search governed skills and connected source repositories from your workspace.</p>
-        </div>
-        <div className={styles.actions}>
+      <UiV2PageHeader title="Library" eyebrow="Workspace / governed assets"
+        actions={<>
           <UiV2Button variant="tertiary" onClick={() => setRetry(x => x + 1)}>
             <Ic.Refresh className={styles.icon} aria-hidden="true" />Refresh
           </UiV2Button>
           <UiV2Button onClick={show}>Connect repository</UiV2Button>
           <UiV2Button variant="primary" onClick={() => setCreateOpen(true)}>New skill</UiV2Button>
-        </div>
-      </div>
+        </>} />
 
       <div className={styles.metrics}>
         <UiV2Metric label="Governed skills" value={skillState.phase === "ready" ? safeUiV2Count(skillState.data?.length) : null} />
@@ -131,6 +163,8 @@ export function LibraryV2() {
           <button id="sv2-repos-tab" type="button" role="tab" aria-controls="sv2-library-list"
             aria-selected={section === "repositories"} tabIndex={section === "repositories" ? 0 : -1}
             onClick={() => setSection("repositories")}>Repositories</button>
+          <Link href={marketplaceHref} className={styles.tabLink}>Marketplace</Link>
+          <span className={styles.disabledTab} aria-disabled="true">Opportunities · Planned</span>
         </div>
         <label className={styles.search}>
           <span className={styles.visuallyHidden}>Search {section}</span>
@@ -151,6 +185,28 @@ export function LibraryV2() {
             </select>
           </label>
         ) : null}
+        {section === "skills" ? <>
+          <label className={styles.filter}>
+            <span className={styles.visuallyHidden}>Skill tier</span>
+            <select value={tierFilter} onChange={event => setTierFilter(
+              event.target.value === "all" ? "all" : Number(event.target.value) as 1 | 2 | 3
+            )}>
+              <option value="all">All tiers</option><option value="1">Tier 1</option>
+              <option value="2">Tier 2</option><option value="3">Tier 3</option>
+            </select>
+          </label>
+          <label className={styles.filter}>
+            <span className={styles.visuallyHidden}>Repository</span>
+            <select value={repoFilter} onChange={event => setRepoFilter(event.target.value)}>
+              <option value="">All repositories</option>
+              {repositoryOptions.map(repo => <option key={repo} value={repo}>{repo}</option>)}
+            </select>
+          </label>
+          <div className={styles.tabs} role="group" aria-label="Inventory density">
+            <button type="button" aria-pressed={!detailView} onClick={() => setDetailView(false)}>Compact</button>
+            <button type="button" aria-pressed={detailView} onClick={() => setDetailView(true)}>Detailed</button>
+          </div>
+        </> : null}
       </div>
 
       <section id="sv2-library-list" className={styles.panel} role="tabpanel"
@@ -163,12 +219,12 @@ export function LibraryV2() {
               <UiV2Button onClick={() => setRetry(x => x + 1)}>Retry</UiV2Button>
             </div>
           ) : filteredSkills.length === 0 ? (
-            <UiV2EmptyState message={term || stage !== "all"
+            <UiV2EmptyState message={term || stage !== "all" || tierFilter !== "all" || repoFilter
               ? "No skills match these filters." : "No indexed skills in this workspace. Connect and sync a repository to begin."} />
           ) : (
             <UiV2TableViewport label="Workspace governed skills">
               <table className={styles.table}>
-                <thead><tr><th>Skill</th><th>Tier</th><th>Repository</th><th>Channel</th><th>Source revision</th><th>Evaluation score</th></tr></thead>
+                <thead><tr><th>Skill</th><th>Tier</th><th>Repository</th><th>Channel</th><th>Source revision</th><th>Quality</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>{filteredSkills.map(skill => (
                   <tr key={skill.skillUuid}>
                     <td>
@@ -176,6 +232,7 @@ export function LibraryV2() {
                         {skill.name}
                       </Link>
                       <span className={styles.subtext}>{skill.team} · {skill.owner}</span>
+                      {detailView ? <span className={styles.subtext}>{skill.description}</span> : null}
                     </td>
                     <td>Tier {skill.tier}</td>
                     <td>{skill.repo}</td>
@@ -183,6 +240,13 @@ export function LibraryV2() {
                     <td className={styles.mono}>{skill.projection.sourceCommitSha || "Not indexed"}</td>
                     <td className={styles.mono}>{skill.score !== null && Number.isFinite(skill.score)
                       ? skill.score.toFixed(1) : "Not available"}</td>
+                    <td><UiV2Status state={skill.status.toLowerCase().includes("regress") ||
+                      skill.status.toLowerCase().includes("fail") ? "failed" :
+                      skill.score === null ? "unavailable" : "ready"}
+                      label={skill.status || "No status"} /></td>
+                    <td><UiV2Button size="small" onClick={() => {
+                      setSelected({ scope, skill }); setInspectorTab("summary");
+                    }}>Inspect</UiV2Button></td>
                   </tr>
                 ))}</tbody>
               </table>
@@ -225,6 +289,48 @@ export function LibraryV2() {
         Repository synchronization and assessment remain available under <Link href={detailHref}>Repositories</Link>.
         Public marketplace items are under <Link href={marketplaceHref}>Marketplace</Link>.
       </p>
+      <UiV2InspectorDrawer id="sv2-skill-inspector" title={activeSelection?.name ?? "Skill"}
+        open={Boolean(activeSelection)} onClose={() => setSelected(null)}
+        actions={activeSelection ? <>
+          <Link href={buildSkillDetailPath(pathname, activeSelection) as Route}
+            className={styles.secondaryLink} onClick={() => setSelected(null)}>Open Workbench</Link>
+        </> : undefined}>
+        {activeSelection ? <>
+          <div className={styles.detailTabs} role="tablist" aria-label="Skill inspector">
+            {(["summary", "versions", "usage", "dependencies"] as const).map(tab =>
+              <button type="button" role="tab" key={tab}
+                aria-selected={inspectorTab === tab} onClick={() => setInspectorTab(tab)}>
+                {tab === "summary" ? "Summary" : tab === "versions" ? "Versions" :
+                  tab === "usage" ? "Usage" : "Dependencies"}
+              </button>)}
+          </div>
+          {detailState.loading ? <p role="status">Loading authorized skill details…</p> :
+            detailState.error ? <UiV2StateBanner state="unavailable" label={detailState.error} /> :
+            detailState.data ? <>
+              {inspectorTab === "summary" ? <dl className={styles.inspectorData}>
+                <dt>Tier</dt><dd>{activeSelection.tier}</dd>
+                <dt>Owner</dt><dd>{activeSelection.owner}</dd>
+                <dt>Repository</dt><dd>{activeSelection.repo}</dd>
+                <dt>Source revision</dt><dd className={styles.mono}>{activeSelection.projection.sourceCommitSha ?? "Not indexed"}</dd>
+                <dt>Latest quality</dt><dd>{Number.isFinite(activeSelection.score) && activeSelection.score !== null
+                  ? activeSelection.score.toFixed(1) : "Not available"}</dd>
+              </dl> : null}
+              {inspectorTab === "versions" ? detailState.data.versionHistory.length > 0
+                ? <ul className={styles.inspectorList}>{detailState.data.versionHistory.map(version =>
+                  <li key={version.commit}><strong>{version.ref}</strong><span>{version.channel} · {version.when}</span>
+                    <code>{version.commit}</code></li>)}</ul>
+                : <UiV2EmptyState message="No source versions recorded." /> : null}
+              {inspectorTab === "usage" ? detailState.data.evaluations.length > 0
+                ? <ul className={styles.inspectorList}>{detailState.data.evaluations.map(run =>
+                  <li key={run.id}><Link href={buildTenantAwareAppPath(pathname,
+                    `/evaluations/${encodeURIComponent(run.id)}`) as Route}>
+                    {run.dataset}</Link><span>{run.status} · {run.passed}/{run.cases} cases</span></li>)}</ul>
+                : <UiV2EmptyState message="No evaluation runs recorded for this skill." /> : null}
+              {inspectorTab === "dependencies" ? <UiV2StateBanner state="unavailable"
+                label="Verified dependency graph not provided by this source API" /> : null}
+            </> : null}
+        </> : null}
+      </UiV2InspectorDrawer>
       <SkillCreateModal open={createOpen} onClose={() => setCreateOpen(false)}
         onApplied={() => setRetry(x => x + 1)} />
     </div>

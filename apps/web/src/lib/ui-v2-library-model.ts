@@ -19,6 +19,7 @@ export function filterUiV2Skills(
   skills: readonly SkillListItem[],
   term: string,
   stage: LibraryStage,
+  options: { tier?: number | "all"; repository?: string } = {},
 ): SkillListItem[] {
   const needle = term.trim().toLocaleLowerCase();
   return skills.filter(skill => {
@@ -28,7 +29,9 @@ export function filterUiV2Skills(
     const textMatch = needle.length === 0 ||
       [skill.name, skill.description, skill.owner, skill.team, skill.repo]
         .some(value => value.toLocaleLowerCase().includes(needle));
-    return stageMatch && textMatch;
+    const tierMatch = options.tier === undefined || options.tier === "all" || skill.tier === options.tier;
+    const repositoryMatch = !options.repository || skill.repo === options.repository;
+    return stageMatch && textMatch && tierMatch && repositoryMatch;
   });
 }
 

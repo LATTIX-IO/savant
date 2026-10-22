@@ -28,7 +28,7 @@ test("PER-1621 no fabricated compare for same, unlisted, abbreviated or malforme
  for(const [base,head] of [
   [a,a],[a,"c".repeat(40)],[a.slice(0,7),b],[a,"f".repeat(64)],
   ["../../other",b],["https://fake.com",b],
- ])assert.equal(recordedGitCompareUrl(skill,versions,base,head),null,`${base}:${head}`);
+ ] as Array<[string,string]>)assert.equal(recordedGitCompareUrl(skill,versions,base,head),null,`${base}:${head}`);
  const forged=[...versions,{ref:"broken",commit:"b".repeat(7)},
   {ref:"dup",commit:a.toUpperCase()}] as VersionHistoryItem[];
  assert.deepEqual(recordedGitRevisionOptions(skill,forged).map(o=>o.commit),[a,b]);

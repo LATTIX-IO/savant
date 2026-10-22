@@ -52,7 +52,7 @@ export function SavantCommandPalette({ open, intent, onClose, initialQuery="", w
       });
     });
     return () => controller.abort();
-  }, [open, workspaceSlug]);
+  }, [open, workspaceSlug, initialQuery]);
 
   const data = evidence.scope === workspaceSlug ? evidence : INITIAL;
   const normalizedQuery = query.trim().toLocaleLowerCase();

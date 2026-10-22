@@ -1,0 +1,36 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {existsSync,readFileSync} from "node:fs";
+import {fileURLToPath} from "node:url";
+const read=(path:string)=>readFileSync(fileURLToPath(new URL(path,import.meta.url)),"utf8");
+const page=read("../components/savant/screens/workbench-home-v2.tsx");
+const shell=read("../components/savant/app-shell-v2.tsx");
+const palette=read("../components/savant/savant-command-palette.tsx");
+const workflow=read("../components/savant/screens/workflow-studio-v2.tsx");
+test("PER-1611 Workbench is a tenant-owned real selectable page, never a shell modal",()=>{
+ assert.ok(existsSync(fileURLToPath(new URL("../app/o/[workspaceSlug]/workbench/page.tsx",import.meta.url))));
+ assert.match(page,/useUiV2WorkspaceSlug/);
+ assert.match(page,/fetchSkillList/);
+ assert.match(page,/AbortController/);
+ assert.match(page,/buildSkillDetailPath/);
+ assert.match(page,/role="combobox"/);
+ assert.match(page,/No skill selected/);
+ assert.match(page,/role="listbox"/);
+ assert.match(page,/role="option"/);
+ assert.match(shell,/id="sv2-global-search"/);
+ assert.match(shell,/setPaletteIntent\("all"\)/);
+ assert.match(shell,/aria-keyshortcuts="Control\+K Meta\+K"/);
+ assert.doesNotMatch(shell,/title="Choose a skill"/);
+ assert.doesNotMatch(shell,/<span>All sections<\/span>/);
+ assert.doesNotMatch(shell,/styles\.navSubItem/);
+ assert.doesNotMatch(page,/mock|fake|localStorage|sessionStorage|dangerouslySetInnerHTML/i);
+});
+test("PER-1611 authenticated search palette links to both real authoring routes",()=>{
+ assert.match(palette,/buildTenantAppPath\(workspaceSlug,"\/workbench"\)/);
+ assert.match(palette,/buildTenantAppPath\(workspaceSlug,"\/workflows"\)/);
+ assert.match(palette,/initialQuery/);
+ assert.match(workflow,/This Git repository has no indexed workflow specifications/);
+ assert.match(workflow,/Create draft/);
+ assert.match(workflow,/Link href=\{workbenchHref\}/);
+ assert.doesNotMatch(workflow,/sample runtime data are shown/);
+});

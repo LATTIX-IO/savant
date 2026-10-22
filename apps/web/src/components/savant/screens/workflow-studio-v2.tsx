@@ -110,7 +110,7 @@ export function WorkflowStudioV2(){
   const selected=draft?.nodes.find(n=>n.id===selectedId)||null;
   const fromNode=draft?.nodes.find(n=>n.id===fromId)||null;
   const toNode=draft?.nodes.find(n=>n.id===toId)||null;
-  const libraryHref=buildTenantAwareAppPath(pathname,"/skills") as Route;
+  const workbenchHref=buildTenantAwareAppPath(pathname,"/workbench") as Route;
 
   useEffect(()=>{
     if(!slug)return;
@@ -303,10 +303,11 @@ export function WorkflowStudioV2(){
 
   return <div className={styles.page}>
     <header className={styles.header}>
-      <div><p><Link href={libraryHref}>Library</Link> / Workbench / Workflows</p>
+      <div><p><Link href={workbenchHref}>Workbench</Link> / Workflow Studio</p>
         <h1>Workflow Studio</h1>
         <p>Model versioned, non-executable workflow specifications backed by authorized Git repositories.</p></div>
       <div className={styles.actions}>
+        <Link href={workbenchHref}>Browse skills</Link>
         <button type="button" onClick={changeMode} disabled={!draft}>
           {mode==="graph"?"JSON source":"Graph and inspector"}
         </button>
@@ -343,7 +344,7 @@ export function WorkflowStudioV2(){
       {visibleIndex.phase==="error"?<p role="alert" className={styles.error}>{visibleIndex.message}</p>:
         visibleIndex.phase==="loading"?<p>Loading authorized index…</p>:
         visibleIndex.phase==="ready"&&visibleIndex.items.length===0?
-          <p className={styles.help}>No readable indexed workflows. A Git workflow may still exist without an index record; use its ID to open.</p>:
+          <p className={styles.help}>This Git repository has no indexed workflow specifications. Indexed skills and workflows are different artifacts. To create a workflow, enter a new safe Workflow ID above, click “Open from Git” to check for an existing version, then choose “Create draft” if it is absent. Nothing executes or commits until you explicitly save.</p>:
           <p className={styles.help}>Open an indexed artifact to verify the current Git contents. This list is not execution evidence.</p>}
       <button type="button" onClick={()=>setIndexRetry(value=>value+1)} disabled={busy||!available}>Refresh index</button>
     </div>}
@@ -452,7 +453,14 @@ export function WorkflowStudioV2(){
               onChange={e=>replaceDraft({...draft,source:{...draft.source,runtime:e.target.value}})}/></label>
           </div>
         </aside>
-      </div>:<div className={styles.empty} role="status">Select a connected GitHub repository, enter a workflow ID, and open the actual Git artifact. No example graphs or sample runtime data are shown.</div>}
+      </div>:<div className={styles.empty} role="status">
+        <strong>{!repositoryId?"Start by selecting a connected GitHub repository.":!workflowId?
+          "Choose an existing workflow or name a new one.":"Open the versioned Git document to inspect or start a draft."}</strong>
+        <p>Skill indexing does not automatically create workflow specifications. Workflows are
+          governed Git documents with typed steps. New graphs begin empty and become
+          editable after the repository has been checked for an existing version.</p>
+        <Link href={workbenchHref}>Choose an indexed skill in Workbench</Link>
+      </div>}
     {draft&&<footer className={styles.footer}>
       <span>{gate.allowed?"Ready to save":"Save unavailable"} · {gate.reason}</span>
       <span>Modeling only · no workflow execution, scheduling, or inferred tool traces</span>

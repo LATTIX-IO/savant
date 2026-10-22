@@ -55,6 +55,10 @@ export function resolveUiV2Route(appPath: string): UiV2RouteResolution {
     return unavailable;
   }
   const normalized = appPath === "/" ? "/dashboard" : appPath;
+  // Workbench has its own selectable landing page. Skill details preserve /skills/[id].
+  if (normalized === "/workbench") return {
+    kind: "collection", navId: "skills", appPath: "/workbench", resourceId: null,
+  };
   // Workflow Studio is a real authenticated v2 tenant route under Workbench.
   if (normalized === "/workflows") return {
     kind: "collection", navId: "skills", appPath: "/workflows", resourceId: null,
@@ -87,8 +91,13 @@ export function buildUiV2RouteCrumbs(
       ["Workspace", null], ["Page unavailable", "current"],
     ]);
   }
-  if (route.kind === "collection" && appPath === "/workflows") return buildUiV2Crumbs(workspaceSlug,
-    [["Workspace", null], ["Workbench", "/skills"], ["Workflows", "current"]]);
+  if (route.kind === "collection" && appPath === "/workbench") return buildUiV2Crumbs(workspaceSlug,
+    [["Workspace", null], ["Workbench", "current"]]);
+  if (route.kind === "collection" && appPath === "/workflows") return [
+    {label:"Workspace",href:null,current:false},
+    {label:"Workbench",href:buildTenantAppPath(workspaceSlug,"/workbench"),current:false},
+    {label:"Workflows",href:null,current:true},
+  ];
   if (route.kind === "collection" && appPath === "/runs") return buildUiV2Crumbs(workspaceSlug,
     [["Workspace", null], ["Runs", "current"]]);
   if (route.kind === "detail" && route.navId === "catalog") {
@@ -171,10 +180,12 @@ export function getUiV2WorkspaceNavigation(
     { id: "overview", label: "Overview", group: "primary", href: link("/dashboard"),
       picker: null, active: active === "overview", count: null },
     { id: "library", label: "Library", group: "primary", href: link("/skills"),
-      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail) && appPath!=="/workflows",
+      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail) &&
+        appPath!=="/workflows" && appPath!=="/workbench",
       count: counts.skills },
-    { id: "workbench", label: "Workbench", group: "primary", href: null,
-      picker: "workbench", active: (active === "skills" && detail)||appPath==="/workflows", count: null },
+    { id: "workbench", label: "Workbench", group: "primary", href: link("/workbench"),
+      picker: null, active: (active === "skills" && detail)||appPath==="/workflows"||
+        appPath==="/workbench", count: null },
     { id: "evaluations", label: "Evaluations", group: "primary", href: link("/evaluations"),
       picker: null, active: active === "evaluations" && !detail && appPath !== "/runs", count: counts.evaluations },
     { id: "runs", label: "Runs", group: "primary", href: link("/runs"),

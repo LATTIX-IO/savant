@@ -8,7 +8,7 @@ function repoParts(skill:Pick<SkillListItem,"repo"|"repoProvider">):[string,stri
  if(skill.repoProvider!=="github")return null;
  const parts=skill.repo.split("/");
  if(parts.length!==2||!parts.every(part=>SEGMENT.test(part)&&part!=="."&&part!==".."&&
-   !part.startsWith("-")))return null;
+   !part.startsWith("-")&&!part.startsWith(".")))return null;
  return [parts[0]!,parts[1]!];
 }
 export function recordedGitRevisionOptions(

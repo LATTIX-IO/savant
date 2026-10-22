@@ -66,7 +66,50 @@ export function WorkspaceSetupChecklistV2(){
  },[slug,retry]);
 
  const live=result.scope===slug?result:EMPTY;
- const report=describeWorkspaceSetup(live);
+ // Never query a former tenant's skill or suite identifiers.
+ const skill=live.skills?.find(item=>item.id===selectedSkillId)??null;
+ const skillKey=skill?`${slug}:${skill.id}`:"";
+ const caseState=cases.key===skillKey?cases:EMPTY_CASES;
+ const currentSuite=caseState.definitions?.find(item=>item.id===selectedSuiteId)??
+   caseState.definitions?.[0]??null;
+ const runKey=currentSuite?`${skillKey}:${currentSuite.id}:${currentSuite.revision}:${currentSuite.sourceCommitSha}`:"";
+ const runState=runs.key===runKey?runs:EMPTY_RUNS;
+ const checked=selectedTestBenchReadiness({
+   selectedSkill:Boolean(skill),
+   definitions:caseState.loading?null:caseState.definitions,
+   selectedSuite:currentSuite,
+   runs:runState.loading?null:runState.runs,
+ });
+ const report=describeWorkspaceSetup({...live,
+   caseState:checked.cases,verifiedRunState:checked.verifiedRun,
+ });
+ useEffect(()=>{
+   if(!slug||!skill)return;
+   const controller=new AbortController();
+   const key=skillKey;
+   queueMicrotask(()=>{if(!controller.signal.aborted)
+     setCases({key,loading:true,definitions:null,error:false});});
+   void listPersistedTestBenches(skill.id,{workspaceSlug:slug,signal:controller.signal})
+     .then(definitions=>{if(!controller.signal.aborted)
+       setCases({key,loading:false,definitions,error:false});})
+     .catch(()=>{if(!controller.signal.aborted)
+       setCases({key,loading:false,definitions:null,error:true});});
+   return ()=>controller.abort();
+ },[slug,skill?.id,skillKey,retry]);
+ useEffect(()=>{
+   if(!slug||!skill||!currentSuite)return;
+   const controller=new AbortController();
+   const key=runKey;
+   queueMicrotask(()=>{if(!controller.signal.aborted)
+     setRuns({key,loading:true,runs:null,error:false});});
+   void listObservedTestBenchRuns(skill.id,currentSuite.id,currentSuite.sourceCommitSha,{
+     workspaceSlug:slug,signal:controller.signal,
+   }).then(records=>{if(!controller.signal.aborted)
+     setRuns({key,loading:false,runs:records,error:false});})
+     .catch(()=>{if(!controller.signal.aborted)
+       setRuns({key,loading:false,runs:null,error:true});});
+   return ()=>controller.abort();
+ },[slug,skill?.id,runKey,currentSuite?.id,currentSuite?.sourceCommitSha,retry]);
  return <section className={styles.setupGuide} aria-label="Workspace setup and readiness">
    <div className={styles.setupHeader}>
      <div><h2>Set up Savant</h2>

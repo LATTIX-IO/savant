@@ -319,7 +319,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <a className="btn btn-primary" href="#catalog-import-panel">Import to Git repository</a>
-          {skill.sourceUrl && <a className="btn btn-ghost" href={skill.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>
+          {skill.sourceUrl && <a className="btn btn-ghost" href={skill.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>}
           <button type="button" className="btn btn-ghost" disabled={busy !== null || evaluating} onClick={() => void analyze()}>
             {evaluating ? "Evaluating…" : skill.evalStatus === "complete" || skill.evalStatus === "needs_review" ? "Re-run live analysis" : "Run live analysis"}
           </button>

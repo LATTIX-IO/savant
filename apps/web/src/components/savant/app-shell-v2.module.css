@@ -296,3 +296,19 @@
 @media(max-width:900px) {
   .navSubItem { margin-left: 0; height: 50px; min-width: 84px; font-size: 10px; }
 }
+
+/* PER-1614: compact setup state above the account profile, not a fabricated
+ * "all done" flag. The underlying read model always distinguishes unverified steps. */
+.setupBubble{display:grid;gap:6px;align-content:start;flex:none;
+ margin:0 10px 10px;padding:12px;border:1px solid var(--sv2-border);
+ border-radius:var(--sv2-radius-panel);background:var(--sv2-recess);
+ color:var(--sv2-fg);text-decoration:none;font:11px/1.4 var(--sv2-font-body);}
+.setupBubble:hover{background:var(--sv2-selected);border-color:var(--sv2-border-strong)}
+.setupBubble:focus-visible{outline:2px solid var(--sv2-focus);outline-offset:2px}
+.setupBubbleTitle{display:flex;align-items:center;justify-content:space-between;
+ gap:8px;font:600 10px var(--sv2-font-code);color:var(--sv2-fg-2);}
+.setupBubble>strong{font:600 12px var(--sv2-font-body);overflow-wrap:anywhere}
+.setupBubble>small{font:10px/1.4 var(--sv2-font-body);color:var(--sv2-muted)}
+.setupBubbleTrack{width:100%;height:5px;border-radius:3px;background:var(--sv2-border);overflow:hidden}
+.setupBubbleTrack>span{display:block;height:100%;background:var(--sv2-fg-2);min-width:0;max-width:100%}
+@media(max-width:900px){.setupBubble{display:none}}

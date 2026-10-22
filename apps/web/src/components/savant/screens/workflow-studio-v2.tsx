@@ -110,7 +110,6 @@ export function WorkflowStudioV2(){
   const selected=draft?.nodes.find(n=>n.id===selectedId)||null;
   const fromNode=draft?.nodes.find(n=>n.id===fromId)||null;
   const toNode=draft?.nodes.find(n=>n.id===toId)||null;
-  const libraryHref=buildTenantAwareAppPath(pathname,"/skills") as Route;
   const workbenchHref=buildTenantAwareAppPath(pathname,"/workbench") as Route;
 
   useEffect(()=>{

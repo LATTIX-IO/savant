@@ -502,9 +502,27 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
               </dd>
             </dl>
           ) : <p className={styles.muted}>No verified source.</p>}
-          <h2>Workflow and dependencies</h2>
-          <UiV2Status state="unavailable" label="No indexed dependency graph" />
-          <p className={styles.note}>The prototype visual graph is not authoritative and is not executed in this Workbench.</p>
+          <h2>Observed source dependencies</h2>
+          {assetData ? <>
+            <UiV2Status state="ready" label="Pinned Git inventory" />
+            <dl>
+              <dt>Indexed source SHA</dt><dd className={styles.mono}>{assetData.commitSha}</dd>
+              <dt>Verified files</dt><dd>{assetData.files.length}{assetData.omitted>0?` + ${assetData.omitted} not shown`:""}</dd>
+              <dt>Declared Markdown links</dt><dd>{assetData.links.length}</dd>
+              <dt>Verified targets</dt><dd>{assetData.links.filter(link=>link.status==="verified").length}</dd>
+              <dt>Missing targets</dt><dd>{assetData.links.filter(link=>link.status==="missing").length}</dd>
+              <dt>Unsafe/unresolved</dt><dd>{assetData.links.filter(link=>link.status==="unsafe").length}</dd>
+              {selectedPreview?<><dt>Inspected file</dt><dd className={styles.mono}>{selectedPreview.path}</dd>
+                <dt>Content bytes</dt><dd>{selectedPreview.bytes}</dd>
+                <dt>Repository edit</dt><dd>Read-only preview. Propose changes through reviewed Git workflow.</dd>
+              </>:null}
+            </dl>
+            <p className={styles.note}>Git source and declared file references only.
+              Runtime execution and tool-level data-flow evidence are not implied.</p>
+          </> : <>
+            <UiV2Status state="unavailable" label="No ACL-verified pinned asset inventory" />
+            <p className={styles.note}>The prototype graph is not authoritative. Missing or denied repository data never renders synthetic dependencies.</p>
+          </>}
         </aside>
       </div>
     </div>

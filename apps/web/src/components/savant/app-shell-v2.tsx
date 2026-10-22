@@ -17,7 +17,7 @@ import {
   EMPTY_SAVANT_SHELL_DATA, type SavantShellData,
 } from "@/lib/shell-state";
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
-import { buildTenantAppPath, stripTenantPathPrefix } from "@/lib/tenant-paths";
+import { stripTenantPathPrefix } from "@/lib/tenant-paths";
 import {
   buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath, getUiV2WorkspaceNavigation,
   resolveUiV2Route, type UiV2WorkspaceNavId,

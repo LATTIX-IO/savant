@@ -19,10 +19,10 @@ test("PER-1625 missing staged schema and managed keys produce actionable but non
  assert.equal(classifyTestBenchAvailability(fail(503)).kind,"temporarily-unavailable");
  assert.equal(classifyTestBenchAvailability(fail(403)).kind,"access-denied");
  assert.equal(classifyTestBenchAvailability(fail(404)).kind,"not-found");
- for(const err of [fail(500),new Error("postgresql://secret:pass@internal"),null]){
+ for(const err of [fail(500),new Error("confidential internal provider diagnostics"),null]){
   const x=classifyTestBenchAvailability(err);
   assert.equal(x.kind,"unexpected");
-  assert.doesNotMatch(JSON.stringify(x),/postgresql|secret|pass@internal|table name|raw SQL/i);
+  assert.doesNotMatch(JSON.stringify(x),/confidential internal|table name|raw SQL/i);
  }
 });
 test("PER-1625 browser preserves sanitized HTTP error code, not server messages",async()=>{

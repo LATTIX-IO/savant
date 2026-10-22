@@ -162,7 +162,12 @@ export function WorkspaceSetupChecklistV2(){
       <h3>{step.title}</h3>
       <p>{step.detail}</p>
       <span className={styles.setupStatus} data-state={step.state}>
-        {live.loading?"Checking…":statusText[step.state]}
+        {live.loading?"Checking…":
+          step.id==="cases"&&step.state==="observed"?"Encrypted suite observed":
+          step.id==="verified-run"&&step.state==="observed"?"Completed provider run observed":
+          step.id==="cases"&&step.state==="action-required"?"No saved suite for selected skill":
+          step.id==="verified-run"&&step.state==="action-required"?"No qualifying completed provider run":
+          statusText[step.state]}
       </span>
      </div>
      <Link className={styles.control}

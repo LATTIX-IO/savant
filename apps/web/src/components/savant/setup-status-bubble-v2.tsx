@@ -18,7 +18,7 @@ type Status={
 const INITIAL:Status={scope:"",loading:true,repositories:null,skills:null,models:null};
 
 /** A compact, read-only status link. Does not award completion based on a Git
- * index, fake provider run, browser state, or a remembered checklist flag. */
+ * index, unverified provider run, browser state, or a remembered checklist flag. */
 export function SetupStatusBubbleV2({workspaceSlug}:{workspaceSlug:string}){
  const [status,setStatus]=useState<Status>(INITIAL);
  useEffect(()=>{

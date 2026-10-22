@@ -84,7 +84,7 @@ export function WorkspaceSetupChecklistV2(){
      </Link>
     </li>)}
    </ol>
-   <p className={styles.note}>A provider's API token, persisted test cases, actual run results
+   <p className={styles.note}>A provider&apos;s API token, persisted test cases, actual run results
     and administrative OAuth grants are separate security boundaries. Setup is not complete
     until the required operational checks are independently verified.</p>
  </section>;

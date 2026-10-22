@@ -21,6 +21,8 @@ export function describeWorkspaceSetup(input:{
  repositories:readonly RepositoryListItem[]|null;
  skills:readonly SkillListItem[]|null;
  models:readonly AIConnectionSummary[]|null;
+ caseState?:SetupState;
+ verifiedRunState?:SetupState;
 }):SetupEvidence{
  const repositories=input.repositories;
  const skills=input.skills;

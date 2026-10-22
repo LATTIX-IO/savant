@@ -29,3 +29,20 @@
 .advanced{min-width:0;overflow:hidden}
 @media(max-width:900px){.compare{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:650px){.page{padding:12px}.portfolio{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* PER-1621: compare only two source-backed Git SHAs; no invented inline diff. */
+.gitCompare{display:grid;gap:12px;padding:14px;min-width:0;border:1px solid var(--sv2-border);
+ border-radius:var(--sv2-radius-control);background:var(--sv2-recess)}
+.gitCompareFields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.gitCompareFields label{display:grid;gap:6px;min-width:0;font:600 12px var(--sv2-font-body)}
+.gitCompareFields select{width:100%;min-width:0;padding:8px;border:1px solid var(--sv2-border-strong);
+ border-radius:var(--sv2-radius-control);background:var(--sv2-surface);
+ color:var(--sv2-fg);font:12px var(--sv2-font-body)}
+.gitCompareFields select:focus-visible,.gitCompareLink:focus-visible{
+ outline:2px solid var(--sv2-focus);outline-offset:2px}
+.gitCompareLink{display:inline-flex;align-items:center;gap:9px;justify-self:start;
+ padding:9px 12px;border:1px solid var(--sv2-border-strong);border-radius:var(--sv2-radius-control);
+ color:var(--sv2-fg);background:var(--sv2-surface);font:600 12px var(--sv2-font-body);text-decoration:none}
+.gitCompareLink:hover{background:var(--sv2-selected)}
+.gitCompare .note{margin:0;max-width:75ch}
+@media(max-width:680px){.gitCompareFields{grid-template-columns:minmax(0,1fr)}}

@@ -9,7 +9,8 @@ import type { SkillDetailPayload, SkillSourcePayload } from "@savant/types";
 import { Ic } from "@/components/savant/icons";
 import { UiV2Button, UiV2CanvasRegion, UiV2EmptyState, UiV2StateBanner, UiV2Status } from "@/components/savant/ui-v2";
 import { useUiV2Mode, useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
+import { fetchSkillAssets, fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
+import type { SkillAssetResponseData } from "@/lib/ui-v2-skill-assets";
 import { proposeFileEdits } from "@/lib/git-connections-client";
 import { parseMarkdownPreviewBlocks } from "@/lib/skill-builder";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
@@ -27,6 +28,7 @@ type LoadState<T> =
 type Notice = { scope: string; kind: "error" | "proposal"; message: string; proposalId: string | null };
 const emptyDetail: LoadState<SkillDetailPayload> = { scope: "", phase: "loading", data: null, error: null };
 const emptySource: LoadState<SkillSourcePayload> = { scope: "", phase: "loading", data: null, error: null };
+const emptyAssets: LoadState<SkillAssetResponseData> = { scope: "", phase: "loading", data: null, error: null };
 
 export function WorkbenchV2({ skillId }: { skillId: string }) {
   const enabled = useUiV2Mode();
@@ -37,6 +39,9 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const evaluationsHref = buildTenantAwareAppPath(pathname, "/evaluations") as Route;
   const [detail, setDetail] = useState<LoadState<SkillDetailPayload>>(emptyDetail);
   const [source, setSource] = useState<LoadState<SkillSourcePayload>>(emptySource);
+  const [assets, setAssets] = useState<LoadState<SkillAssetResponseData>>(emptyAssets);
+  const [assetPreview, setAssetPreview] = useState<LoadState<SkillAssetResponseData>>(emptyAssets);
+  const [assetSelection, setAssetSelection] = useState<{scope:string;path:string}|null>(null);
   const [draft, setDraft] = useState<{ scope: string; text: string }>({ scope: "", text: "" });
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reviewed, setReviewed] = useState<{ scope: string; text: string; base: string } | null>(null);
@@ -95,7 +100,67 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const currentSource = source.scope === scope ? source : emptySource;
   const skill = currentDetail.phase === "ready" ? currentDetail.data.skill : null;
   const sourceData = currentSource.phase === "ready" ? currentSource.data : null;
+  const assetScope = sourceData?.mode === "repository" && sourceData.sourceCommitSha
+    ? `${scope}@${sourceData.sourceCommitSha}` : "";
+  const activeAssets = assets.scope === assetScope ? assets : emptyAssets;
+  const assetData = activeAssets.phase === "ready" ? activeAssets.data : null;
+  const chosenPath=assetSelection?.scope===assetScope?assetSelection.path:null;
+  const previewKey=chosenPath?`${assetScope}:${chosenPath}`:"";
+  const currentPreview=assetPreview.scope===previewKey?assetPreview:emptyAssets;
+  const selectedPreview=currentPreview.phase==="ready"?currentPreview.data.selection:null;
   const editorText = draft.scope === scope ? draft.text : "";
+  useEffect(()=>{
+    if(!enabled||!workspaceSlug||!assetScope||!sourceData)return;
+    const controller=new AbortController();
+    let active=true;
+    queueMicrotask(()=>{
+      if(active){setAssets({scope:assetScope,phase:"loading",data:null,error:null});
+        setAssetSelection(null);}
+    });
+    void fetchSkillAssets(skillId,{workspaceSlug,signal:controller.signal}).then(result=>{
+      if(!active||controller.signal.aborted)return;
+      if(result.data.commitSha!==sourceData.sourceCommitSha)
+        throw new Error("Asset index revision differs from the loaded source; reload Workbench.");
+      if(sourceData.sourcePath!==result.data.root+"/SKILL.md"
+        && sourceData.sourcePath!==result.data.root)
+        throw new Error("Indexed asset root differs from the loaded source path.");
+      setAssets({scope:assetScope,phase:"ready",data:result.data,error:null});
+    }).catch(error=>{
+      if(active&&!controller.signal.aborted)setAssets({scope:assetScope,phase:"error",data:null,
+        error:error instanceof Error?error.message:"Verified Git asset inventory unavailable."});
+    });
+    return ()=>{active=false;controller.abort();};
+  },[enabled,workspaceSlug,skillId,assetScope,retry,sourceData?.sourceCommitSha,sourceData?.sourcePath]);
+
+  useEffect(()=>{
+    if(!enabled||!workspaceSlug||!chosenPath||!previewKey||!assetScope)return;
+    const controller=new AbortController();
+    let active=true;
+    queueMicrotask(()=>{if(active)setAssetPreview({scope:previewKey,phase:"loading",data:null,error:null});});
+    void fetchSkillAssets(skillId,{workspaceSlug,path:chosenPath,signal:controller.signal})
+      .then(result=>{
+        if(!active||controller.signal.aborted)return;
+        if(result.data.commitSha!==sourceData?.sourceCommitSha
+          ||result.data.selection?.path!==chosenPath)
+          throw new Error("Requested file revision or path no longer matches the selected source.");
+        setAssetPreview({scope:previewKey,phase:"ready",data:result.data,error:null});
+      }).catch(error=>{
+        if(active&&!controller.signal.aborted)setAssetPreview({scope:previewKey,phase:"error",
+          data:null,error:error instanceof Error?error.message:"File preview unavailable."});
+      });
+    return ()=>{active=false;controller.abort();};
+  },[enabled,workspaceSlug,skillId,chosenPath,previewKey,assetScope,sourceData?.sourceCommitSha]);
+
+  function openObservedFile(path:string){
+    if(!assetData||!assetData.files.some(file=>file.path===path))return;
+    if(path===assetData.root+"/SKILL.md"){
+      setAssetSelection(null);setWorkspaceView("code");setMode("edit");
+      return;
+    }
+    setAssetSelection({scope:assetScope,path});
+    setWorkspaceView("code");
+  }
+
   const gate = getWorkbenchGate(sourceData, editorText);
   const pending = notice?.scope === scope && notice.kind === "proposal" ? notice : null;
   const visibleNotice = notice?.scope === scope ? notice : null;

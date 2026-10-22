@@ -135,6 +135,7 @@ export function LibraryV2() {
           <UiV2Button variant="tertiary" onClick={() => setRetry(x => x + 1)}>
             <Ic.Refresh className={styles.icon} aria-hidden="true" />Refresh
           </UiV2Button>
+          <Link href={marketplaceHref} className={styles.secondaryLink}>Browse Public Library</Link>
           <UiV2Button onClick={show}>Connect repository</UiV2Button>
           <UiV2Button variant="primary" onClick={() => setCreateOpen(true)}>New skill</UiV2Button>
         </>} />
@@ -163,7 +164,7 @@ export function LibraryV2() {
           <button id="sv2-repos-tab" type="button" role="tab" aria-controls="sv2-library-list"
             aria-selected={section === "repositories"} tabIndex={section === "repositories" ? 0 : -1}
             onClick={() => setSection("repositories")}>Repositories</button>
-          <Link href={marketplaceHref} className={styles.tabLink}>Marketplace</Link>
+          <Link href={marketplaceHref} className={styles.tabLink}>Public Library</Link>
           <span className={styles.disabledTab} aria-disabled="true">Opportunities · Planned</span>
         </div>
         <label className={styles.search}>
@@ -287,7 +288,7 @@ export function LibraryV2() {
 
       <p className={styles.help}>
         Repository synchronization and assessment remain available under <Link href={detailHref}>Repositories</Link>.
-        Public marketplace items are under <Link href={marketplaceHref}>Marketplace</Link>.
+        Browse the <Link href={marketplaceHref}>Public Library</Link> to import external skills into an authorized Git repository through a reviewed proposal.
       </p>
       <UiV2InspectorDrawer id="sv2-skill-inspector" title={activeSelection?.name ?? "Skill"}
         open={Boolean(activeSelection)} onClose={() => setSelected(null)}
@@ -307,14 +308,41 @@ export function LibraryV2() {
           {detailState.loading ? <p role="status">Loading authorized skill details…</p> :
             detailState.error ? <UiV2StateBanner state="unavailable" label={detailState.error} /> :
             detailState.data ? <>
-              {inspectorTab === "summary" ? <dl className={styles.inspectorData}>
-                <dt>Tier</dt><dd>{activeSelection.tier}</dd>
-                <dt>Owner</dt><dd>{activeSelection.owner}</dd>
-                <dt>Repository</dt><dd>{activeSelection.repo}</dd>
-                <dt>Source revision</dt><dd className={styles.mono}>{activeSelection.projection.sourceCommitSha ?? "Not indexed"}</dd>
-                <dt>Latest quality</dt><dd>{Number.isFinite(activeSelection.score) && activeSelection.score !== null
-                  ? activeSelection.score.toFixed(1) : "Not available"}</dd>
-              </dl> : null}
+              {inspectorTab === "summary" ? <div className={styles.inspectorSummary}>
+                <section className={styles.skillPurpose} aria-label="Skill purpose">
+                  <h3>Purpose</h3>
+                  <p>{activeSelection.description?.trim()||
+                    "No summary is available in this skill's indexed Git metadata."}</p>
+                </section>
+                <dl className={styles.inspectorData}>
+                  <dt>Tier</dt><dd>Tier {activeSelection.tier}</dd>
+                  <dt>Owner / team</dt><dd>{activeSelection.owner} · {activeSelection.team}</dd>
+                  <dt>Channel</dt><dd>{activeSelection.channel}</dd>
+                  <dt>State</dt><dd>{activeSelection.status}</dd>
+                  <dt>Repository</dt><dd>{activeSelection.repo}</dd>
+                  <dt>Provider</dt><dd>{activeSelection.repoProvider}</dd>
+                  <dt>Indexed path</dt><dd className={styles.mono}>{activeSelection.projection.sourcePath??"Not reported"}</dd>
+                  <dt>Source revision</dt><dd className={styles.mono}>
+                    {activeSelection.projection.sourceCommitSha??"Not indexed"}</dd>
+                  <dt>Recorded quality</dt><dd>{Number.isFinite(activeSelection.score)&&activeSelection.score!==null
+                    ?activeSelection.score.toFixed(1):"Not available"}</dd>
+                  <dt>Recorded versions</dt><dd>{detailState.data.versionHistory.length}</dd>
+                  <dt>Access group</dt><dd>{activeSelection.accessGroup||"Not reported"}</dd>
+                </dl>
+                <section className={styles.skillPurpose} aria-label="Evaluation summary">
+                  <h3>Latest recorded evaluation</h3>
+                  {detailState.data.evaluations.length?(()=>{
+                    const result=detailState.data.evaluations[0]!;
+                    return <div className={styles.evaluationSynopsis}>
+                      <Link href={buildTenantAwareAppPath(pathname,
+                        `/evaluations/${encodeURIComponent(result.id)}`) as Route}>
+                        {result.dataset}</Link>
+                      <span>{result.status} · {result.passed}/{result.cases} cases passed</span>
+                      <small>Recorded against {result.ref}; not proof of a current provider-backed execution.</small>
+                    </div>;
+                  })():<p>No evaluation history is recorded for this skill.</p>}
+                </section>
+              </div> : null}
               {inspectorTab === "versions" ? detailState.data.versionHistory.length > 0
                 ? <ul className={styles.inspectorList}>{detailState.data.versionHistory.map(version =>
                   <li key={version.commit}><strong>{version.ref}</strong><span>{version.channel} · {version.when}</span>

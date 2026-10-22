@@ -203,11 +203,15 @@ export function SkillHubScreen() {
 
 export function SkillHubSkillScreen({ id }: { id: string }) {
   const pathname = usePathname() || "/";
+  const workspaceSlug=extractWorkspaceSlugFromPathname(pathname);
   const [skill, setSkill] = useState<CatalogSkillDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [repositories, setRepositories] = useState<RepositoryListItem[]>([]);
   const [repositoryId, setRepositoryId] = useState("");
+  const [repositoryState,setRepositoryState]=useState<"loading"|"ready"|"error">("loading");
+  const [repositoryError,setRepositoryError]=useState<string|null>(null);
+  const [repositoryRetry,setRepositoryRetry]=useState(0);
   const [targetRoot, setTargetRoot] = useState("");
   const [owner, setOwner] = useState("");
   const [busy, setBusy] = useState<"analyze" | "import" | null>(null);
@@ -231,16 +235,25 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
   }, [id, refresh]);
 
   useEffect(() => {
-    let active = true;
-    fetchRepositoryList().then((response) => {
-      if (!active) return;
-      setRepositories(response.data);
-      setRepositoryId((current) => current || response.data[0]?.id || "");
-    }).catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
+    const controller=new AbortController();
+    if(!workspaceSlug)return;
+    queueMicrotask(()=>{if(!controller.signal.aborted){
+      setRepositories([]);setRepositoryId("");setRepositoryError(null);
+      setRepositoryState("loading");
+    }});
+    void fetchRepositoryList({workspaceSlug,signal:controller.signal}).then(response=>{
+      if(controller.signal.aborted)return;
+      const available=response.data.filter(repo=>repo.status!=="disabled");
+      setRepositories(available);
+      setRepositoryId(available.length===1?available[0]!.id:"");
+      setRepositoryState("ready");
+    }).catch(reason=>{
+      if(controller.signal.aborted)return;
+      setRepositoryError(reason instanceof Error?reason.message:"Repository list unavailable.");
+      setRepositoryState("error");
+    });
+    return ()=>controller.abort();
+  }, [workspaceSlug,repositoryRetry]);
 
   const evaluating = skill?.evalStatus === "queued" || skill?.evalStatus === "running";
   useEffect(() => {
@@ -264,7 +277,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
   }
 
   async function importSkill() {
-    if (!repositoryId) return;
+    if (!repositoryId || !repositories.some(repo=>repo.id===repositoryId) || !workspaceSlug) return;
     setBusy("import");
     setMessage(null);
     try {
@@ -305,7 +318,8 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {skill.sourceUrl && <a className="btn btn-ghost" href={skill.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>}
+          <a className="btn btn-primary" href="#catalog-import-panel">Import to Git repository</a>
+          {skill.sourceUrl && <a className="btn btn-ghost" href={skill.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>
           <button type="button" className="btn btn-ghost" disabled={busy !== null || evaluating} onClick={() => void analyze()}>
             {evaluating ? "Evaluating…" : skill.evalStatus === "complete" || skill.evalStatus === "needs_review" ? "Re-run live analysis" : "Run live analysis"}
           </button>
@@ -395,17 +409,25 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
         </div>
 
         <div className="col" style={{ gap: "var(--gutter)" }}>
-          <div className="panel">
+          <div className="panel" id="catalog-import-panel">
             <div className="panel-hd"><div className="panel-title">Import into a repository</div></div>
             <div className="panel-bd col" style={{ gap: 10 }}>
-              {repositories.length === 0 ? (
-                <span className="subtle" style={{ fontSize: 12.5 }}>Connect a repository first (Repositories → Connect).</span>
+              {repositoryState==="loading"?<p role="status">Loading connected repositories…</p>:
+               repositoryState==="error"?<div role="alert" className="col" style={{gap:8}}>
+                 <span>Repository inventory unavailable: {repositoryError}</span>
+                 <button className="btn btn-ghost btn-sm" type="button" onClick={()=>setRepositoryRetry(n=>n+1)}>Retry repository check</button>
+               </div>:repositories.length===0 ? (
+                <span className="subtle" style={{ fontSize: 12.5 }}>
+                  No connected Git repositories. <Link href={buildTenantAwareAppPath(pathname,"/repositories") as Route}>Connect a repository</Link> first.
+                </span>
               ) : (
                 <>
                   <label className="col" style={{ gap: 4, fontSize: 12 }}>
-                    Repository
+                    Destination repository (required)
                     <select className="input" value={repositoryId} onChange={(event) => setRepositoryId(event.target.value)}>
-                      {repositories.map((repository) => <option key={repository.id} value={repository.id}>{repository.name}</option>)}
+                      <option value="">Choose a destination repository</option>
+                      {repositories.map((repository) => <option key={repository.id} value={repository.id}>
+                        {repository.name} · {repository.provider} · {repository.branch}</option>)}
                     </select>
                   </label>
                   <label className="col" style={{ gap: 4, fontSize: 12 }}>
@@ -416,7 +438,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                     Owner (optional)
                     <input className="input" value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="e.g. platform-team" />
                   </label>
-                  <button type="button" className="btn btn-primary" disabled={busy !== null || !repositoryId || skill.verdict === "unsafe"} onClick={() => void importSkill()}>
+                  <button type="button" className="btn btn-primary" disabled={busy !== null || !repositoryId || skill.verdict === "unsafe" || Boolean(proposal)} onClick={() => void importSkill()}>
                     {busy === "import" ? "Preparing…" : "Propose import"}
                   </button>
                   <span className="subtle" style={{ fontSize: 11.5 }}>

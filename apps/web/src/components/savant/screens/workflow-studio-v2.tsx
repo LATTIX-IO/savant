@@ -19,7 +19,7 @@ import styles from "./workflow-studio-v2.module.css";
 type WorkflowRecord = {
   sourceOfTruth: "git"; repositoryId: string; workflowId: string;
   specification: WorkflowSpecification; blobSha: string; commitSha: string; digest: string;
-  indexed?: boolean; reconciliationRequired?: boolean;
+
 };
 type Inventory = { scope: string; phase: "loading"|"ready"|"error"; data: RepositoryListItem[]; message: string };
 type Loaded = { key: string; phase: "idle"|"loading"|"ready"|"missing"|"error"; record: WorkflowRecord|null; message: string };

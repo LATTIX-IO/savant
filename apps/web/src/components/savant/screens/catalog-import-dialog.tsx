@@ -1,12 +1,13 @@
 "use client";
 
 import type {ChangeProposal,RepositoryListItem} from "@savant/types";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useRef,useState,type KeyboardEvent} from "react";
 import Link from "next/link";
 import type {Route} from "next";
 
 import {fetchRepositoryList} from "@/lib/control-plane-client";
 import {importCatalogSkill} from "@/lib/git-connections-client";
+import {eligibleCatalogImportRepositories,initialCatalogImportRepositoryId,canProposeCatalogImport} from "@/lib/ui-v2-catalog-import";
 import {buildTenantAppPath} from "@/lib/tenant-paths";
 import {SkillProposalNotice} from "./skill-assessment-findings";
 import styles from "./catalog-import-dialog.module.css";
@@ -51,10 +52,10 @@ export function CatalogImportDialog({skill,workspaceSlug,onClose}:{
    void fetchRepositoryList({workspaceSlug,signal:controller.signal})
      .then(response=>{
        if(controller.signal.aborted)return;
-       const data=response.data.filter(item=>item.status!=="disabled");
+       const data=eligibleCatalogImportRepositories(response.data);
        setRepositories({status:"ready",data,error:null});
        // Multiple destinations always require a conscious selection.
-       setSelectedId(data.length===1?data[0]!.id:"");
+       setSelectedId(initialCatalogImportRepositoryId(data));
      }).catch(caught=>{
        if(!controller.signal.aborted)setRepositories({status:"error",data:[],
          error:caught instanceof Error?caught.message:"Repository inventory unavailable."});
@@ -63,8 +64,7 @@ export function CatalogImportDialog({skill,workspaceSlug,onClose}:{
  },[workspaceSlug,retry]);
 
  async function propose(){
-   if(requestRef.current||!ownedRef.current||busy||proposal||skill.verdict==="unsafe"||
-     !repositories.data.some(item=>item.id===selectedId))return;
+   if(requestRef.current||!ownedRef.current||!canProposeCatalogImport({repositories:repositories.data,repositoryId:selectedId,verdict:skill.verdict,loading:busy||repositories.status!=="ready",proposalExists:Boolean(proposal)}))return;
    requestRef.current=true;setBusy(true);setError(null);
    try{
      const data=await importCatalogSkill(skill.id,{
@@ -77,7 +77,7 @@ export function CatalogImportDialog({skill,workspaceSlug,onClose}:{
      if(ownedRef.current)setError(caught instanceof Error?caught.message:"Import proposal could not be created.");
    }finally{requestRef.current=false;if(ownedRef.current)setBusy(false);}
  }
- function onKeyDown(event:React.KeyboardEvent){
+ function onKeyDown(event:KeyboardEvent){
    if(event.key==="Escape"&&!busy){event.preventDefault();onClose();return;}
    if(event.key!=="Tab"||!dialogRef.current)return;
    const focusable=[...dialogRef.current.querySelectorAll<HTMLElement>(
@@ -90,7 +90,8 @@ export function CatalogImportDialog({skill,workspaceSlug,onClose}:{
      event.preventDefault();focusable[0]?.focus();
    }
  }
- const canPropose=selectedId&&skill.verdict!=="unsafe"&&repositories.status==="ready"&&!busy&&!proposal;
+ const canPropose=canProposeCatalogImport({repositories:repositories.data,repositoryId:selectedId,
+   verdict:skill.verdict,loading:busy||repositories.status!=="ready",proposalExists:Boolean(proposal)});
  return <div className={styles.scrim} onMouseDown={e=>{
    if(e.target===e.currentTarget&&!busy)onClose();
  }}>

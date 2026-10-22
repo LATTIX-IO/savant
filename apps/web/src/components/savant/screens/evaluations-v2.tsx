@@ -12,7 +12,7 @@ import { fetchEvaluationDashboard, fetchSkillList, fetchSkillSource } from "@/li
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import { listPersistedTestBenches } from "@/lib/test-bench-client";
 import type { TestBenchDefinition } from "@/server/test-bench/definition-contract";
-import { PersistedTestBench } from "./persisted-test-bench";
+import { PersistedTestBenchCasesV2 } from "./persisted-test-bench-cases-v2";
 import { evaluationLifecycle, visibleEvaluationRuns } from "@/lib/ui-v2-evaluations-model";
 import styles from "./evaluations-v2.module.css";
 
@@ -134,8 +134,8 @@ export function EvaluationsV2() {
               <>
                 {!canAuthor?<UiV2StateBanner state="unavailable"
                   label="Editing disabled until this workspace has an authorized, pinned Git source and role."/>:null}
-                <PersistedTestBench key={slug+":"+skillId} skillId={skillId}
-                  pathname={pathname} readOnly={!canAuthor} guided/>
+                <PersistedTestBenchCasesV2 key={slug+":"+skillId} skillId={skillId}
+                  pathname={pathname} readOnly={!canAuthor}/>
               </>
             )}
           <p className={styles.note}>Reference dataset catalog is not available from the production API.

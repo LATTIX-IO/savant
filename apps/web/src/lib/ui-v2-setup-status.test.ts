@@ -5,8 +5,7 @@ import {fileURLToPath} from "node:url";
 import type {AIConnectionSummary,RepositoryListItem,SkillListItem} from "@savant/types";
 import {describeWorkspaceSetup} from "./ui-v2-setup-status.ts";
 
-const repo={id:"r-1",name:"skills",status:"active",state:"ready",provider:"github",skills:7}
- as unknown as RepositoryListItem;
+const repo={id:"r-1",name:"skills",status:"active",state:"ready",provider:"github",skills:7} as unknown as RepositoryListItem;
 const skill={id:"skill-1",skillUuid:"skill-uuid",name:"QA"} as SkillListItem;
 const model:AIConnectionSummary={
  aiConnectionUuid:"conn-1",provider:"openai",label:"Test only",

@@ -501,6 +501,30 @@ the repository's change proposal controls; reopen from Git after merge.`);
             <label>Title<input value={selected.label??""} maxLength={2048}
               onChange={e=>changeNode(selected.id,{label:e.target.value})}/></label>
             <label>Kind<select value={selected.kind} onChange={e=>changeNodeKind(e.target.value as WorkflowNodeKind)}>{KINDS.map(k=><option key={k} value={k}>{k}</option>)}</select></label>
+            {selected.kind==="skill"?<section className={styles.fields}
+              aria-label="Indexed skill source reference">
+              <label>Indexed Git skill (authoring reference)
+                <select value={typeof authoredSkillRef==="object"&&authoredSkillRef!==null&&
+                    "skillId" in authoredSkillRef&&typeof authoredSkillRef.skillId==="string"&&
+                    repoSkills.some(item=>item.id===authoredSkillRef.skillId)?authoredSkillRef.skillId:""}
+                  onChange={event=>bindIndexedSkill(event.target.value)}
+                  disabled={!repo||busy||visibleSkills.phase!=="ready"}>
+                  <option value="">Choose an indexed skill from this repository</option>
+                  {repoSkills.map(item=><option key={item.skillUuid} value={item.id}
+                    disabled={!createAuthoredWorkflowSkillBinding(item,repo?.name??"")}>
+                    {item.name} · {item.projection.sourceCommitSha?.slice(0,12)??"Unpinned"}
+                  </option>)}
+                </select>
+              </label>
+              {visibleSkills.phase==="error"?<p role="alert">Indexed skill inventory unavailable.</p>:
+                repoSkills.length===0?<p>No indexed skills are available in this repository.</p>:null}
+              <p>Source evidence: {indexedSkillState.replaceAll("-"," ")}. This reference
+                records tenant-indexed Git metadata for human modeling only. It is
+                not runtime authorization or evidence that the skill was executed.</p>
+              {authoredSkillRef&&typeof authoredSkillRef==="object"&&
+                "sourceCommitSha" in authoredSkillRef&&typeof authoredSkillRef.sourceCommitSha==="string"?
+                <p>Authored source revision: <code>{authoredSkillRef.sourceCommitSha}</code></p>:null}
+            </section>:null}
             <h3>Typed input ports</h3>
             {(selected.inputs??[]).map(p=><div key={p.id} className={styles.portRow}>
               <code>{p.id}</code>

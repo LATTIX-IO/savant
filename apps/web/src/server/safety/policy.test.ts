@@ -17,7 +17,7 @@ test("CAUTION below the pass risk passes under policy; raw output stays in the f
   const findings = safetyFindings([{ skillId: "a", sourcePath: "tier2/x/a", commitSha: "c", status: "complete", riskScore: 12, severity: "LOW", recommendation: "CAUTION", issues: [], llmUsed: false, scannerVersion: "2", error: null, scannedAt: "2026-09-30T00:00:00Z" }]);
   assert.equal(findings[0]?.code, "SAFETY_LOW_RISK");
   assert.equal(findings[0]?.severity, "info");
-  assert.match(findings[0]?.detail ?? "", /SkillSpector: CAUTION · severity LOW · risk 12\/100/);
+  assert.match(findings[0]?.detail ?? "", /Security assessment: CAUTION · severity LOW · risk 12\/100/);
 });
 
 test("limitations explain what a chat-only run can't exercise; small references are included", () => {

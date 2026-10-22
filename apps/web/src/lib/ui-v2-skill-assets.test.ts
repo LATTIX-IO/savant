@@ -44,3 +44,18 @@ test("list is bounded and honestly reports truncation",()=>{
  assert.equal(p.omitted,25);
  assert.equal(p.complete,false);
 });
+
+test("the canonical SKILL.md remains inspectable when an index is truncated",()=>{
+ const many=Array.from({length:250},(_,i)=>({path:prefix+"/references/a"+i+".md",kind:"file" as const}));
+ const p=projectSkillAssets({sourcePath:prefix,commitSha:SHA,entries:[...many,entries[0]!]});
+ assert.equal(p.items.length,200);
+ assert.equal(p.omitted,51);
+ assert.ok(p.items.some(file=>file.relativePath==="SKILL.md"));
+});
+test("simple dotted relative file paths remain verifiable without permitting traversal",()=>{
+ const p=projectSkillAssets({sourcePath:prefix,commitSha:SHA,entries});
+ const r=resolveObservedSkillLinks({sourcePath:prefix+"/SKILL.md",assets:p,
+   content:"[Valid](./references/policy.md#overview)\n[Bad](./../private.env)"});
+ assert.deepEqual(r.map(link=>link.status),["verified","unsafe"]);
+ assert.equal(r[0]?.resolvedPath,prefix+"/references/policy.md");
+});

@@ -339,7 +339,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           <div className="panel">
             <div className="panel-hd">
               <div className="panel-title">Live evaluation</div>
-              <span className="subtle" style={{ fontSize: 11.5 }}>{skill.evaluation?.models?.generator ?? "NVIDIA NIM"} drafts and runs · {"Evaluation judge"} validates and scores</span>
+              <span className="subtle" style={{ fontSize: 11.5 }}>Model-generated cases · independent evaluation judge reviews and scores</span>
             </div>
             <div className="panel-bd col" style={{ gap: 10 }}>
               {scorecard?.overallScore !== undefined ? (
@@ -368,7 +368,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           </div>
 
           <div className="panel">
-            <div className="panel-hd"><div className="panel-title">Safety · NVIDIA SkillSpector</div></div>
+            <div className="panel-hd"><div className="panel-title">Safety assessment</div></div>
             <div className="panel-bd col" style={{ gap: 6 }}>
               {skill.safety?.status === "complete" ? (
                 <>

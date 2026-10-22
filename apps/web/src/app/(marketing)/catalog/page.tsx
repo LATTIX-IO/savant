@@ -60,8 +60,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
             Skills worth <em>trusting</em>.
           </h1>
           <p className="page-lede">
-            Agent skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other reputable sources. Savant scans each one with
-            Savant's security assessments and evaluates it with model-generated cases and independent scoring.
+            Agent skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other reputable sources. Savant assesses them for security risks and evaluates model-generated test cases using independent scoring.
             Workspaces import any skill into their own repositories through a reviewed pull request. Every listing on each hub is
             enumerated; packages are fetched, scanned and evaluated most-popular first as daily capacity allows.
           </p>

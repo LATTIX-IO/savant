@@ -2,7 +2,7 @@ import type { RepositoryTreeEntry } from "../git/types.ts";
 import { projectSkillAssets, resolveObservedSkillLinks,
   type SkillAssetProjection, type SkillAssetResponseData } from "../../lib/ui-v2-skill-assets.ts";
 
-const MAX_TREE_ENTRIES=20_000;
+export const MAX_TREE_ENTRIES=20_000;
 const MAX_SKILL_BYTES=200_000;
 const MAX_PREVIEW_BYTES=64_000;
 const SHA=/^[a-fA-F0-9]{40}$/;

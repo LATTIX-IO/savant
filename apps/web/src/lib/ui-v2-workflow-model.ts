@@ -22,7 +22,7 @@ export function workflowSaveGate(state:{
   if(!state.hasRecord&&!state.canCreate)return {allowed:false,reason:"Open the Git artifact or verify that a new workflow does not exist."};
   if(!state.valid)return {allowed:false,reason:"Fix graph/JSON validation errors before saving."};
   if(!state.dirty)return {allowed:false,reason:"No unsaved workflow changes."};
-  return {allowed:true,reason:"Git compares the expected file revision before a write."};
+  return {allowed:true,reason:"Reverify the pinned Git revision and submit a reviewed change proposal; this does not write to the repository."};
 }
 
 /** Read-only deterministic DAG placement. It is a view of explicit edges, not execution evidence. */

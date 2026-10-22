@@ -11,8 +11,8 @@ export const VERDICT_LABEL: Record<string, string> = {
 export const VERDICT_HINT: Record<string, string> = {
   validated: "Passed Savant's safety scan and scored 70+ on a live evaluation.",
   analyzed: "Scanned or evaluated by Savant; not yet both passing.",
-  caution: "SkillSpector or the source hub flagged patterns to review before use.",
-  unsafe: "SkillSpector recommends not installing this skill.",
+  caution: "Security analysis or source-hub review identified patterns requiring attention.",
+  unsafe: "Savant's security policy blocks importing this skill.",
   unverified: "Imported from the source hub; Savant's analysis is still running.",
 };
 

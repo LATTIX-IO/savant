@@ -47,6 +47,8 @@ export function SavantShellV2({
   const counts = shellData?.counts ?? EMPTY_SAVANT_SHELL_DATA.counts;
   const navItems = getUiV2WorkspaceNavigation(workspace.slug, appPath, counts);
   const [paletteIntent, setPaletteIntent] = useState<PaletteIntent | null>(null);
+  const [sidebarQuery,setSidebarQuery] = useState("");
+  const closePalette=()=>{setPaletteIntent(null);setSidebarQuery("");};
   const { resolvedTheme, values, set } = useTweaks();
   const toggle = buildBinaryThemeToggleState(resolvedTheme);
   const dashboardHref = buildUiV2WorkspaceSwitchPath(workspace.slug, "/dashboard") as Route;
@@ -181,6 +183,16 @@ export function SavantShellV2({
         </div>
       </header>
       <aside className={styles.sidebar} aria-label="Application navigation">
+        <label className={styles.sidebarSearch} htmlFor="sv2-global-search">
+          <Ic.Search className={styles.icon} aria-hidden="true" />
+          <input id="sv2-global-search" type="search" value={sidebarQuery}
+            onFocus={()=>setPaletteIntent("all")}
+            onChange={event=>{setSidebarQuery(event.target.value);setPaletteIntent("all");}}
+            placeholder="Search Savant…" autoComplete="off"
+            aria-label="Search Savant skills and sections. Ctrl or Command K"
+            aria-keyshortcuts="Control+K Meta+K" />
+          <kbd className={styles.shortcut}>Ctrl K</kbd>
+        </label>
         <nav className={styles.nav} aria-label="Savant sections">
           {groups.map(group => {
             const items = navItems.filter(item => item.group === group.id);
@@ -206,21 +218,9 @@ export function SavantShellV2({
                   {content}
                 </Link>;
               })}
-              {group.id === "primary" ? <Link
-                href={buildTenantAppPath(workspace.slug,"/workflows") as Route}
-                className={`${styles.navItem} ${styles.navSubItem} ${appPath==="/workflows"?styles.navSubActive:""}`}
-                aria-current={appPath==="/workflows"?"page":undefined}
-                title="Model Git-backed workflow specifications">
-                <Ic.Repo className={styles.icon} aria-hidden="true" />
-                <span>Workflow Studio</span>
-              </Link> : null}
+
             </div>;
           })}
-          <button type="button" className={`${styles.navItem} ${styles.navButton}`}
-            onClick={() => setPaletteIntent("all")} title="Find tools and administrative sections">
-            <Ic.Search className={styles.icon} aria-hidden="true" />
-            <span>All sections</span>
-          </button>
         </nav>
         <div className={styles.profile} title={viewer.displayName}>
           <span className={styles.profileAvatar} aria-hidden="true">{viewer.initials}</span>
@@ -231,7 +231,7 @@ export function SavantShellV2({
         <UiV2ModeProvider workspaceSlug={workspace.slug}>{children}</UiV2ModeProvider>
       </main>
       <SavantCommandPalette open={paletteIntent !== null} intent={paletteIntent ?? "all"}
-        onClose={() => setPaletteIntent(null)} workspaceSlug={workspace.slug}
+        onClose={closePalette} initialQuery={sidebarQuery} workspaceSlug={workspace.slug}
         counts={counts} governanceEnabled={isGovernanceFeatureEnabled()} />
     </UiV2Surface>
   );

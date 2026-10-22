@@ -44,19 +44,21 @@ export function projectSkillAssets(input:{
   if(!SHA.test(input.commitSha))throw new Error("source_revision_unverified");
   const root=skillAssetRoot(input.sourcePath);
   const seen=new Set<string>();
-  const assets:SkillAsset[]=[];
-  let omitted=0;
+  const candidates:SkillAsset[]=[];
   for(const entry of input.entries){
     if(entry.kind!=="file"||!safeSegments(entry.path)||!entry.path.startsWith(root+"/"))continue;
     const relative=entry.path.slice(root.length+1);
     const kind=classify(relative);
     if(!kind||seen.has(entry.path))continue;
     seen.add(entry.path);
-    if(assets.length>=MAX_ITEMS){omitted++;continue;}
     const bytes=Number.isSafeInteger(entry.size)&&entry.size!>=0?entry.size!:null;
-    assets.push({path:entry.path,relativePath:relative,kind,bytes});
+    candidates.push({path:entry.path,relativePath:relative,kind,bytes});
   }
-  assets.sort((a,b)=>a.relativePath.localeCompare(b.relativePath));
+  // Truncation is deterministic and never hides the canonical SKILL.md.
+  candidates.sort((a,b)=>a.kind==="instructions"?-1:b.kind==="instructions"?1:
+    a.relativePath.localeCompare(b.relativePath));
+  const omitted=Math.max(0,candidates.length-MAX_ITEMS);
+  const assets=candidates.slice(0,MAX_ITEMS).sort((a,b)=>a.relativePath.localeCompare(b.relativePath));
   return {source:"pinned-git-tree",root,commitSha:input.commitSha,items:assets,
     omitted,complete:omitted===0};
 }
@@ -77,7 +79,8 @@ export function resolveObservedSkillLinks(input:{
       if(/^(https?:|mailto:)/i.test(raw)){
         results.push({raw,resolvedPath:null,line:index+1,status:"external"});continue;
       }
-      const path=raw.split("#")[0]||"";
+      const rawPath=raw.split("#")[0]||"";
+      const path=rawPath.startsWith("./")?rawPath.slice(2):rawPath;
       if(!path||!safeSegments(path)){
         results.push({raw,resolvedPath:null,line:index+1,status:"unsafe"});continue;
       }
@@ -88,3 +91,16 @@ export function resolveObservedSkillLinks(input:{
   }
   return results;
 }
+
+/** Shared wire contract for the authenticated Git asset inventory. */
+export type SkillAssetResponseData={
+  sourceOfTruth:"git";
+  commitSha:string;
+  root:string;
+  files:SkillAsset[];
+  links:SkillAssetLink[];
+  complete:boolean;
+  omitted:number;
+  selection:{path:string;kind:SkillAssetKind;content:string;bytes:number}|null;
+};
+export type SkillAssetApiResponse={data:SkillAssetResponseData;meta:{sourceOfTruth:string;generatedAt:string;schemaVersion:number}};

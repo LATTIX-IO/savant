@@ -19,6 +19,7 @@ test("PER-1610 provider mode guard excludes GitHub symbolic links and submodules
    {path:"tier2/review/SKILL.md",type:"blob",mode:"100644",size:50},
    {path:"tier2/review/scripts/check.sh",type:"blob",mode:"100755",size:80},
    {path:"tier2/review/references/symlink.md",type:"blob",mode:"120000",size:27},
+   {path:"tier2/review/references/unknown.md",type:"blob",size:30},
    {path:"tier2/review/vendor",type:"commit",mode:"160000"},
    {path:"tier2/review/references",type:"tree",mode:"040000"},
   ]}),{status:200,headers:{"content-type":"application/json"}});
@@ -27,7 +28,7 @@ test("PER-1610 provider mode guard excludes GitHub symbolic links and submodules
  assert.deepEqual(tree.map(x=>x.path),[
   "tier2/review/SKILL.md","tier2/review/scripts/check.sh","tier2/review/references",
  ]);
- assert.equal(tree.some(x=>x.path.includes("symlink")),false);
+ assert.equal(tree.some(x=>x.path.includes("symlink")||x.path.includes("unknown")),false);
  assert.equal(observed.length,1);
  assert.ok(observed[0]?.includes("/git/trees/"+sha));
 });

@@ -34,7 +34,7 @@ export function describeSafetyDecision(decision: SafetyDecision, threshold = saf
     case "pass":
       return "The security assessment rated this package safe.";
     case "pass_low_risk":
-      return `SkillSpector rated it CAUTION, but its risk score is below ${threshold}/100, so Savant's policy passes it. Its findings are still listed for review.`;
+      return `The assessment recommended caution, but its risk score is below ${threshold}/100, so Savant's policy passes it. Its findings are still listed for review.`;
     case "caution":
       return `The assessment recommends caution with a risk score of ${threshold}/100 or more; review its findings before use.`;
     case "block":

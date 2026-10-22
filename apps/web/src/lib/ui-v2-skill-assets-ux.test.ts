@@ -15,7 +15,11 @@ test("PER-1610 Workbench reads and renders only ACL-filtered Git assets, not sta
  assert.match(workbench,/sourceData\.sourceCommitSha/);
  assert.match(workbench,/sourceData\.sourcePath/);
  assert.match(workbench,/assetData\.files\.map/);
- assert.match(workbench,/assetData\.links\.map/);
+ assert.match(workbench,/projectObservedSkillSourceGraph\(assetData\)/);
+ assert.match(workbench,/sourceGraph\.unresolved\.map/);
+ assert.match(workbench,/sourceGraph\.files\.map/);
+ const projection=readFileSync(fileURLToPath(new URL("./ui-v2-workbench-source-graph.ts",import.meta.url)),"utf8");
+ assert.match(projection,/for\(const link of inventory\.links\)/);
  assert.match(workbench,/openObservedFile/);
  assert.match(workbench,/currentPreview\.phase==="error"/);
  assert.match(workbench,/selectedPreview\.content/);

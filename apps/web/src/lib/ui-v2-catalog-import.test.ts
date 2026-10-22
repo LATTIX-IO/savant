@@ -15,7 +15,7 @@ test("PER-1623 choose exactly one eligible repository; multiple require explicit
  assert.equal(initialCatalogImportRepositoryId([]),"");
  assert.equal(initialCatalogImportRepositoryId([a]),"one");
  assert.equal(initialCatalogImportRepositoryId([a,b]),"");
- assert.equal(initialCatalogImportRepositoryId([repo("disabled","disabled")]),"");
+ assert.equal(initialCatalogImportRepositoryId([repo("unsupported",false)]),"");
  for(const [items,id,verdict,loading,proposal,allowed] of [
   [[a,b],"","validated",false,false,false],
   [[a,b],"one","validated",false,false,true],
@@ -24,7 +24,7 @@ test("PER-1623 choose exactly one eligible repository; multiple require explicit
   [[a],"one","unsafe",false,false,false],
   [[a],"one","validated",true,false,false],
   [[a],"one","validated",false,true,false],
-  [[repo("disabled","disabled")],"unsupported","validated",false,false,false],
+  [[repo("unsupported",false)],"unsupported","validated",false,false,false],
  ] as const){
    assert.equal(canProposeCatalogImport({repositories:items,repositoryId:id,
      verdict,loading,proposalExists:proposal}),allowed);

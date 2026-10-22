@@ -30,7 +30,7 @@ import styles from "./app-shell-v2.module.css";
 
 const iconById: Record<UiV2WorkspaceNavId, (props: React.SVGProps<SVGSVGElement>) => React.JSX.Element> = {
   overview: Ic.Overview, library: Ic.Skills, workbench: Ic.Repo, evaluations: Ic.Eval,
-  runs: Ic.Clock, insights: Ic.Eval, integrations: Ic.Connectors, settings: Ic.Settings,
+  runs: Ic.Clock, insights: Ic.Eval, catalog: Ic.Skills, integrations: Ic.Connectors, settings: Ic.Settings,
 };
 const groups = [{ id: "primary", label: "Workspaces" }, { id: "admin", label: "Administration" }] as const;
 

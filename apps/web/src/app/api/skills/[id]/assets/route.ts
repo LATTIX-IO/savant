@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { authorizeTenantRequest, TenantContextError } from "@/server/control-plane/tenant-context";
 import { createApiErrorResponse, createControlPlaneMeta } from "@/server/control-plane/control-plane-response";
-import { getSkillAssetResponse, SkillAssetError } from "@/server/control-plane/skill-assets";
+import { getSkillAssetResponse } from "@/server/control-plane/skill-assets-runtime";
+import { SkillAssetError } from "@/server/control-plane/skill-assets";
 import { CapabilityResolveError } from "@/server/workflows/capability-resolver";
 import { GitProviderError } from "@/server/git/errors";
 

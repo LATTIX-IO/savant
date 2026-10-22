@@ -9,7 +9,7 @@ import type {TestBenchDefinition} from "@/server/test-bench/definition-contract"
 import {readObservedDailyQuota} from "@/lib/observed-admission-quota-client";
 import type {DailyAdmissionQuota} from "@/server/test-bench/observed-admission-quota";
 
-/** Displays ONLY server-confirmed NIM/Jev chat-only observations, never synthetic scores. */
+/** Displays ONLY server-confirmed chat-only execution and judge observations, never synthetic scores. */
 export function ObservedTestBenchRunPanel({
   skillId,definition,workspaceSlug,readOnly,
 }:{

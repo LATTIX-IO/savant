@@ -55,7 +55,6 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
  const repositoryHref=buildTenantAwareAppPath(pathname,"/repositories") as Route;
  const modelsHref=(buildTenantAwareAppPath(pathname,"/settings")+"?section=ai") as Route;
  const sourceHref=(buildTenantAwareAppPath(pathname,"/settings")+"?section=source-control") as Route;
- const evaluationsHref=buildTenantAwareAppPath(pathname,"/evaluations") as Route;
  const defaultHref=buildTenantAwareAppPath(pathname,"/settings") as Route;
  const status=(model:AIConnectionSummary)=>model.status==="active"?"ready":
    model.status==="revoked"?"failed":"warning";

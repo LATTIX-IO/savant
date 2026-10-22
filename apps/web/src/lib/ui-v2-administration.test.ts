@@ -11,7 +11,8 @@ test("UX-06 uses scoped provider metadata, avoids credential exposure and retain
    "inspectUiV2ProviderLanes","workspaceSlug:slug,signal:controller.signal"])assert.ok(integrations.includes(field));
  assert.match(integrations,/API credentials are never returned/);
  assert.match(integrations,/tenant-scoped agent-client inventory API is not available/);
- assert.match(integrations,/No step uses browser-local simulated state/);
+ assert.match(integrations,/Settings is the canonical one-stop place/);
+ assert.match(integrations,/runtime not verified/);
  assert.match(settings,/External SCIM identity synchronization/);
  assert.match(settings,/existing owner entitlements/);
  assert.match(classic,/ClassicSettingsScreen/);

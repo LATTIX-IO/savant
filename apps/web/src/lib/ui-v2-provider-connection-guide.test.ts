@@ -23,7 +23,9 @@ test("PER-1607: pending account and enterprise controls cannot issue OAuth or pr
   assert.ok(guide.includes(name));
  assert.doesNotMatch(guide,/fetch\(|onClick=|localStorage|sessionStorage|oauth\/authorize/);
  assert.match(integrations,/testAction=\{<Link href=\{modelsHref\}/);
- assert.match(settings,/onClick=\{\(\)=>setTab\("advanced"\)\}/);
+ assert.match(settings,/onClick=\{openEditor\}/);
+ assert.match(settings,/\["setup","Setup"\]/);
+ assert.doesNotMatch(settings,/\["advanced","Manage settings"\]/);
 });
 test("PER-1607: reused central v2 tokens and both existing screen routes",()=>{
  assert.match(integrations,/ProviderConnectionGuide/);

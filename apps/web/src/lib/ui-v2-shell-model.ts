@@ -18,7 +18,7 @@ const NAVIGATION: readonly NavSpec[] = [
   { id: "overview", label: "Overview", appPath: "/dashboard", group: "workspace" },
   { id: "skills", label: "Skills", appPath: "/skills", group: "library", countKey: "skills" },
   { id: "repositories", label: "Repositories", appPath: "/repositories", group: "library", countKey: "repositories" },
-  { id: "catalog", label: "Marketplace", appPath: "/catalog", group: "library" },
+  { id: "catalog", label: "Catalog", appPath: "/catalog", group: "library" },
   { id: "evaluations", label: "Evaluations and runs", appPath: "/evaluations", group: "quality", countKey: "evaluations" },
   { id: "intelligence", label: "Insights", appPath: "/intelligence", group: "quality" },
   { id: "releases", label: "Releases", appPath: "/releases", group: "quality", countKey: "releases" },
@@ -102,7 +102,7 @@ export function buildUiV2RouteCrumbs(
     [["Workspace", null], ["Runs", "current"]]);
   if (route.kind === "detail" && route.navId === "catalog") {
     return buildUiV2Crumbs(workspaceSlug, [
-      ["Workspace", null], ["Marketplace", "/catalog"], ["Skill", "current"],
+      ["Workspace", null], ["Catalog", "/catalog"], ["Skill", "current"],
     ]);
   }
   return buildUiV2Crumbs(workspaceSlug,
@@ -157,12 +157,12 @@ export function isUiV2EnabledForWorkspace(
 }
 
 /**
- * Reference navigation is six operational workspaces and two administrative areas.
+ * Reference navigation is seven operational workspaces and two administrative areas.
  * Canonical routes above remain unchanged for deep-link and governance parity.
  * Workbench is a picker; Runs has an authorized tenant route.
  */
 export type UiV2WorkspaceNavId =
-  "overview" | "library" | "workbench" | "evaluations" | "runs" | "insights" |
+  "overview" | "library" | "workbench" | "evaluations" | "runs" | "insights" | "catalog" |
   "integrations" | "settings";
 export type UiV2WorkspaceNavItem = {
   id: UiV2WorkspaceNavId; label: string; group: "primary" | "admin";
@@ -180,7 +180,7 @@ export function getUiV2WorkspaceNavigation(
     { id: "overview", label: "Overview", group: "primary", href: link("/dashboard"),
       picker: null, active: active === "overview", count: null },
     { id: "library", label: "Library", group: "primary", href: link("/skills"),
-      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail) &&
+      picker: null, active: ["skills","repositories"].includes(active ?? "") && !(active === "skills" && detail) &&
         appPath!=="/workflows" && appPath!=="/workbench",
       count: counts.skills },
     { id: "workbench", label: "Workbench", group: "primary", href: link("/workbench"),
@@ -192,6 +192,8 @@ export function getUiV2WorkspaceNavigation(
       picker: null, active: appPath === "/runs" || (active === "evaluations" && detail), count: null },
     { id: "insights", label: "Insights", group: "primary", href: link("/intelligence"),
       picker: null, active: ["intelligence","releases"].includes(active ?? ""), count: null },
+    { id: "catalog", label: "Catalog", group: "primary", href: link("/catalog"),
+      picker: null, active: active === "catalog", count: null },
     { id: "integrations", label: "Integrations", group: "admin", href: link("/router"),
       picker: null, active: ["router","connectors"].includes(active ?? ""), count: null },
     { id: "settings", label: "Settings", group: "admin", href: link("/settings"),

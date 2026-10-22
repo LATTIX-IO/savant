@@ -41,10 +41,13 @@ export function projectObservedSkillSourceGraph(
   relation:authored.has(file.path)?"declared-in-skill-md" as const:"observed-git-file" as const,
   authoredLines:authored.get(file.path)??[],
  }));
- const unresolved=inventory.links.filter(link=>link.status!=="verified").map(link=>({
-  raw:link.raw,line:link.line,
-  status:link.status==="missing"&&!inventory.complete?"unverified" as const:link.status,
- }));
+ const unresolved:UnresolvedSourceEdge[]=[];
+ for(const link of inventory.links){
+  if(link.status==="verified")continue;
+  const status:UnresolvedSourceEdge["status"]=
+   link.status==="missing"&&!inventory.complete?"unverified":link.status;
+  unresolved.push({raw:link.raw,line:link.line,status});
+ }
  return {commitSha:inventory.commitSha,root:inventory.root,files,unresolved,
   totalObserved:all.length,notShown:(all.length-files.length)+inventory.omitted,
   complete:inventory.complete};

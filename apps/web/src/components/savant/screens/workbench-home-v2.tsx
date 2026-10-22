@@ -83,7 +83,7 @@ export function WorkbenchHomeV2(){
         onKeyDown={event=>{if(event.key==="Escape")setExpanded(false);}} 
         placeholder="Search by skill, owner, repository, or purpose…"/>
       {live.phase==="loading"?<p role="status" className={styles.muted}>
-        Loading your workspace's indexed skills…</p>:
+        Loading your workspace&apos;s indexed skills…</p>:
         live.phase==="error"?<UiV2StateBanner state="unavailable" label={live.message}/>:
         live.data.length===0?<UiV2EmptyState
           message="No indexed skills are available yet. Connect and synchronize a Git repository in Library."/>:

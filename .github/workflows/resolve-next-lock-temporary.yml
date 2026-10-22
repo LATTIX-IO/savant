@@ -1,0 +1,45 @@
+name: Resolve Next.js patched lockfile (temporary read-only)
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'apps/web/package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/resolve-next-lock-temporary.yml'
+permissions:
+  contents: read
+jobs:
+  lock:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'fix/per-1626-next-security-patch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout only untrusted feature head with read-only token
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - name: Install pinned pnpm
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
+        with:
+          run_install: false
+      - name: Install Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '24'
+      - name: Resolve patched packages, no dependency scripts or application credentials
+        run: pnpm install --lockfile-only --no-frozen-lockfile --ignore-scripts
+      - name: Print public lockfile as bounded fragments for a reviewed PR update
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync} from "node:fs";
+          const data=readFileSync("pnpm-lock.yaml");
+          const encoded=data.toString("base64");
+          const chunk=12000, count=Math.ceil(encoded.length/chunk);
+          console.log("SAVANT_LOCK_PARTS="+count+" BYTES="+data.length);
+          for(let i=0;i<count;i++){
+            console.log("SAVANT_LOCK_FRAGMENT_"+String(i).padStart(3,"0")+"::"+
+              encoded.slice(i*chunk,(i+1)*chunk));
+          }
+          console.log("SAVANT_LOCK_END");
+          NODE

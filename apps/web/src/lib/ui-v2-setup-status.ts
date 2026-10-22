@@ -65,6 +65,7 @@ export function selectedTestBenchReadiness(input:{
   if(!input.selectedSuite)return {cases:"observed",verifiedRun:"not-verified"};
   if(input.runs===null)return {cases:"observed",verifiedRun:"unknown"};
   const suite=input.selectedSuite;
+  const expectedIds=new Set(suite.cases.map(item=>item.caseId));
   const matched=input.runs.some(run=>
     run.definitionId===suite.id&&run.skillId===suite.skillId&&
     run.status==="complete"&&
@@ -73,6 +74,11 @@ export function selectedTestBenchReadiness(input:{
     run.expectedCases===suite.cases.length&&
     run.completedCases===suite.cases.length&&
     run.samples.length===suite.cases.length&&
+    run.samples.every(sample=>expectedIds.has(sample.caseId))&&
+    new Set(run.samples.map(sample=>sample.caseId)).size===expectedIds.size&&
+    typeof run.executionModel==="string"&&run.executionModel.length>0&&
+    typeof run.judgeModel==="string"&&run.judgeModel.length>0&&
+    run.scorecard!==null&&
     run.observedUsageReceipts>0&&
     run.observedExecutorTokens+run.observedJudgeTokens>0&&
     run.unconfirmedProviderCalls===0&&

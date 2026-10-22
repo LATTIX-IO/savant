@@ -8,6 +8,7 @@ import type { RepositoryListItem } from "@savant/types";
 import type { WorkflowSpecification, WorkflowNodeKind } from "@savant/types/workflow-specification";
 import { parseWorkflowSpecification } from "@savant/schemas/workflow-specification";
 import { fetchRepositoryList } from "@/lib/control-plane-client";
+import { proposeFileEdits } from "@/lib/git-connections-client";
 import { buildTenantAwareAppPath, withWorkspaceSlugQuery } from "@/lib/tenant-paths";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { workflowDocumentPath, workflowIdValid, workflowSaveGate, layoutWorkflowGraph } from "@/lib/ui-v2-workflow-model";
@@ -41,17 +42,19 @@ function errorMessage(payload: unknown, fallback: string): string {
   }
   return fallback;
 }
-async function requestWorkflow(method:"GET"|"PUT",slug:string,repo:string,id:string,body?:unknown,signal?:AbortSignal):Promise<WorkflowRecord>{
-  const url=withWorkspaceSlugQuery(workflowDocumentPath(id),slug);
-  const target=method==="GET" ? url+`&repositoryId=${encodeURIComponent(repo)}` : url;
-  const response=await fetch(target,{method,credentials:"same-origin",cache:"no-store",
-    ...(body===undefined?{}:{headers:{"content-type":"application/json"},body:JSON.stringify(body)}),
+async function requestWorkflow(slug:string,repo:string,id:string,signal?:AbortSignal):Promise<WorkflowRecord>{
+  const target=withWorkspaceSlugQuery(workflowDocumentPath(id),slug)+
+    `&repositoryId=${encodeURIComponent(repo)}`;
+  const response=await fetch(target,{method:"GET",credentials:"same-origin",cache:"no-store",
     ...(signal?{signal}:{}),
   });
   const payload:unknown=await response.json().catch(()=>null);
   if(!response.ok){
     const error=new Error(errorMessage(payload,`Workflow request failed (${response.status}).`));
-    (error as Error&{status:number}).status=response.status;
+    (error as Error&{status:number;code?:string}).status=response.status;
+    const code=payload&&typeof payload==="object"&&"error" in payload?
+      (payload as {error?:{code?:unknown}}).error?.code:null;
+    if(typeof code==="string")(error as Error&{code:string}).code=code;
     throw error;
   }
   if(!payload||typeof payload!=="object"||!("data" in payload)) throw new Error("Invalid workflow response.");
@@ -69,6 +72,8 @@ export function WorkflowStudioV2(){
   const [indexed,setIndexed]=useState<IndexLoad>(NO_INDEX);
   const [indexRetry,setIndexRetry]=useState(0);
   const readRef=useRef<AbortController|null>(null);
+  const savingRef=useRef(false);
+  const liveScopeRef=useRef("");
   const [repositoryId,setRepositoryId]=useState("");
   const [workflowId,setWorkflowId]=useState("");
   const [loaded,setLoaded]=useState<Loaded>(NONE);
@@ -79,6 +84,7 @@ export function WorkflowStudioV2(){
   const [text,setText]=useState("");
   const [jsonError,setJsonError]=useState("");
   const [message,setMessage]=useState("");
+  const [pendingProposal,setPendingProposal]=useState<{key:string;source:string;id:string}|null>(null);
   const [busy,setBusy]=useState(false);
   const [fromId,setFromId]=useState("");
   const [fromPort,setFromPort]=useState("");
@@ -92,6 +98,7 @@ export function WorkflowStudioV2(){
   const listKey=`${slug}:${repositoryId}`;
   const visibleIndex=indexed.key===listKey?indexed:NO_INDEX;
   const dirty=draft!==null && (source!==baseline || Boolean(jsonError));
+  const alreadyProposed=pendingProposal?.key===scopeKey&&pendingProposal.source===source;
   const safeId=workflowIdValid(workflowId);
   const available=repo?.provider==="github";
   const validation=useMemo(()=>{
@@ -107,6 +114,7 @@ export function WorkflowStudioV2(){
   },[draft,jsonError]);
   const gate=workflowSaveGate({hasRecord:active.phase==="ready",canCreate:active.phase==="missing",
     valid:validation.valid,dirty,repositorySupported:available});
+  const canPropose=gate.allowed&&!alreadyProposed&&!busy;
   const selected=draft?.nodes.find(n=>n.id===selectedId)||null;
   const fromNode=draft?.nodes.find(n=>n.id===fromId)||null;
   const toNode=draft?.nodes.find(n=>n.id===toId)||null;
@@ -144,11 +152,12 @@ export function WorkflowStudioV2(){
   },[slug,repositoryId,available,indexRetry]);
 
   useEffect(()=>{
-    // Never reuse another tenant, repository or workflow's mutable state.
+    // A returned read/proposal for workspace A must not be shown in workspace B.
+    liveScopeRef.current=scopeKey;
     readRef.current?.abort();readRef.current=null;
     queueMicrotask(()=>{setBusy(false);setLoaded({...NONE,key:scopeKey});setDraft(null);setBaseline("");
-      setSelectedId("");setMessage("");setJsonError("");setMode("graph");setText("");});
-    return ()=>{readRef.current?.abort();};
+      setSelectedId("");setMessage("");setJsonError("");setMode("graph");setText("");setPendingProposal(null);});
+    return ()=>{readRef.current?.abort();if(liveScopeRef.current===scopeKey)liveScopeRef.current="";};
   },[scopeKey]);
 
   useEffect(()=>{
@@ -181,7 +190,7 @@ export function WorkflowStudioV2(){
     readRef.current?.abort();readRef.current=controller;
     setBusy(true);setLoaded({key,phase:"loading",record:null,message:""});setMessage("");
     try{
-      const record=await requestWorkflow("GET",slug,repositoryId,workflowId,undefined,controller.signal);
+      const record=await requestWorkflow(slug,repositoryId,workflowId,controller.signal);
       if(controller.signal.aborted)return;
       const value=parseWorkflowSpecification(record.specification);
       setLoaded({key,phase:"ready",record,message:""});
@@ -189,8 +198,9 @@ export function WorkflowStudioV2(){
     }catch(e){
       if(controller.signal.aborted)return;
       const status=(e as {status?:number}).status;
-      if(status===404){
-        setLoaded({key,phase:"missing",record:null,message:"No readable workflow at this path. Creating requires an authorized write."});
+      const code=(e as {code?:string}).code;
+      if(status===404&&code==="workflow_not_found"){
+        setLoaded({key,phase:"missing",record:null,message:"No workflow document exists at this authorized path. Create a reviewed Git proposal to add it."});
       }else{
         setLoaded({key,phase:"error",record:null,message:e instanceof Error?e.message:"Could not open workflow."});
       }
@@ -256,33 +266,63 @@ export function WorkflowStudioV2(){
     const result=addWorkflowConnection(draft,fromId,fromPort,toId,toPort);
     if(result.ok)replaceDraft(result.document);else setMessage(result.reason);
   }
-  async function save(){
-    if(!slug||!repositoryId||!draft||!gate.allowed||busy||active.key!==scopeKey)return;
+  async function propose(){
+    if(!slug||!repositoryId||!draft||!canPropose||busy||savingRef.current||
+      active.key!==scopeKey)return;
     let spec:WorkflowSpecification;
     try{spec=parseWorkflowSpecification(draft);}catch(e){
       setMessage(e instanceof Error?e.message:"Invalid graph.");return;
     }
-    const directCommit=active.phase==="ready"?"update":"create";
-    if(!window.confirm(`Commit this workflow directly to the selected Git repository (${directCommit})? Savant will not open a review proposal or execute the workflow.`))return;
+    if(!window.confirm(`Create a reviewed Git change proposal for workflows/${workflowId}.json?
+The repository file is NOT committed by this action. A separate authorized review and
+Git pull request is required before the workflow becomes available.`))return;
+    savingRef.current=true;
     setBusy(true);setMessage("");
+    const originalKey=scopeKey;
+    const originalSource=source;
     try{
-      const result=await requestWorkflow("PUT",slug,repositoryId,workflowId,{
-        repositoryId,expectedBlobSha:active.phase==="ready"?active.record?.blobSha??null:null,
-        specification:spec,
-      });
-      setLoaded({key:scopeKey,phase:"ready",record:result,message:""});
-      replaceDraft(result.specification);
-      setBaseline(JSON.stringify(result.specification));
-      setIndexRetry(value=>value+1);
-      setMessage(result.reconciliationRequired
-        ?"Git saved the workflow, but its database index needs reconciliation."
-        :`Saved to Git revision ${result.commitSha.slice(0,12)}. This does not run or publish the workflow.`);
+      // Fail closed on an old revision or an artifact-specific read denial.
+      // The repo proposal service separately enforces write permissions and
+      // checks changed files again when the proposal is approved.
+      if(active.phase==="ready"){
+        const current=await requestWorkflow(slug,repositoryId,workflowId);
+        const baselineRecord=active.record;
+        if(!baselineRecord||current.repositoryId!==repositoryId||
+          current.workflowId!==workflowId||
+          current.blobSha!==baselineRecord.blobSha||
+          current.commitSha!==baselineRecord.commitSha||
+          JSON.stringify(current.specification)!==baseline)
+          throw new Error("The Git workflow revision changed. Reopen and reconcile before proposing.");
+      }else if(active.phase==="missing"){
+        try{
+          await requestWorkflow(slug,repositoryId,workflowId);
+          throw new Error("A Git workflow now exists at this path. Reopen before proposing changes.");
+        }catch(error){
+          const checked=error as {status?:number;code?:string};
+          if(!(checked.status===404&&checked.code==="workflow_not_found"))throw error;
+        }
+      }else{
+        throw new Error("Reopen the authorized Git workflow before proposing.");
+      }
+      if(liveScopeRef.current!==originalKey)return;
+      const proposed=await proposeFileEdits(repositoryId,{
+        title:`Savant: review workflow ${workflowId}`,
+        body:`Versioned, non-executable workflow model for workflows/${workflowId}.json. Review all step definitions and branch protections before approval.`,
+        files:[{path:`workflows/${workflowId}.json`,content:JSON.stringify(spec,null,2)+"\\n"}],
+      },{workspaceSlug:slug});
+      if(liveScopeRef.current!==originalKey)return;
+      setPendingProposal({key:originalKey,source:originalSource,id:proposed.data.id});
+      setMessage(`Proposal ${proposed.data.id} created (${proposed.data.status}).
+The Git workflow was NOT committed or published. Review and approve it through
+the repository's change proposal controls; reopen from Git after merge.`);
     }catch(e){
-      const status=(e as {status?:number}).status;
-      setMessage(status===409
-        ?"Revision conflict or provider restriction. Your draft is preserved. Reopen and reconcile before retrying."
-        :e instanceof Error?e.message:"Save failed. Draft retained.");
-    }finally{setBusy(false);}
+      if(liveScopeRef.current===originalKey){
+        const checked=e as {status?:number};
+        setMessage(checked.status===409?
+          "Conflict with the current Git source. Draft preserved; reopen the workflow and reconcile.":
+          e instanceof Error?e.message:"Could not create proposal. Draft retained.");
+      }
+    }finally{savingRef.current=false;if(liveScopeRef.current===originalKey)setBusy(false);}
   }
   function changeMode(){
     if(mode==="json" && jsonError){
@@ -311,7 +351,7 @@ export function WorkflowStudioV2(){
         <button type="button" onClick={changeMode} disabled={!draft}>
           {mode==="graph"?"JSON source":"Graph and inspector"}
         </button>
-        <button type="button" onClick={()=>void save()} disabled={busy||!gate.allowed}>Commit to Git</button>
+        <button type="button" onClick={()=>void propose()} disabled={!canPropose}>Create Git proposal</button>
       </div>
     </header>
     <div className={styles.selector}>
@@ -462,7 +502,8 @@ export function WorkflowStudioV2(){
         <Link href={workbenchHref}>Choose an indexed skill in Workbench</Link>
       </div>}
     {draft&&<footer className={styles.footer}>
-      <span>{gate.allowed?"Ready to save":"Save unavailable"} · {gate.reason}</span>
+      <span>{alreadyProposed?"Proposal pending review":gate.allowed?"Ready to propose":"Proposal unavailable"} ·
+        {alreadyProposed?"A proposal already exists for this exact draft; edit or reopen after merge.":gate.reason}</span>
       <span>Modeling only · no workflow execution, scheduling, or inferred tool traces</span>
     </footer>}
   </div>;

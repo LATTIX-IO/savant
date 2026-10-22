@@ -7,11 +7,11 @@ import {eligibleCatalogImportRepositories,initialCatalogImportRepositoryId,canPr
 import {getUiV2WorkspaceNavigation,buildUiV2RouteCrumbs} from "./ui-v2-shell-model.ts";
 import {EMPTY_SAVANT_SHELL_DATA} from "./shell-state.ts";
 
-const repo=(id:string,status="active")=>({id,name:`LATTIX-IO/${id}`,provider:"github",
- branch:"main",status}) as RepositoryListItem;
+const repo=(id:string,allow=true)=>({id,name:`LATTIX-IO/${id}`,provider:"github",
+ branch:"main",status:"ok",providerReadiness:{supportsProvisioningWrites:allow}}) as RepositoryListItem;
 test("PER-1623 choose exactly one eligible repository; multiple require explicit selection",()=>{
  const a=repo("one"),b=repo("two");
- assert.deepEqual(eligibleCatalogImportRepositories([a,repo("disabled","disabled")]).map(r=>r.id),["one"]);
+ assert.deepEqual(eligibleCatalogImportRepositories([a,repo("unsupported",false)]).map(r=>r.id),["one"]);
  assert.equal(initialCatalogImportRepositoryId([]),"");
  assert.equal(initialCatalogImportRepositoryId([a]),"one");
  assert.equal(initialCatalogImportRepositoryId([a,b]),"");
@@ -24,7 +24,7 @@ test("PER-1623 choose exactly one eligible repository; multiple require explicit
   [[a],"one","unsafe",false,false,false],
   [[a],"one","validated",true,false,false],
   [[a],"one","validated",false,true,false],
-  [[repo("disabled","disabled")],"disabled","validated",false,false,false],
+  [[repo("disabled","disabled")],"unsupported","validated",false,false,false],
  ] as const){
    assert.equal(canProposeCatalogImport({repositories:items,repositoryId:id,
      verdict,loading,proposalExists:proposal}),allowed);

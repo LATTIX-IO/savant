@@ -19,7 +19,7 @@ function record(value:unknown):Record<string,unknown>{
 test("PER-1409: MVP Next and ESLint paired patch is fully represented in the frozen lock",async()=>{
  const pkg=await readJson(webPackage);
  const dep=record(pkg.dependencies),dev=record(pkg.devDependencies);
- assert.equal(dep.next,"16.3.8");
+ assert.equal(dep.next,"16.4.2");
  assert.equal(dev["eslint-config-next"],dep.next);
  const lock=await readYaml(new URL("pnpm-lock.yaml",root));
  const importer=record(record(lock.importers)["apps/web"]);
@@ -27,8 +27,8 @@ test("PER-1409: MVP Next and ESLint paired patch is fully represented in the fro
  const lint=record(record(importer.devDependencies)["eslint-config-next"]);
  assert.equal(locked.specifier,dep.next);
  assert.equal(lint.specifier,dev["eslint-config-next"]);
- assert.match(String(locked.version),/^16\.3\.8\(/);
- assert.match(String(lint.version),/^16\.3\.8\(/);
+ assert.match(String(locked.version),/^16\.4\.2\(/);
+ assert.match(String(lint.version),/^16\.4\.2\(/);
 });
 test("PER-1409: patched transitive production ranges are consistent with frozen pnpm resolutions",async()=>{
  const settings=await readYaml(new URL("pnpm-workspace.yaml",root));

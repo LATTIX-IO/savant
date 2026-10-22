@@ -14,7 +14,8 @@ import {
   UiV2StateBanner, UiV2Status, UiV2TableViewport,
 } from "@/components/savant/ui-v2";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { fetchRepositoryList, fetchSkillDetail, fetchSkillList } from "@/lib/control-plane-client";
+import { fetchRepositoryList, fetchSkillAssets, fetchSkillDetail, fetchSkillList } from "@/lib/control-plane-client";
+import type { SkillAssetResponseData } from "@/lib/ui-v2-skill-assets";
 import { buildSkillDetailPath } from "@/lib/skill-paths";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
@@ -44,6 +45,10 @@ export function LibraryV2() {
   const [inspectorTab, setInspectorTab] = useState<"summary" | "versions" | "usage" | "dependencies">("summary");
   const [skillDetail, setSkillDetail] = useState<{ scope: string; id: string; data: SkillDetailPayload | null;
     loading: boolean; error: string | null }>({ scope: "", id: "", data: null, loading: false, error: null });
+  const [assetInventory,setAssetInventory]=useState<{scope:string;id:string;
+    state:"loading"|"ready"|"error";data:SkillAssetResponseData|null;error:string|null}>({
+    scope:"",id:"",state:"loading",data:null,error:null,
+  });
   const [skills, setSkills] = useState<SourceState<SkillListItem>>(initialSkills);
   const [repositories, setRepositories] = useState<SourceState<RepositoryListItem>>(initialRepositories);
   const [retry, setRetry] = useState(0);
@@ -123,6 +128,24 @@ export function LibraryV2() {
       });
     return () => controller.abort();
   }, [scope, selectedId]);
+  useEffect(()=>{
+    if(!scope||!selectedId||inspectorTab!=="dependencies")return;
+    const controller=new AbortController();
+    queueMicrotask(()=>{if(!controller.signal.aborted)
+      setAssetInventory({scope,id:selectedId,state:"loading",data:null,error:null});});
+    void fetchSkillAssets(selectedId,{workspaceSlug:scope,signal:controller.signal}).then(response=>{
+      if(!controller.signal.aborted)setAssetInventory({
+        scope,id:selectedId,state:"ready",data:response.data,error:null,
+      });
+    }).catch(error=>{
+      if(!controller.signal.aborted)setAssetInventory({
+        scope,id:selectedId,state:"error",data:null,
+        error:error instanceof Error?error.message:"Pinned Git asset inventory unavailable.",
+      });
+    });
+    return ()=>controller.abort();
+  },[scope,selectedId,inspectorTab]);
+
   const detailState = skillDetail.scope === scope && skillDetail.id === selectedId
     ? skillDetail : { scope, id: selectedId, data: null, loading: true, error: null };
   const detailHref = buildTenantAwareAppPath(pathname, "/repositories") as Route;
@@ -354,8 +377,32 @@ export function LibraryV2() {
                     `/evaluations/${encodeURIComponent(run.id)}`) as Route}>
                     {run.dataset}</Link><span>{run.status} · {run.passed}/{run.cases} cases</span></li>)}</ul>
                 : <UiV2EmptyState message="No evaluation runs recorded for this skill." /> : null}
-              {inspectorTab === "dependencies" ? <UiV2StateBanner state="unavailable"
-                label="Verified dependency graph not provided by this source API" /> : null}
+              {inspectorTab === "dependencies" ? <>
+                {assetInventory.scope!==scope||assetInventory.id!==selectedId||
+                  assetInventory.state==="loading"?<p role="status">Loading pinned Git dependencies…</p>:
+                  assetInventory.state==="error"?<UiV2StateBanner state="unavailable"
+                    label={assetInventory.error??"Repository dependency inventory unavailable."}/>:
+                  assetInventory.data?<div className={styles.inspectorSummary}>
+                    <section className={styles.skillPurpose}><h3>Observed Git files</h3>
+                      <p>{assetInventory.data.files.length} verified file path(s), pinned to
+                        commit {assetInventory.data.commitSha.slice(0,12)}.
+                        {assetInventory.data.omitted>0?` ${assetInventory.data.omitted} omitted due to inventory limits.`:""}</p>
+                      <ul className={styles.inspectorList}>{assetInventory.data.files.slice(0,15).map(file=>
+                        <li key={file.path}><strong>{file.relativePath}</strong><span>{file.kind}</span></li>)}</ul>
+                    </section>
+                    <section className={styles.skillPurpose}><h3>Declared Markdown references</h3>
+                      {assetInventory.data.links.length===0?
+                        <p>No Markdown references declared in this SKILL.md.
+                          Other source files alone do not prove runtime dependencies.</p>:
+                        <ul className={styles.inspectorList}>{assetInventory.data.links.map((link,index)=>
+                          <li key={`${link.raw}-${index}`}>
+                            <strong>{link.raw}</strong>
+                            <span>{link.status} · source line {link.line}</span>
+                          </li>)}</ul>}
+                    </section>
+                    <p>Authored Git references are not observed tool calls or runtime lineage.</p>
+                  </div>:null}
+              </> : null}
             </> : null}
         </> : null}
       </UiV2InspectorDrawer>

@@ -43,7 +43,7 @@ test("PER-1605: UI has no fake OAuth callback or misleading first-run verificati
  assert.match(guide,/commercial partner/);
  assert.match(guide,/unmodified Claude Code runtime/);
  assert.match(guide,/cannot proxy Claude.ai subscription OAuth/);
- assert.match(ui,/Provider-backed completion not verified/);
+ assert.match(ui,/Not verified by this integration inventory/);
  assert.doesNotMatch(ui,/fetchEvaluationDashboard|firstEvaluation/);
  assert.doesNotMatch(ui,/oauth\/callback|window\.location\.assign\(|localStorage|sessionStorage/);
  for(const f of ["fetchRepositoryList","fetchAIConnections","fetchConnectorDashboard",

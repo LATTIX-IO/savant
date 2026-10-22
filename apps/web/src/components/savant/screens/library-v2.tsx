@@ -14,7 +14,8 @@ import {
   UiV2StateBanner, UiV2Status, UiV2TableViewport,
 } from "@/components/savant/ui-v2";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { fetchRepositoryList, fetchSkillDetail, fetchSkillList } from "@/lib/control-plane-client";
+import { fetchRepositoryList, fetchSkillAssets, fetchSkillDetail, fetchSkillList } from "@/lib/control-plane-client";
+import type { SkillAssetResponseData } from "@/lib/ui-v2-skill-assets";
 import { buildSkillDetailPath } from "@/lib/skill-paths";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
 import {
@@ -44,6 +45,10 @@ export function LibraryV2() {
   const [inspectorTab, setInspectorTab] = useState<"summary" | "versions" | "usage" | "dependencies">("summary");
   const [skillDetail, setSkillDetail] = useState<{ scope: string; id: string; data: SkillDetailPayload | null;
     loading: boolean; error: string | null }>({ scope: "", id: "", data: null, loading: false, error: null });
+  const [assetInventory,setAssetInventory]=useState<{scope:string;id:string;
+    state:"loading"|"ready"|"error";data:SkillAssetResponseData|null;error:string|null}>({
+    scope:"",id:"",state:"loading",data:null,error:null,
+  });
   const [skills, setSkills] = useState<SourceState<SkillListItem>>(initialSkills);
   const [repositories, setRepositories] = useState<SourceState<RepositoryListItem>>(initialRepositories);
   const [retry, setRetry] = useState(0);
@@ -123,6 +128,24 @@ export function LibraryV2() {
       });
     return () => controller.abort();
   }, [scope, selectedId]);
+  useEffect(()=>{
+    if(!scope||!selectedId||inspectorTab!=="dependencies")return;
+    const controller=new AbortController();
+    queueMicrotask(()=>{if(!controller.signal.aborted)
+      setAssetInventory({scope,id:selectedId,state:"loading",data:null,error:null});});
+    void fetchSkillAssets(selectedId,{workspaceSlug:scope,signal:controller.signal}).then(response=>{
+      if(!controller.signal.aborted)setAssetInventory({
+        scope,id:selectedId,state:"ready",data:response.data,error:null,
+      });
+    }).catch(error=>{
+      if(!controller.signal.aborted)setAssetInventory({
+        scope,id:selectedId,state:"error",data:null,
+        error:error instanceof Error?error.message:"Pinned Git asset inventory unavailable.",
+      });
+    });
+    return ()=>controller.abort();
+  },[scope,selectedId,inspectorTab]);
+
   const detailState = skillDetail.scope === scope && skillDetail.id === selectedId
     ? skillDetail : { scope, id: selectedId, data: null, loading: true, error: null };
   const detailHref = buildTenantAwareAppPath(pathname, "/repositories") as Route;
@@ -135,6 +158,7 @@ export function LibraryV2() {
           <UiV2Button variant="tertiary" onClick={() => setRetry(x => x + 1)}>
             <Ic.Refresh className={styles.icon} aria-hidden="true" />Refresh
           </UiV2Button>
+          <Link href={marketplaceHref} className={styles.secondaryLink}>Browse Public Library</Link>
           <UiV2Button onClick={show}>Connect repository</UiV2Button>
           <UiV2Button variant="primary" onClick={() => setCreateOpen(true)}>New skill</UiV2Button>
         </>} />
@@ -163,7 +187,7 @@ export function LibraryV2() {
           <button id="sv2-repos-tab" type="button" role="tab" aria-controls="sv2-library-list"
             aria-selected={section === "repositories"} tabIndex={section === "repositories" ? 0 : -1}
             onClick={() => setSection("repositories")}>Repositories</button>
-          <Link href={marketplaceHref} className={styles.tabLink}>Marketplace</Link>
+          <Link href={marketplaceHref} className={styles.tabLink}>Public Library</Link>
           <span className={styles.disabledTab} aria-disabled="true">Opportunities · Planned</span>
         </div>
         <label className={styles.search}>
@@ -287,7 +311,7 @@ export function LibraryV2() {
 
       <p className={styles.help}>
         Repository synchronization and assessment remain available under <Link href={detailHref}>Repositories</Link>.
-        Public marketplace items are under <Link href={marketplaceHref}>Marketplace</Link>.
+        Browse the <Link href={marketplaceHref}>Public Library</Link> to import external skills into an authorized Git repository through a reviewed proposal.
       </p>
       <UiV2InspectorDrawer id="sv2-skill-inspector" title={activeSelection?.name ?? "Skill"}
         open={Boolean(activeSelection)} onClose={() => setSelected(null)}
@@ -307,14 +331,41 @@ export function LibraryV2() {
           {detailState.loading ? <p role="status">Loading authorized skill details…</p> :
             detailState.error ? <UiV2StateBanner state="unavailable" label={detailState.error} /> :
             detailState.data ? <>
-              {inspectorTab === "summary" ? <dl className={styles.inspectorData}>
-                <dt>Tier</dt><dd>{activeSelection.tier}</dd>
-                <dt>Owner</dt><dd>{activeSelection.owner}</dd>
-                <dt>Repository</dt><dd>{activeSelection.repo}</dd>
-                <dt>Source revision</dt><dd className={styles.mono}>{activeSelection.projection.sourceCommitSha ?? "Not indexed"}</dd>
-                <dt>Latest quality</dt><dd>{Number.isFinite(activeSelection.score) && activeSelection.score !== null
-                  ? activeSelection.score.toFixed(1) : "Not available"}</dd>
-              </dl> : null}
+              {inspectorTab === "summary" ? <div className={styles.inspectorSummary}>
+                <section className={styles.skillPurpose} aria-label="Skill purpose">
+                  <h3>Purpose</h3>
+                  <p>{activeSelection.description?.trim()||
+                    "No summary is available in this skill's indexed Git metadata."}</p>
+                </section>
+                <dl className={styles.inspectorData}>
+                  <dt>Tier</dt><dd>Tier {activeSelection.tier}</dd>
+                  <dt>Owner / team</dt><dd>{activeSelection.owner} · {activeSelection.team}</dd>
+                  <dt>Channel</dt><dd>{activeSelection.channel}</dd>
+                  <dt>State</dt><dd>{activeSelection.status}</dd>
+                  <dt>Repository</dt><dd>{activeSelection.repo}</dd>
+                  <dt>Provider</dt><dd>{activeSelection.repoProvider}</dd>
+                  <dt>Indexed path</dt><dd className={styles.mono}>{activeSelection.projection.sourcePath??"Not reported"}</dd>
+                  <dt>Source revision</dt><dd className={styles.mono}>
+                    {activeSelection.projection.sourceCommitSha??"Not indexed"}</dd>
+                  <dt>Recorded quality</dt><dd>{Number.isFinite(activeSelection.score)&&activeSelection.score!==null
+                    ?activeSelection.score.toFixed(1):"Not available"}</dd>
+                  <dt>Recorded versions</dt><dd>{detailState.data.versionHistory.length}</dd>
+                  <dt>Access group</dt><dd>{activeSelection.accessGroup||"Not reported"}</dd>
+                </dl>
+                <section className={styles.skillPurpose} aria-label="Evaluation summary">
+                  <h3>Latest recorded evaluation</h3>
+                  {detailState.data.evaluations.length?(()=>{
+                    const result=detailState.data.evaluations[0]!;
+                    return <div className={styles.evaluationSynopsis}>
+                      <Link href={buildTenantAwareAppPath(pathname,
+                        `/evaluations/${encodeURIComponent(result.id)}`) as Route}>
+                        {result.dataset}</Link>
+                      <span>{result.status} · {result.passed}/{result.cases} cases passed</span>
+                      <small>Recorded against {result.ref}; not proof of a current provider-backed execution.</small>
+                    </div>;
+                  })():<p>No evaluation history is recorded for this skill.</p>}
+                </section>
+              </div> : null}
               {inspectorTab === "versions" ? detailState.data.versionHistory.length > 0
                 ? <ul className={styles.inspectorList}>{detailState.data.versionHistory.map(version =>
                   <li key={version.commit}><strong>{version.ref}</strong><span>{version.channel} · {version.when}</span>
@@ -326,8 +377,32 @@ export function LibraryV2() {
                     `/evaluations/${encodeURIComponent(run.id)}`) as Route}>
                     {run.dataset}</Link><span>{run.status} · {run.passed}/{run.cases} cases</span></li>)}</ul>
                 : <UiV2EmptyState message="No evaluation runs recorded for this skill." /> : null}
-              {inspectorTab === "dependencies" ? <UiV2StateBanner state="unavailable"
-                label="Verified dependency graph not provided by this source API" /> : null}
+              {inspectorTab === "dependencies" ? <>
+                {assetInventory.scope!==scope||assetInventory.id!==selectedId||
+                  assetInventory.state==="loading"?<p role="status">Loading pinned Git dependencies…</p>:
+                  assetInventory.state==="error"?<UiV2StateBanner state="unavailable"
+                    label={assetInventory.error??"Repository dependency inventory unavailable."}/>:
+                  assetInventory.data?<div className={styles.inspectorSummary}>
+                    <section className={styles.skillPurpose}><h3>Observed Git files</h3>
+                      <p>{assetInventory.data.files.length} verified file path(s), pinned to
+                        commit {assetInventory.data.commitSha.slice(0,12)}.
+                        {assetInventory.data.omitted>0?` ${assetInventory.data.omitted} omitted due to inventory limits.`:""}</p>
+                      <ul className={styles.inspectorList}>{assetInventory.data.files.slice(0,15).map(file=>
+                        <li key={file.path}><strong>{file.relativePath}</strong><span>{file.kind}</span></li>)}</ul>
+                    </section>
+                    <section className={styles.skillPurpose}><h3>Declared Markdown references</h3>
+                      {assetInventory.data.links.length===0?
+                        <p>No Markdown references declared in this SKILL.md.
+                          Other source files alone do not prove runtime dependencies.</p>:
+                        <ul className={styles.inspectorList}>{assetInventory.data.links.map((link,index)=>
+                          <li key={`${link.raw}-${index}`}>
+                            <strong>{link.raw}</strong>
+                            <span>{link.status} · source line {link.line}</span>
+                          </li>)}</ul>}
+                    </section>
+                    <p>Authored Git references are not observed tool calls or runtime lineage.</p>
+                  </div>:null}
+              </> : null}
             </> : null}
         </> : null}
       </UiV2InspectorDrawer>

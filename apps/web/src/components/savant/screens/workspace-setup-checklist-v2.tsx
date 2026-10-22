@@ -68,7 +68,7 @@ export function WorkspaceSetupChecklistV2(){
  const live=result.scope===slug?result:EMPTY;
  // Never query a former tenant's skill or suite identifiers.
  const skill=live.skills?.find(item=>item.id===selectedSkillId)??null;
- const skillKey=skill?`${slug}:${skill.id}`:"";
+ const skillKey=skill?`${slug}:${skill.id}:${retry}`:"";
  const caseState=cases.key===skillKey?cases:EMPTY_CASES;
  const currentSuite=caseState.definitions?.find(item=>item.id===selectedSuiteId)??
    caseState.definitions?.[0]??null;

@@ -11,6 +11,7 @@ import { UiV2Button, UiV2CanvasRegion, UiV2EmptyState, UiV2StateBanner, UiV2Stat
 import { useUiV2Mode, useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { fetchSkillAssets, fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
 import type { SkillAssetResponseData } from "@/lib/ui-v2-skill-assets";
+import { projectObservedSkillSourceGraph } from "@/lib/ui-v2-workbench-source-graph";
 import { proposeFileEdits } from "@/lib/git-connections-client";
 import { parseMarkdownPreviewBlocks } from "@/lib/skill-builder";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
@@ -104,6 +105,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
     ? `${scope}@${sourceData.sourceCommitSha}` : "";
   const activeAssets = assets.scope === assetScope ? assets : emptyAssets;
   const assetData = activeAssets.phase === "ready" ? activeAssets.data : null;
+  const sourceGraph = useMemo(() => assetData ? projectObservedSkillSourceGraph(assetData) : null, [assetData]);
   const chosenPath=assetSelection?.scope===assetScope?assetSelection.path:null;
   const previewKey=chosenPath?`${assetScope}:${chosenPath}`:"";
   const currentPreview=assetPreview.scope===previewKey?assetPreview:emptyAssets;
@@ -365,30 +367,52 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                       </Link>)}</div>}
                 <p className={styles.note}>Evaluation association is skill-level only. A run is not proved
                   to have used the currently indexed source revision.</p>
-                <p className={styles.canvasLane}>Declared file dependencies · indexed SKILL.md</p>
-                {assetData?<div className={styles.dependencyGraph} aria-label="Observed dependency links from SKILL.md">
+                <p className={styles.canvasLane}>Indexed skill context · Git files and authored references</p>
+                {assetData&&sourceGraph?<div className={styles.sourceContextGraph} role="group"
+                  aria-label="Pinned Git skill file context">
                   <div className={styles.dependencyOrigin}>
-                    <strong>SKILL.md</strong><span>Git · {assetData.commitSha.slice(0,12)}</span>
+                    <strong>SKILL.md</strong>
+                    <span>Source · {assetData.commitSha.slice(0,12)}</span>
                   </div>
-                  {assetData.links.length===0?
-                    <p className={styles.note}>No Markdown file links declared in this indexed SKILL.md.</p>:
-                    assetData.links.map((link,i)=><div key={`${link.line}-${i}`} className={styles.dependencyEdge}>
-                      <span aria-hidden="true">→</span>
-                      {link.status==="verified"&&link.resolvedPath?
-                        <button type="button" className={styles.dependencyTarget}
-                          onClick={()=>openObservedFile(link.resolvedPath!)}>
-                          <strong>{link.raw}</strong>
-                          <small>Verified file · SKILL.md line {link.line}</small>
-                        </button>:
-                        <span className={styles.dependencyTarget}>
-                          <strong>{link.raw}</strong>
-                          <small>{link.status} · SKILL.md line {link.line}</small>
-                        </span>}
+                  {sourceGraph.files.length>0?<div className={styles.contextFileNodes} role="list"
+                    aria-label="Observed Git assets and declared dependencies">
+                    {sourceGraph.files.map(file=><div key={file.path} className={styles.contextFile} role="listitem">
+                      <span className={styles.contextEdge} aria-hidden="true">→</span>
+                      <button type="button" className={styles.contextFileNode}
+                        onClick={()=>openObservedFile(file.path)}>
+                        <span className={styles.canvasType}>{file.kind} · {file.relation==="declared-in-skill-md"?
+                          "declared link":"observed Git file"}</span>
+                        <strong>{file.relativePath}</strong>
+                        <span>{file.relation==="declared-in-skill-md"?
+                          `SKILL.md line ${file.authoredLines.join(", ")} · pinned Git`:
+                          "Exists at pinned Git revision; not necessarily invoked"}</span>
+                      </button>
                     </div>)}
+                  </div>:<p className={styles.note}>No other allowlisted skill files were observed
+                    at the pinned commit. SKILL.md remains the only modeled source node.</p>}
+                  {sourceGraph.notShown>0?<p className={styles.note} role="status">
+                    {sourceGraph.notShown} additional asset(s) are outside this bounded diagram.
+                    Use the source file tree to inspect available Git records.
+                  </p>:null}
+                  {sourceGraph.unresolved.length>0?<div className={styles.contextMissing}
+                    aria-label="Unresolved authored references">
+                    <strong>References that are not verified Git edges</strong>
+                    {sourceGraph.unresolved.map((link,i)=><div key={`${link.line}-${i}`}
+                      className={styles.dependencyEdge}>
+                      <span aria-hidden="true">!</span>
+                      <span className={styles.dependencyTarget}>
+                        <strong>{link.raw}</strong>
+                        <small>{link.status==="unverified"?"Cannot check in truncated index":
+                          link.status} · SKILL.md line {link.line}</small>
+                      </span>
+                    </div>)}
+                  </div>:null}
                 </div>:<UiV2StateBanner state="unavailable"
-                  label="No ACL-verified, pinned repository tree available for dependency inspection" />}
-                <p className={styles.note}>These edges are authored Markdown file references only.
-                  No tool invocation, runtime execution or data lineage has been observed.</p>
+                  label="No ACL-verified, pinned repository tree available for source context" />}
+                <p className={styles.note}>Every source node is a Git file observed at the indexed commit.
+                  Only nodes marked declared link have an authored SKILL.md reference. A source
+                  file is not proof of execution. Recorded evaluations above are skill-level
+                  associations and are not attributed to this revision without matching receipts.</p>
               </div>
             </UiV2CanvasRegion> : null}
             {workspaceView !== "canvas" ? <div className={styles.sourceArea}

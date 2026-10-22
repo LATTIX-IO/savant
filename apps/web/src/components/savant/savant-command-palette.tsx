@@ -17,8 +17,8 @@ type Evidence = { scope: string; skills: readonly SkillListItem[];
   runs: readonly EvaluationRunListItem[]; errors: readonly string[]; loading: boolean };
 const INITIAL: Evidence = { scope: "", skills: [], runs: [], errors: [], loading: true };
 
-export function SavantCommandPalette({ open, intent, onClose, workspaceSlug, counts, governanceEnabled }: {
-  open: boolean; intent: PaletteIntent; onClose: () => void;
+export function SavantCommandPalette({ open, intent, onClose, initialQuery="", workspaceSlug, counts, governanceEnabled }: {
+  open: boolean; intent: PaletteIntent; onClose: () => void; initialQuery?:string;
   workspaceSlug: string; counts: SavantShellCounts; governanceEnabled: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -30,7 +30,7 @@ export function SavantCommandPalette({ open, intent, onClose, workspaceSlug, cou
     const controller = new AbortController();
     queueMicrotask(() => {
       if (!controller.signal.aborted) {
-        setQuery("");
+        setQuery(initialQuery);
         setEvidence({ ...INITIAL, scope: workspaceSlug });
       }
     });
@@ -64,7 +64,7 @@ export function SavantCommandPalette({ open, intent, onClose, workspaceSlug, cou
     matches(item.name) || matches(item.repo) || matches(item.owner)).slice(0, 12) : [];
   const runs = intent !== "workbench" ? data.runs.filter(item =>
     matches(item.skill) || matches(item.id)).slice(0, 12) : [];
-  const heading = intent === "workbench" ? "Choose a skill to edit" :
+  const heading = intent === "workbench" ? "Find a skill" :
     intent === "runs" ? "Open an observed evaluation" : "Search Savant";
   const onKeys = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp") return;
@@ -91,6 +91,18 @@ export function SavantCommandPalette({ open, intent, onClose, workspaceSlug, cou
             <span>{item.label}</span><small>Open section</small>
           </Link>)}
         </section> : null}
+        {intent === "all" && (normalizedQuery.length===0||"workbench".includes(normalizedQuery)||"workflow studio".includes(normalizedQuery))?
+          <section aria-label="Creation and editing">
+            <h3>Creation and editing</h3>
+            {(!normalizedQuery||"workbench".includes(normalizedQuery))?
+              <Link href={buildTenantAppPath(workspaceSlug,"/workbench") as Route} onClick={closeAndFollow}>
+                <span>Workbench</span><small>Select an indexed skill to edit</small>
+              </Link>:null}
+            {(!normalizedQuery||"workflow studio".includes(normalizedQuery))?
+              <Link href={buildTenantAppPath(workspaceSlug,"/workflows") as Route} onClick={closeAndFollow}>
+                <span>Workflow Studio</span><small>Model versioned Git workflow specifications</small>
+              </Link>:null}
+          </section>:null}
         {data.loading ? <p className={styles.notice} role="status">Loading permitted workspace results…</p> : null}
         {data.errors.map(error => <UiV2StateBanner key={error} state="unavailable" label={error} />)}
         {skills.length > 0 ? <section aria-label="Indexed skills">
@@ -112,9 +124,9 @@ export function SavantCommandPalette({ open, intent, onClose, workspaceSlug, cou
         {!data.loading && navigation.length === 0 && skills.length === 0 && runs.length === 0
           ? <p role="status" className={styles.notice}>No authorized results. Try another search or open an existing section.</p> : null}
         {intent !== "all" ? <Link className={styles.fallback}
-          href={buildTenantAppPath(workspaceSlug, intent === "workbench" ? "/skills" : "/evaluations") as Route}
+          href={buildTenantAppPath(workspaceSlug, intent === "workbench" ? "/workbench" : "/evaluations") as Route}
           onClick={closeAndFollow}>
-          Browse {intent === "workbench" ? "Library" : "Evaluations"} instead
+          Browse {intent === "workbench" ? "Workbench" : "Evaluations"} instead
         </Link> : null}
       </div>
     </div>

@@ -93,8 +93,11 @@ export function buildUiV2RouteCrumbs(
   }
   if (route.kind === "collection" && appPath === "/workbench") return buildUiV2Crumbs(workspaceSlug,
     [["Workspace", null], ["Workbench", "current"]]);
-  if (route.kind === "collection" && appPath === "/workflows") return buildUiV2Crumbs(workspaceSlug,
-    [["Workspace", null], ["Workbench", "/workbench"], ["Workflows", "current"]]);
+  if (route.kind === "collection" && appPath === "/workflows") return [
+    {label:"Workspace",href:null,current:false},
+    {label:"Workbench",href:buildTenantAppPath(workspaceSlug,"/workbench"),current:false},
+    {label:"Workflows",href:null,current:true},
+  ];
   if (route.kind === "collection" && appPath === "/runs") return buildUiV2Crumbs(workspaceSlug,
     [["Workspace", null], ["Runs", "current"]]);
   if (route.kind === "detail" && route.navId === "catalog") {
@@ -136,7 +139,7 @@ export function buildUiV2WorkspaceSwitchPath(nextSlug: string, currentAppPath: s
 export function buildUiV2Crumbs(workspaceSlug: string, crumbs: readonly SavantShellCrumb[]) {
   return crumbs.map(([label, target]) => ({
     label,
-    href: typeof target === "string" && (NAVIGATION.some(item => item.appPath === target) || target === "/workbench") ?
+    href: typeof target === "string" && NAVIGATION.some(item => item.appPath === target) ?
       buildTenantAppPath(workspaceSlug, target) : null,
     current: target === "current",
   }));

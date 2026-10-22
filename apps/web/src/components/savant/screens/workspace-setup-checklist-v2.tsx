@@ -119,9 +119,42 @@ export function WorkspaceSetupChecklistV2(){
    </div>
    <div className={styles.setupProgress} role="status">
     {live.loading?"Checking authorized workspace connections…":
-      `${report.observed} of ${report.required} setup prerequisites observed; remaining steps need action or verification.`}
+      `${report.observed} of ${report.required} setup checkpoints observed${skill?" for the selected skill/suite where applicable":""}; select a skill to verify case and execution readiness.`}
    </div>
    {live.issues.map(issue=><UiV2StateBanner key={issue} state="unavailable" label={issue}/>)}
+   <div className={styles.setupEvidencePicker} aria-label="Verify actual Test Bench evidence">
+     <div className={styles.setupEvidenceFields}>
+       <label>Skill to verify
+         <select value={skill?.id??""}
+           onChange={event=>{setSelectedSkillId(event.target.value);setSelectedSuiteId("");}}
+           disabled={live.loading||!live.skills?.length}>
+           <option value="">Select a tenant-authorized indexed skill</option>
+           {(live.skills??[]).map(item=><option key={item.id} value={item.id}>
+             {item.name}</option>)}
+         </select>
+       </label>
+       {skill&&caseState.definitions?.length?<label>Saved suite
+         <select value={currentSuite?.id??""} onChange={event=>setSelectedSuiteId(event.target.value)}>
+           {caseState.definitions.map(item=><option key={item.id} value={item.id}>
+             {item.name} · revision {item.revision}</option>)}
+         </select>
+       </label>:null}
+     </div>
+     <p className={styles.note}>{!skill?
+       "Select a skill to verify its actual encrypted case suites and first provider-backed run.":
+       caseState.loading?"Reading authorized saved Test Bench case suites…":
+       caseState.error?"Saved case verification unavailable; check tenant permissions, production schema and managed keys.":
+       !currentSuite?"No saved suites for this skill; create one in Evaluations.":
+       runState.loading?"Checking observed case receipts for the selected suite…":
+       runState.error?"Observed run verification unavailable; run tables or managed keys may be unready.":
+       checked.verifiedRun==="observed"?
+       "Completed provider evidence observed for this exact saved revision and Git source SHA.":
+       "No completed, provider-observed case run qualifies for this saved revision and Git source SHA."}
+     </p>
+     <p className={styles.note}>These two checks apply only to the selected skill and suite.
+       They do not certify every skill in the organization, infer provider invoices,
+       or treat indexed historical scores as current Test Bench executions.</p>
+   </div>
    <ol className={styles.setupSteps}>
     {report.steps.map((step,index)=><li key={step.id} className={styles.setupStep}>
      <span className={styles.setupStepNumber} aria-hidden="true">{index+1}</span>

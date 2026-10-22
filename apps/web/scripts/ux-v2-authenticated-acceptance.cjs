@@ -292,9 +292,8 @@ async function verifyTenantBoundaries(page, config) {
     "Workspace B must not read workspace A's source.");
   if(config.assetPath){
     const crossTenant=await page.request.get(config.origin+
-      tenantPath(config,config.workspaceB,"/api/skills/"+
-        encodeURIComponent(config.skillId)+"/assets")+
-      "?workspaceSlug="+encodeURIComponent(config.workspaceB));
+      "/api/skills/"+encodeURIComponent(config.skillId)+"/assets?workspaceSlug="+
+      encodeURIComponent(config.workspaceB));
     assert.ok([403,404].includes(crossTenant.status()),
       "Workspace B must not enumerate A's pinned skill Git assets.");
   }

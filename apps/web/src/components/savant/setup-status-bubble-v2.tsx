@@ -41,8 +41,13 @@ export function SetupStatusBubbleV2({workspaceSlug}:{workspaceSlug:string}){
  },[workspaceSlug]);
  const live=status.scope===workspaceSlug?status:INITIAL;
  const report=describeWorkspaceSetup(live);
- const label=live.loading?"Checking setup…":report.completeness==="unavailable"?
-   "Setup status unavailable":`${report.observed} of ${report.required} observed`;
+ // The compact bubble only checks source/index/model metadata. The Test Bench
+ // case and observed-provider steps require an explicit skill/suite selection.
+ const prerequisites=report.steps.filter(step=>
+   step.id!=="cases"&&step.id!=="verified-run");
+ const observed=prerequisites.filter(step=>step.state==="observed").length;
+ const label=live.loading?"Checking setup…":prerequisites.every(step=>step.state==="unknown")?
+   "Setup sources unavailable":`${observed} of ${prerequisites.length} source/provider checks observed`;
  return <Link href={buildTenantAppPath(workspaceSlug,"/settings?section=setup") as Route}
    className={styles.setupBubble} aria-label={`Open workspace setup. ${label}.`}>
    <span className={styles.setupBubbleTitle}>
@@ -51,8 +56,8 @@ export function SetupStatusBubbleV2({workspaceSlug}:{workspaceSlug:string}){
    </span>
    <strong>{label}</strong>
    <span className={styles.setupBubbleTrack} aria-hidden="true">
-     <span style={{width:`${(report.observed/report.required)*100}%`}}/>
+     <span style={{width:`${(observed/prerequisites.length)*100}%`}}/>
    </span>
-   <small>Configure and verify remaining steps</small>
+   <small>Verify saved cases and actual runs in Settings</small>
  </Link>;
 }

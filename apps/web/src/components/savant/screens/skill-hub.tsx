@@ -243,7 +243,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
     }});
     void fetchRepositoryList({workspaceSlug,signal:controller.signal}).then(response=>{
       if(controller.signal.aborted)return;
-      const available=response.data.filter(repo=>repo.status!=="disabled");
+      const available=response.data.filter(repo=>repo.provider==="github"&&repo.providerReadiness.supportsProvisioningWrites);
       setRepositories(available);
       setRepositoryId(available.length===1?available[0]!.id:"");
       setRepositoryState("ready");

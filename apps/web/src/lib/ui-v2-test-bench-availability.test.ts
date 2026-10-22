@@ -7,7 +7,7 @@ import {classifyTestBenchAvailability} from "./ui-v2-test-bench-availability.ts"
 import {evaluationLifecycle} from "./ui-v2-evaluations-model.ts";
 import type {EvaluationDashboardPayload} from "@savant/types";
 
-const fail=(status:number,code?:string)=>new TestBenchClientError("unavailable",{status,code});
+const fail=(status:number,code?:string)=>new TestBenchClientError("unavailable",{status,...(code?{code}:{})});
 test("PER-1625 missing staged schema and managed keys produce actionable but non-secret diagnostics",()=>{
  const schema=classifyTestBenchAvailability(fail(503,"test_bench_schema_unavailable"));
  assert.equal(schema.kind,"schema-unavailable");

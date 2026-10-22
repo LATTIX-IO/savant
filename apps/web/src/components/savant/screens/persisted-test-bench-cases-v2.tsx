@@ -6,11 +6,12 @@ import {parseTestBenchCases} from "@/server/test-bench/definition-contract";
 import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
 import {listObservedTestBenchRuns} from "@/lib/observed-test-bench-runs";
 import {listPersistedTestBenches,createPersistedTestBench,updatePersistedTestBench,
- archivePersistedTestBench} from "@/lib/test-bench-client";
+ archivePersistedTestBench,TestBenchClientError} from "@/lib/test-bench-client";
 import {extractWorkspaceSlugFromPathname} from "@/lib/tenant-paths";
 import {UiV2InspectorDrawer,UiV2StateBanner} from "@/components/savant/ui-v2";
 import {ObservedTestBenchRunPanel} from "./observed-test-bench-run-panel";
 import {ObservedRunComparisonPanel} from "./observed-run-comparison-panel";
+import {TestBenchAvailabilityNotice} from "./test-bench-availability-notice";
 import styles from "./persisted-test-bench-cases-v2.module.css";
 
 const newCase=():TestBenchCase=>({
@@ -19,7 +20,7 @@ const newCase=():TestBenchCase=>({
 });
 const KINDS:readonly TestBenchCaseKind[]=["positive","negative","edge","escalation"];
 type Inventory={scope:string;loading:boolean;definitions:readonly TestBenchDefinition[];
- error:string|null};
+ error:TestBenchClientError|null};
 const EMPTY:Inventory={scope:"",loading:true,definitions:[],error:null};
 type Runs={scope:string;loading:boolean;runs:readonly ObservedRunSummary[];error:string|null};
 const NO_RUNS:Runs={scope:"",loading:true,runs:[],error:null};
@@ -51,7 +52,7 @@ export function PersistedTestBenchCasesV2({
  const observed=runs.scope===runScope?runs:NO_RUNS;
  const currentRun=observed.runs.find(run=>run.status==="complete"&&
   run.definitionRevision===selected?.revision&&run.sourceCommitSha===selected.sourceCommitSha)??null;
- const editable=Boolean(slug&&!readOnly&&!busy);
+ const editable=Boolean(slug&&!readOnly&&!busy&&!inv.loading&&!inv.error);
  const canAppend=Boolean(selected&&selected.cases.length<8);
  const mode=editingId==="__new-suite"?"new-suite":editingId?"edit":"add";
  const heading=mode==="new-suite"?"Create a new suite and case":
@@ -65,8 +66,8 @@ export function PersistedTestBenchCasesV2({
    if(!controller.signal.aborted)setInventory({scope,loading:false,definitions:data,error:null});
   }).catch(err=>{
    if(!controller.signal.aborted)setInventory({scope,loading:false,definitions:[],
-    error:err instanceof Error?`Saved suites unavailable: ${err.message}`:
-     "Saved suites unavailable. Check tenant access, production schema, and managed encryption keys."});
+    error:err instanceof TestBenchClientError?err:
+      new TestBenchClientError("Saved encrypted suites could not be loaded.")});
   });
   return ()=>controller.abort();
  },[slug,skillId,scope,reload]);
@@ -172,7 +173,8 @@ export function PersistedTestBenchCasesV2({
    </div>
   </header>
   {inv.loading?<p role="status">Loading encrypted, tenant-owned case definitions…</p>:
-   inv.error?<UiV2StateBanner state="unavailable" label={inv.error}/>:
+   inv.error?<TestBenchAvailabilityNotice error={inv.error} pathname={pathname}
+     onRetry={()=>setReload(value=>value+1)}/>:
    inv.definitions.length===0?<div className={styles.empty}>
     <h3>No saved Test Bench suites</h3>
     <p>Create a suite to add cases. Indexed benchmark scores from older Git evaluations

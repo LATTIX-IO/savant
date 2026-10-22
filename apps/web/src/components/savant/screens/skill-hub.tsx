@@ -72,7 +72,7 @@ export function SkillHubScreen() {
           <h1 className="h-display">Skill catalog</h1>
           <div className="page-head-sub">
             Skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other sources, safety-scanned with NVIDIA SkillSpector and
-            evaluated live (LLM-drafted cases, Jev-validated and scored). Import any skill into a connected repository as a reviewed pull request.
+            evaluated live (model-generated cases, independently validated and scored). Import any skill into a connected repository as a reviewed pull request.
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -302,7 +302,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           <div className="panel">
             <div className="panel-hd">
               <div className="panel-title">Live evaluation</div>
-              <span className="subtle" style={{ fontSize: 11.5 }}>{skill.evaluation?.models?.generator ?? "NVIDIA NIM"} drafts and runs · {skill.evaluation?.models?.judge ?? "Jev"} validates and scores</span>
+              <span className="subtle" style={{ fontSize: 11.5 }}>{skill.evaluation?.models?.generator ?? "NVIDIA NIM"} drafts and runs · {"Evaluation judge"} validates and scores</span>
             </div>
             <div className="panel-bd col" style={{ gap: 10 }}>
               {scorecard?.overallScore !== undefined ? (
@@ -318,13 +318,13 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                   <EvalLimitationsNote limitations={skill.evaluation?.limitations} />
                   <span className="subtle" style={{ fontSize: 12 }}>
                     {scorecard.passCount ?? 0} pass · {scorecard.investigateCount ?? 0} investigate · {scorecard.failCount ?? 0} fail
-                    {skill.evaluation?.metrics?.drafted ? ` · Jev accepted ${skill.evaluation.metrics.accepted ?? 0} of ${skill.evaluation.metrics.drafted} drafts` : ""}
+                    {skill.evaluation?.metrics?.drafted ? ` · Evaluation judge accepted ${skill.evaluation.metrics.accepted ?? 0} of ${skill.evaluation.metrics.drafted} drafts` : ""}
                     {" · generated evaluations are included when you import"}
                   </span>
                 </>
               ) : (
                 <span className="subtle" style={{ fontSize: 12.5 }}>
-                  {evaluating ? "Running: the LLM drafts cases, Jev validates them, the skill runs, and Jev scores the outputs." : skill.evalStatus === "failed" ? `Last run failed${skill.evalError ? `: ${skill.evalError}` : "."}` : "No live evaluation yet. Run one to get a starting baseline — this skill has no answer key."}
+                  {evaluating ? "Running: the generation model drafts cases, the evaluation judge validates them, the skill runs, and the independent judge scores outputs." : skill.evalStatus === "failed" ? `Last run failed${skill.evalError ? `: ${skill.evalError}` : "."}` : "No live evaluation yet. Run one to get a starting baseline — this skill has no answer key."}
                 </span>
               )}
             </div>

@@ -9,7 +9,7 @@ import type {TestBenchDefinition} from "@/server/test-bench/definition-contract"
 import {readObservedDailyQuota} from "@/lib/observed-admission-quota-client";
 import type {DailyAdmissionQuota} from "@/server/test-bench/observed-admission-quota";
 
-/** Displays ONLY server-confirmed NIM/Jev chat-only observations, never synthetic scores. */
+/** Displays ONLY server-confirmed chat-only execution and judge observations, never synthetic scores. */
 export function ObservedTestBenchRunPanel({
   skillId,definition,workspaceSlug,readOnly,
 }:{
@@ -114,7 +114,7 @@ export function ObservedTestBenchRunPanel({
       </div>
       <p className="subtle" style={{fontSize:12,margin:0,lineHeight:1.5}}>
         Run the saved revision with either an explicitly configured workspace OpenAI key
-        or Savant platform NIM. Both modes use Savant Jev for judging.
+        or Savant platform NIM. Both modes use a separate platform evaluation judge for scoring.
         Up to four cases per run. This does not execute MCP tools, scripts or customer-owned harnesses.
         Results are provisional and do not constitute an automatic release approval.
         Workspace OpenAI uses the tenant-provided key with a token bound, but actual

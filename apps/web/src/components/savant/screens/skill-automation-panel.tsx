@@ -30,9 +30,9 @@ const SAFETY_CHIP: Record<string, string> = { SAFE: "chip-moss", CAUTION: "chip-
 
 const STAGE_LABEL: Record<string, string> = {
   drafting: "LLM drafting cases",
-  validating: "Jev validating drafts",
+  validating: "Evaluation judge validating drafts",
   executing: "LLM running the skill on accepted cases",
-  scoring: "Jev scoring outputs",
+  scoring: "Evaluation judge scoring outputs",
 };
 
 function signed(value: number): string {
@@ -85,9 +85,9 @@ function RunDetails({ run }: { run: SkillAutomationRun }) {
                 hint={`${run.scorecard.passCount ?? 0} pass · ${run.scorecard.investigateCount ?? 0} investigate · ${run.scorecard.failCount ?? 0} fail`}
               />
             )}
-            <Metric label="Accepted by Jev" value={`${metrics.accepted ?? 0}/${metrics.drafted ?? 0}`} hint={`Without Jev all ${metrics.drafted ?? 0} drafts would ship`} />
+            <Metric label="Accepted by judge" value={`${metrics.accepted ?? 0}/${metrics.drafted ?? 0}`} hint={`Without independent validation, ${metrics.drafted ?? 0} drafts would ship`} />
             <Metric label="Rejected" value={metrics.rejected ?? 0} hint={`${metrics.needsReview ?? 0} held for review`} />
-            <Metric label="Rounds" value={run.rounds} hint={metrics.durationMs ? `${Math.round(metrics.durationMs / 1000)}s · ${metrics.llmCalls ?? 0} LLM / ${metrics.judgeCalls ?? 0} Jev calls` : undefined} />
+            <Metric label="Rounds" value={run.rounds} hint={metrics.durationMs ? `${Math.round(metrics.durationMs / 1000)}s · ${metrics.llmCalls ?? 0} LLM / ${metrics.judgeCalls ?? 0} judge calls` : undefined} />
           </div>
 
           <EvalLimitationsNote limitations={metrics.limitations} />
@@ -119,7 +119,7 @@ function RunDetails({ run }: { run: SkillAutomationRun }) {
                 <tr>
                   <th style={{ width: 90 }}>Kind</th>
                   <th>Case</th>
-                  <th style={{ width: 110 }}>Jev decision</th>
+                  <th style={{ width: 110 }}>Judge decision</th>
                   <th style={{ width: 100 }}>Verdict</th>
                 </tr>
               </thead>
@@ -181,7 +181,7 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
 }
 
 /**
- * Evaluation generation (LLM drafts → Jev validates → LLM executes → Jev
+ * Evaluation generation (model drafts → evaluator validates → model executes → evaluator
  * scores) and SkillSpector safety results for one skill.
  */
 export function SkillAutomationPanel({ skillId }: { skillId: string }) {
@@ -249,7 +249,7 @@ export function SkillAutomationPanel({ skillId }: { skillId: string }) {
           <div className="col" style={{ gap: 2 }}>
             <div className="panel-title">Evaluation generation</div>
             <span className="subtle" style={{ fontSize: 11.5 }}>
-              {automation?.services.generationModel ?? "NVIDIA NIM"} drafts and runs cases · {automation?.services.judgeModel ?? "Jev"} validates and scores
+              {automation?.services.generationModel ?? "NVIDIA NIM"} drafts and runs cases · {"Independent evaluation judge"} validates and scores
             </span>
           </div>
           {automation && (
@@ -257,7 +257,7 @@ export function SkillAutomationPanel({ skillId }: { skillId: string }) {
               type="button"
               className="btn btn-sm btn-primary"
               disabled={busy || live || !automation.canGenerate}
-              title={servicesMissing ? "NVIDIA_NIM_API_KEY and JEV_API_KEY must be configured" : !automation.canGenerate ? "Requires an admin or repository manager" : undefined}
+              title={servicesMissing ? "A generation provider and an independent evaluation judge must be configured" : !automation.canGenerate ? "Requires an admin or repository manager" : undefined}
               onClick={() => void generate()}
             >
               {busy ? "Starting…" : live ? "Running…" : automation.hasAnswerKey ? "Run alignment check" : latest ? "Regenerate evaluations" : "Generate evaluations"}
@@ -271,7 +271,7 @@ export function SkillAutomationPanel({ skillId }: { skillId: string }) {
             <span className="subtle" style={{ fontSize: 12.5 }}>
               {automation.hasAnswerKey
                 ? "This skill has a committed, scored dataset. An alignment check generates an independent set and compares it with the answer key."
-                : "This skill has no scored evaluation set. Generation drafts cases from SKILL.md, keeps the ones Jev validates, runs the skill on them, and proposes the dataset as a pull request."}
+                : "This skill has no scored evaluation set. Generation drafts cases from SKILL.md, keeps the ones its evaluation judge validates, runs the skill on them, and proposes the dataset as a pull request."}
             </span>
           )}
           {latest && <RunDetails run={latest} />}

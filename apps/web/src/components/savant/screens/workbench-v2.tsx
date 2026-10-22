@@ -327,11 +327,11 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
             </div>
             <div className={styles.tabs} role="group" aria-label="Workbench viewing mode">
               <UiV2Button size="small" variant={mode === "edit" ? "primary" : "default"} aria-pressed={mode === "edit"}
-                onClick={() => { setMode("edit"); setWorkspaceView("code"); }}>Edit</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("edit"); setWorkspaceView("code"); }}>Edit</UiV2Button>
               <UiV2Button size="small" variant={mode === "preview" ? "primary" : "default"} aria-pressed={mode === "preview"}
-                onClick={() => { setMode("preview"); setWorkspaceView("code"); }}>Preview</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("preview"); setWorkspaceView("code"); }}>Preview</UiV2Button>
               <UiV2Button size="small" variant={mode === "review" ? "primary" : "default"} aria-pressed={mode === "review"}
-                onClick={() => { setMode("review"); setWorkspaceView("code"); }}>Compare</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("review"); setWorkspaceView("code"); }}>Compare</UiV2Button>
             </div>
             {comparison ? <span className={styles.muted}>Original {comparison.originalLines} lines · Draft {comparison.proposedLines} lines</span> : null}
           </div>
@@ -346,7 +346,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
               <div className={styles.visualCanvas}>
                 <p className={styles.canvasLane}>Indexed source · Git-owned artifact</p>
                 {observedCanvas.source ? <button type="button" className={styles.canvasSource}
-                  onClick={() => { setWorkspaceView("code"); setMode("edit"); }}>
+                  onClick={() => { setAssetSelection(null);setWorkspaceView("code"); setMode("edit"); }}>
                   <span className={styles.canvasType}>SKILL.md · indexed source</span>
                   <strong>{observedCanvas.source.path}</strong>
                   <span>Revision: {observedCanvas.source.commit ?? "Not reported"}</span>
@@ -365,8 +365,30 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                       </Link>)}</div>}
                 <p className={styles.note}>Evaluation association is skill-level only. A run is not proved
                   to have used the currently indexed source revision.</p>
-                <UiV2StateBanner state="unavailable"
-                  label="Tool and dependency graph not provided by the source API" />
+                <p className={styles.canvasLane}>Declared file dependencies · indexed SKILL.md</p>
+                {assetData?<div className={styles.dependencyGraph} aria-label="Observed dependency links from SKILL.md">
+                  <div className={styles.dependencyOrigin}>
+                    <strong>SKILL.md</strong><span>Git · {assetData.commitSha.slice(0,12)}</span>
+                  </div>
+                  {assetData.links.length===0?
+                    <p className={styles.note}>No Markdown file links declared in this indexed SKILL.md.</p>:
+                    assetData.links.map((link,i)=><div key={`${link.line}-${i}`} className={styles.dependencyEdge}>
+                      <span aria-hidden="true">→</span>
+                      {link.status==="verified"&&link.resolvedPath?
+                        <button type="button" className={styles.dependencyTarget}
+                          onClick={()=>openObservedFile(link.resolvedPath!)}>
+                          <strong>{link.raw}</strong>
+                          <small>Verified file · SKILL.md line {link.line}</small>
+                        </button>:
+                        <span className={styles.dependencyTarget}>
+                          <strong>{link.raw}</strong>
+                          <small>{link.status} · SKILL.md line {link.line}</small>
+                        </span>}
+                    </div>)}
+                </div>:<UiV2StateBanner state="unavailable"
+                  label="No ACL-verified, pinned repository tree available for dependency inspection" />}
+                <p className={styles.note}>These edges are authored Markdown file references only.
+                  No tool invocation, runtime execution or data lineage has been observed.</p>
               </div>
             </UiV2CanvasRegion> : null}
             {workspaceView !== "canvas" ? <div className={styles.sourceArea}>

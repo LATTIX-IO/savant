@@ -136,7 +136,7 @@ export function buildUiV2WorkspaceSwitchPath(nextSlug: string, currentAppPath: s
 export function buildUiV2Crumbs(workspaceSlug: string, crumbs: readonly SavantShellCrumb[]) {
   return crumbs.map(([label, target]) => ({
     label,
-    href: typeof target === "string" && NAVIGATION.some(item => item.appPath === target) ?
+    href: typeof target === "string" && (NAVIGATION.some(item => item.appPath === target) || target === "/workbench") ?
       buildTenantAppPath(workspaceSlug, target) : null,
     current: target === "current",
   }));

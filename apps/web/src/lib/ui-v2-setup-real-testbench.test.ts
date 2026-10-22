@@ -12,6 +12,7 @@ const run={id:"run-1",definitionId:suite.id,skillId:suite.skillId,
  definitionRevision:suite.revision,sourceCommitSha:suite.sourceCommitSha,
  status:"complete",expectedCases:1,completedCases:1,samples:[{caseId:"case-1"}],
  observedUsageReceipts:2,observedExecutorTokens:10,observedJudgeTokens:5,
+ executionModel:"test-executor",judgeModel:"test-judge",scorecard:{overallScore:91},
  unconfirmedProviderCalls:0,completedAt:"2026-10-22T10:00:00Z",
 } as unknown as ObservedRunSummary;
 const check=(definitions:TestBenchDefinition[]|null,runs:ObservedRunSummary[]|null)=>
@@ -31,7 +32,8 @@ test("PER-1619 only exact-revision, provider-observed, fully completed case rece
   {definitionId:"other"},{status:"running"},{status:"canceled"},
   {status:"failed"},{observedUsageReceipts:0},{unconfirmedProviderCalls:1},
   {observedExecutorTokens:0,observedJudgeTokens:0},{completedCases:0},
-  {expectedCases:2},{samples:[]},{completedAt:null},
+  {expectedCases:2},{samples:[]},{samples:[{caseId:"foreign"}]},
+  {executionModel:null},{judgeModel:null},{scorecard:null},{completedAt:null},
  ]){
   assert.equal(check([suite],[{...run,...drift} as ObservedRunSummary]).verifiedRun,"action-required",
    JSON.stringify(drift));

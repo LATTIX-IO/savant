@@ -8,7 +8,7 @@ import { toLocator } from "../git/repository-sync-service.ts";
 import { authorizeCapabilityRepository } from "../workflows/capability-access.ts";
 import { authorizeCapabilityArtifact } from "../workflows/capability-artifact-access.ts";
 import type { CapabilityResolveActor } from "../workflows/capability-resolver.ts";
-import { SkillAssetError, readVerifiedSkillAssetSnapshot, type IndexedAssetLocation } from "./skill-assets.ts";
+import { SkillAssetError, readVerifiedSkillAssetSnapshot, MAX_TREE_ENTRIES, type IndexedAssetLocation } from "./skill-assets.ts";
 import type { SkillAssetResponseData } from "../../lib/ui-v2-skill-assets.ts";
 
 /** Production adapter. The indexed skill is resolved using the same tenant

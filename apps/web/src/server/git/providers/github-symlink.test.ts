@@ -2,12 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {createGitHubProvider} from "./github.ts";
 import {createRuntimeCredential} from "../types.ts";
+import {SAMPLE_TOKENS} from "../testing/fixtures.ts";
 
 test("PER-1610 provider mode guard excludes GitHub symbolic links and submodules from the file tree",async()=>{
  const provider=createGitHubProvider({env:{}});
  const credential=createRuntimeCredential({
   provider:"github",connectionId:"test",organizationId:"tenant-a",
-  apiBaseUrl:"https://api.github.com",host:"github.com",accessToken:"synthetic-not-real",
+  apiBaseUrl:"https://api.github.com",host:"github.com",accessToken:SAMPLE_TOKENS.valid,
  });
  const locator={provider:"github" as const,host:"github.com",owner:"example",name:"repo",
   fullName:"example/repo",providerRepositoryId:"123"};

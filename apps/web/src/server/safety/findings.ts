@@ -43,7 +43,7 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
       skillId: null,
       path: null,
       title: "Skill safety scanning is unavailable",
-      detail: unavailable.error ?? "SkillSpector could not run.",
+      detail: "The repository safety analysis service is unavailable.",
       remediation: "Safety scans run in a Vercel Sandbox. Check the project's Sandbox access; the next sync retries automatically.",
       fix: null,
       status: "open",
@@ -60,7 +60,7 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
         skillId: scan.skillId,
         path: scan.sourcePath,
         title: "Safety scan didn't complete",
-        detail: scan.error ?? "SkillSpector produced no report for this package.",
+        detail: "No completed security analysis report is available for this package.",
         remediation: "It's retried on the next sync. If it keeps failing, the package may be too large or malformed.",
         fix: null,
         status: "open",
@@ -71,7 +71,7 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
       continue;
     }
     const blocking = scan.recommendation === "DO_NOT_INSTALL";
-    const raw = `SkillSpector: ${scan.recommendation.replace(/_/g, " ")} · severity ${scan.severity ?? "unknown"} · risk ${scan.riskScore ?? "?"}/100.`;
+    const raw = `Security assessment: ${scan.recommendation.replace(/_/g, " ")} · severity ${scan.severity ?? "unknown"} · risk ${scan.riskScore ?? "?"}/100.`;
     if (safetyDecision(scan.recommendation, scan.riskScore) === "pass_low_risk") {
       findings.push({
         fingerprint: fingerprintFinding("SAFETY_LOW_RISK", `skill:${scan.skillId}:${scan.sourcePath}`),
@@ -96,8 +96,8 @@ export function safetyFindings(scans: readonly StoredSafetyScan[]): AssessmentFi
       skillId: scan.skillId,
       path: scan.sourcePath,
       title: blocking
-        ? `SkillSpector flags this skill as unsafe to install (risk ${scan.riskScore ?? "?"}/100)`
-        : `SkillSpector found security risks to review (risk ${scan.riskScore ?? "?"}/100)`,
+        ? `Security assessment blocked this skill (risk ${scan.riskScore ?? "?"}/100)`
+        : `Security analysis found patterns to review (risk ${scan.riskScore ?? "?"}/100)`,
       detail: `${raw} ${scan.issues.length > 0 ? describeIssues(scan) : ""}`.trim(),
       remediation: blocking
         ? "Don't release this skill until the flagged instructions, scripts or dependencies are fixed or confirmed as false positives."

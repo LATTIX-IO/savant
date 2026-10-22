@@ -9,7 +9,7 @@ import { authorizeCapabilityRepository } from "../workflows/capability-access.ts
 import { authorizeCapabilityArtifact } from "../workflows/capability-artifact-access.ts";
 import type { CapabilityResolveActor } from "../workflows/capability-resolver.ts";
 import { projectSkillAssets, resolveObservedSkillLinks,
-  type SkillAssetProjection, type SkillAssetLink, type SkillAsset } from "../../lib/ui-v2-skill-assets.ts";
+  type SkillAssetProjection, type SkillAssetResponseData } from "../../lib/ui-v2-skill-assets.ts";
 
 const MAX_TREE_ENTRIES=20_000;
 const MAX_SKILL_BYTES=200_000;
@@ -27,16 +27,6 @@ export class SkillAssetError extends Error {
 export type IndexedAssetLocation={
   organizationId:string;skillId:string;repositoryId:string;
   sourcePath:string;commitSha:string;
-};
-export type SkillAssetResponseData={
-  sourceOfTruth:"git";
-  commitSha:string;
-  root:string;
-  files:SkillAsset[];
-  links:SkillAssetLink[];
-  complete:boolean;
-  omitted:number;
-  selection: {path:string;kind:SkillAsset["kind"];content:string;bytes:number}|null;
 };
 export type SkillAssetReaderPorts={
   authorizeRepository():Promise<void>;

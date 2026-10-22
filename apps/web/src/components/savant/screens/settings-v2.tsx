@@ -93,7 +93,7 @@ export function SettingsV2({settings,legacy}:{settings:WorkspaceSettingsPayload;
     </>:tab==="access"?<>
       <h2>Access and roles</h2>
       <UiV2StateBanner state="planned"
-        label="External SCIM sync, effective group mapping and per-user access checks are not verified."/>
+        label="External SCIM identity synchronization, group mappings and effective-user checks are not verified."/>
       <p className={styles.note}>Member roles are server-sourced summaries, not an
         effective permission matrix or a grant/revoke operation.</p>
       <dl className={styles.definition}><dt>Authentication provider</dt>

@@ -7,6 +7,7 @@ const workbench=readFileSync(fileURLToPath(new URL("../components/savant/screens
 const css=readFileSync(fileURLToPath(new URL("../components/savant/screens/workbench-v2.module.css",import.meta.url)),"utf8");
 const api=readFileSync(fileURLToPath(new URL("../app/api/skills/[id]/assets/route.ts",import.meta.url)),"utf8");
 const service=readFileSync(fileURLToPath(new URL("../server/control-plane/skill-assets.ts",import.meta.url)),"utf8");
+const runtime=readFileSync(fileURLToPath(new URL("../server/control-plane/skill-assets-runtime.ts",import.meta.url)),"utf8");
 const client=readFileSync(fileURLToPath(new URL("./control-plane-client.ts",import.meta.url)),"utf8");
 
 test("PER-1610 Workbench reads and renders only ACL-filtered Git assets, not static fake files",()=>{
@@ -56,8 +57,9 @@ test("PER-1610 provider credentials only resolve AFTER repository and skill ACL"
  const aa=body.indexOf("await ports.authorizeArtifact()");
  const open=body.indexOf("await ports.openProvider()");
  assert.ok(ar>0&&aa>ar&&open>aa);
- assert.match(service,/validateRepositoryAccess/);
- assert.match(service,/repositoryIdentityMismatch|repository_identity_mismatch/);
+ assert.match(runtime,/validateRepositoryAccess/);
+ assert.match(runtime,/repository_identity_mismatch/);
+ assert.match(runtime,/getGitRuntime/);
  assert.match(service,/source_revision_unverified/);
  assert.match(service,/new TextDecoder\("utf-8",\{fatal:true\}\)/);
  assert.match(service,/sourceOfTruth:"git"/);

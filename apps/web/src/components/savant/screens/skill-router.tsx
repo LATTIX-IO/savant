@@ -99,7 +99,7 @@ function ClassicSkillRouterScreen() {
           <h1 className="h-display">Skill router</h1>
           <div className="page-head-sub">
             Connect ChatGPT, Claude, GitHub Copilot, Gemini and Cursor to this workspace&apos;s governed skills over MCP. The router picks the right
-            skill for each task (Jev chooses among your skills), serves the approved SKILL.md at its indexed commit, and records every use as a live
+            skill for each task (the skill router selects an authorized candidate), serves the approved SKILL.md at its indexed commit, and records every use as a live
             run — the primary telemetry for skill health and SkillOpt. Evaluations remain the fallback where there&apos;s no live data yet.
           </div>
         </div>
@@ -190,7 +190,7 @@ function ClassicSkillRouterScreen() {
           <div className="panel">
             <div className="panel-hd"><div className="panel-title">How it works</div></div>
             <div className="panel-bd col" style={{ gap: 6, fontSize: 12.5 }}>
-              <span><strong>find_skill</strong> — Jev picks the governed skill that fits the task (or none).</span>
+              <span><strong>find_skill</strong> — The skill router picks a governed skill that fits the task (or none).</span>
               <span><strong>load_skill</strong> — serves the approved SKILL.md pinned to its indexed commit and starts a tracked run.</span>
               <span><strong>report_skill_outcome</strong> — records success, acceptance and rating for health and SkillOpt.</span>
               <span className="subtle">Runs are attributed to the client (Claude, ChatGPT, Copilot, Gemini, Cursor) and stored under the workspace&apos;s telemetry policy and redaction.</span>

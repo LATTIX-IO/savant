@@ -7,7 +7,11 @@ import {useEffect,useState} from "react";
 import type {AIConnectionSummary,RepositoryListItem,SkillListItem} from "@savant/types";
 import {fetchAIConnections,fetchRepositoryList,fetchSkillList} from "@/lib/control-plane-client";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
-import {describeWorkspaceSetup,type SetupState} from "@/lib/ui-v2-setup-status";
+import {describeWorkspaceSetup,selectedTestBenchReadiness,type SetupState} from "@/lib/ui-v2-setup-status";
+import {listPersistedTestBenches} from "@/lib/test-bench-client";
+import {listObservedTestBenchRuns} from "@/lib/observed-test-bench-runs";
+import type {TestBenchDefinition} from "@/server/test-bench/definition-contract";
+import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
 import {useUiV2WorkspaceSlug} from "@/components/savant/ui-v2/mode";
 import {UiV2StateBanner} from "@/components/savant/ui-v2";
 import styles from "./operational-admin-v2.module.css";
@@ -18,6 +22,10 @@ type Result={
  issues:readonly string[];
 };
 const EMPTY:Result={scope:"",loading:true,repositories:null,skills:null,models:null,issues:[]};
+type CaseCheck={key:string;loading:boolean;definitions:readonly TestBenchDefinition[]|null;error:boolean};
+type RunCheck={key:string;loading:boolean;runs:readonly ObservedRunSummary[]|null;error:boolean};
+const EMPTY_CASES:CaseCheck={key:"",loading:true,definitions:null,error:false};
+const EMPTY_RUNS:RunCheck={key:"",loading:true,runs:null,error:false};
 const statusText:Record<SetupState,string>={
  observed:"Connection or source observed",
  "action-required":"Action required",
@@ -29,6 +37,10 @@ export function WorkspaceSetupChecklistV2(){
  const pathname=usePathname()||"/";
  const [result,setResult]=useState<Result>(EMPTY);
  const [retry,setRetry]=useState(0);
+ const [selectedSkillId,setSelectedSkillId]=useState("");
+ const [selectedSuiteId,setSelectedSuiteId]=useState("");
+ const [cases,setCases]=useState<CaseCheck>(EMPTY_CASES);
+ const [runs,setRuns]=useState<RunCheck>(EMPTY_RUNS);
  useEffect(()=>{
   if(!slug)return;
   const controller=new AbortController();
@@ -54,7 +66,50 @@ export function WorkspaceSetupChecklistV2(){
  },[slug,retry]);
 
  const live=result.scope===slug?result:EMPTY;
- const report=describeWorkspaceSetup(live);
+ // Never query a former tenant's skill or suite identifiers.
+ const skill=live.skills?.find(item=>item.id===selectedSkillId)??null;
+ const skillKey=skill?`${slug}:${skill.id}:${retry}`:"";
+ const caseState=cases.key===skillKey?cases:EMPTY_CASES;
+ const currentSuite=caseState.definitions?.find(item=>item.id===selectedSuiteId)??
+   caseState.definitions?.[0]??null;
+ const runKey=currentSuite?`${skillKey}:${currentSuite.id}:${currentSuite.revision}:${currentSuite.sourceCommitSha}`:"";
+ const runState=runs.key===runKey?runs:EMPTY_RUNS;
+ const checked=selectedTestBenchReadiness({
+   selectedSkill:Boolean(skill),
+   definitions:caseState.loading?null:caseState.definitions,
+   selectedSuite:currentSuite,
+   runs:runState.loading?null:runState.runs,
+ });
+ const report=describeWorkspaceSetup({...live,
+   caseState:checked.cases,verifiedRunState:checked.verifiedRun,
+ });
+ useEffect(()=>{
+   if(!slug||!skill)return;
+   const controller=new AbortController();
+   const key=skillKey;
+   queueMicrotask(()=>{if(!controller.signal.aborted)
+     setCases({key,loading:true,definitions:null,error:false});});
+   void listPersistedTestBenches(skill.id,{workspaceSlug:slug,signal:controller.signal})
+     .then(definitions=>{if(!controller.signal.aborted)
+       setCases({key,loading:false,definitions,error:false});})
+     .catch(()=>{if(!controller.signal.aborted)
+       setCases({key,loading:false,definitions:null,error:true});});
+   return ()=>controller.abort();
+ },[slug,skill?.id,skillKey,retry]);
+ useEffect(()=>{
+   if(!slug||!skill||!currentSuite)return;
+   const controller=new AbortController();
+   const key=runKey;
+   queueMicrotask(()=>{if(!controller.signal.aborted)
+     setRuns({key,loading:true,runs:null,error:false});});
+   void listObservedTestBenchRuns(skill.id,currentSuite.id,currentSuite.sourceCommitSha,{
+     workspaceSlug:slug,signal:controller.signal,
+   }).then(records=>{if(!controller.signal.aborted)
+     setRuns({key,loading:false,runs:records,error:false});})
+     .catch(()=>{if(!controller.signal.aborted)
+       setRuns({key,loading:false,runs:null,error:true});});
+   return ()=>controller.abort();
+ },[slug,skill?.id,runKey,currentSuite?.id,currentSuite?.sourceCommitSha,retry]);
  return <section className={styles.setupGuide} aria-label="Workspace setup and readiness">
    <div className={styles.setupHeader}>
      <div><h2>Set up Savant</h2>
@@ -64,9 +119,42 @@ export function WorkspaceSetupChecklistV2(){
    </div>
    <div className={styles.setupProgress} role="status">
     {live.loading?"Checking authorized workspace connections…":
-      `${report.observed} of ${report.required} setup prerequisites observed; remaining steps need action or verification.`}
+      `${report.observed} of ${report.required} setup checkpoints observed${skill?" for the selected skill/suite where applicable":""}; select a skill to verify case and execution readiness.`}
    </div>
    {live.issues.map(issue=><UiV2StateBanner key={issue} state="unavailable" label={issue}/>)}
+   <div className={styles.setupEvidencePicker} aria-label="Verify actual Test Bench evidence">
+     <div className={styles.setupEvidenceFields}>
+       <label>Skill to verify
+         <select value={skill?.id??""}
+           onChange={event=>{setSelectedSkillId(event.target.value);setSelectedSuiteId("");}}
+           disabled={live.loading||!live.skills?.length}>
+           <option value="">Select a tenant-authorized indexed skill</option>
+           {(live.skills??[]).map(item=><option key={item.id} value={item.id}>
+             {item.name}</option>)}
+         </select>
+       </label>
+       {skill&&caseState.definitions?.length?<label>Saved suite
+         <select value={currentSuite?.id??""} onChange={event=>setSelectedSuiteId(event.target.value)}>
+           {caseState.definitions.map(item=><option key={item.id} value={item.id}>
+             {item.name} · revision {item.revision}</option>)}
+         </select>
+       </label>:null}
+     </div>
+     <p className={styles.note}>{!skill?
+       "Select a skill to verify its actual encrypted case suites and first provider-backed run.":
+       caseState.loading?"Reading authorized saved Test Bench case suites…":
+       caseState.error?"Saved case verification unavailable; check tenant permissions, production schema and managed keys.":
+       !currentSuite?"No saved suites for this skill; create one in Evaluations.":
+       runState.loading?"Checking observed case receipts for the selected suite…":
+       runState.error?"Observed run verification unavailable; run tables or managed keys may be unready.":
+       checked.verifiedRun==="observed"?
+       "Completed provider evidence observed for this exact saved revision and Git source SHA.":
+       "No completed, provider-observed case run qualifies for this saved revision and Git source SHA."}
+     </p>
+     <p className={styles.note}>These two checks apply only to the selected skill and suite.
+       They do not certify every skill in the organization, infer provider invoices,
+       or treat indexed historical scores as current Test Bench executions.</p>
+   </div>
    <ol className={styles.setupSteps}>
     {report.steps.map((step,index)=><li key={step.id} className={styles.setupStep}>
      <span className={styles.setupStepNumber} aria-hidden="true">{index+1}</span>
@@ -74,7 +162,12 @@ export function WorkspaceSetupChecklistV2(){
       <h3>{step.title}</h3>
       <p>{step.detail}</p>
       <span className={styles.setupStatus} data-state={step.state}>
-        {live.loading?"Checking…":statusText[step.state]}
+        {live.loading?"Checking…":
+          step.id==="cases"&&step.state==="observed"?"Encrypted suite observed":
+          step.id==="verified-run"&&step.state==="observed"?"Completed provider run observed":
+          step.id==="cases"&&step.state==="action-required"?"No saved suite for selected skill":
+          step.id==="verified-run"&&step.state==="action-required"?"No qualifying completed provider run":
+          statusText[step.state]}
       </span>
      </div>
      <Link className={styles.control}

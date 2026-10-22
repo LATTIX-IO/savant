@@ -99,3 +99,15 @@
 @media(max-width:650px){.setupStep{grid-template-columns:30px minmax(0,1fr)}
 .setupStep>.control{grid-column:2;justify-self:start}
 }
+
+/* PER-1619: opt-in, explicitly scoped Test Bench evidence inspection. */
+.setupEvidencePicker{display:grid;gap:10px;padding:14px;border:1px solid var(--sv2-border);
+ border-radius:var(--sv2-radius-control);background:var(--sv2-recess);min-width:0}
+.setupEvidenceFields{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;min-width:0}
+.setupEvidenceFields label{display:grid;gap:6px;min-width:0;font:600 12px var(--sv2-font-body)}
+.setupEvidenceFields select{width:100%;max-width:100%;min-width:0;padding:9px;
+ background:var(--sv2-surface);color:var(--sv2-fg);border:1px solid var(--sv2-border-strong);
+ border-radius:var(--sv2-radius-control);font:12px var(--sv2-font-body)}
+.setupEvidenceFields select:focus-visible{outline:2px solid var(--sv2-focus);outline-offset:2px}
+.setupEvidencePicker .note{margin:0;max-width:85ch}
+@media(max-width:600px){.setupEvidenceFields{grid-template-columns:minmax(0,1fr)}}

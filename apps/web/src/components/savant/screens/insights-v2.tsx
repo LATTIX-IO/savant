@@ -15,6 +15,7 @@ import {UiV2EmptyState,UiV2Metric,UiV2PageHeader,UiV2StateBanner,
 import {ObservedRunComparisonPanel} from "./observed-run-comparison-panel";
 import {observedPortfolio,releaseProgress,chronologicalReleaseHistory}
  from "@/lib/ui-v2-insights-model";
+import {recordedGitRevisionOptions,recordedGitCompareUrl} from "@/lib/ui-v2-insights-git-comparison";
 import styles from "./insights-v2.module.css";
 
 type Panel="compare"|"releases"|"portfolio"|"advanced";
@@ -27,6 +28,9 @@ export function InsightsV2({advanced}:{advanced:ReactNode}){
  const pathname=usePathname()||"/";
  const [data,setData]=useState<Data>(EMPTY);
  const [selection,setSelection]=useState("");
+ const [gitComparison,setGitComparison]=useState<{skill:string;base:string;head:string}>({
+   skill:"",base:"",head:"",
+ });
  const [detail,setDetail]=useState<{scope:string;id:string;data:SkillDetailPayload|null;
   ready:boolean}>({scope:"",id:"",data:null,ready:false});
  const [tab,setTab]=useState<Panel>("compare");
@@ -69,6 +73,12 @@ export function InsightsV2({advanced}:{advanced:ReactNode}){
   return ()=>controller.abort();
  },[slug,skillId,refresh]);
  const inspected=detail.scope===slug&&detail.id===skillId?detail:null;
+ const history=inspected?.data?.versionHistory??[];
+ const options=skill?recordedGitRevisionOptions(skill,history):[];
+ const selectedGit=gitComparison.skill===`${slug}/${skillId}`?gitComparison:null;
+ const base=options.some(item=>item.commit===selectedGit?.base)?selectedGit!.base:options[1]?.commit??"";
+ const head=options.some(item=>item.commit===selectedGit?.head)?selectedGit!.head:options[0]?.commit??"";
+ const compareUrl=skill?recordedGitCompareUrl(skill,history,base,head):null;
  const portfolio=observedPortfolio(current.portfolio);
  const releasesHref=buildTenantAwareAppPath(pathname,"/releases") as Route;
  const skillHref=skill?buildTenantAwareAppPath(pathname,
@@ -112,8 +122,43 @@ export function InsightsV2({advanced}:{advanced:ReactNode}){
                 </tr>)}</tbody>
               </table></UiV2TableViewport>:
             <UiV2EmptyState message="No verified version history available for this skill."/>}
-          <UiV2StateBanner state="unavailable"
-             label="Exact per-file diff unavailable from the skill detail read model; inspect Git before approval."/>
+          {skill&&options.length>=2?<div className={styles.gitCompare} aria-label="Recorded Git source comparison">
+            <div className={styles.gitCompareFields}>
+              <label>Base revision
+                <select value={base} onChange={event=>setGitComparison({
+                  skill:`${slug}/${skillId}`,base:event.target.value,head,
+                })}>
+                  {options.map(version=><option key={version.commit} value={version.commit}>
+                    {version.label}</option>)}
+                </select>
+              </label>
+              <label>Candidate revision
+                <select value={head} onChange={event=>setGitComparison({
+                  skill:`${slug}/${skillId}`,base,head:event.target.value,
+                })}>
+                  {options.map(version=><option key={version.commit} value={version.commit}>
+                    {version.label}</option>)}
+                </select>
+              </label>
+            </div>
+            {compareUrl?<a href={compareUrl} target="_blank" rel="noopener noreferrer"
+              className={styles.gitCompareLink}>
+              Review these immutable revisions in GitHub <span aria-hidden="true">↗</span>
+            </a>:<p className={styles.note} role="status">
+              Choose two different, recorded Git revisions to compare.
+            </p>}
+            <p className={styles.note}>GitHub shows a read-only, repository-wide
+              comparison between the selected commits; changes may include other
+              skills or files. Savant has not independently verified a skill-only
+              per-file diff or a QA uplift from this link. Review affected paths
+              and authorizations in Git before approval.</p>
+          </div>:<UiV2StateBanner state="unavailable"
+             label={inspected?.ready&&!inspected.data?
+               "Skill detail unavailable. Retry the authorized source history request.":
+               skill?.repoProvider!=="github"?
+               "Git compare is available for GitHub-hosted skills only.":
+               "At least two distinct full Git revisions must be recorded before source comparison."}/>}
+
         </section>
         <section className={styles.panel}>
           <h2>Did it improve / What regressed</h2>

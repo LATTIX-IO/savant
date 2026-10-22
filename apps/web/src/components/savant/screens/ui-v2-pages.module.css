@@ -95,3 +95,14 @@
   .referenceMetrics > div:nth-child(2n) { border-right: none; }
   .referenceMetrics > div:nth-child(-n+2) { border-top: 0; }
 }
+
+/* PER-1616: compact source-backed Library inspector summary. */
+.inspectorSummary{display:grid;gap:15px;align-content:start;min-width:0}
+.skillPurpose{display:grid;gap:6px;min-width:0;padding:12px 0;border-bottom:1px solid var(--sv2-border)}
+.skillPurpose h3{margin:0;font:600 12px/1.4 var(--sv2-font-body);color:var(--sv2-fg)}
+.skillPurpose p{margin:0;color:var(--sv2-fg-2);font:12px/1.55 var(--sv2-font-body);
+overflow-wrap:anywhere}
+.evaluationSynopsis{display:grid;gap:6px;min-width:0;font:12px/1.4 var(--sv2-font-body)}
+.evaluationSynopsis a{color:var(--sv2-accent);overflow-wrap:anywhere}
+.evaluationSynopsis span{color:var(--sv2-fg-2)}
+.evaluationSynopsis small{font-size:11px;line-height:1.5;color:var(--sv2-muted)}

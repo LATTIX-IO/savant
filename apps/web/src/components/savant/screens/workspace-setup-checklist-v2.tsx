@@ -7,7 +7,11 @@ import {useEffect,useState} from "react";
 import type {AIConnectionSummary,RepositoryListItem,SkillListItem} from "@savant/types";
 import {fetchAIConnections,fetchRepositoryList,fetchSkillList} from "@/lib/control-plane-client";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
-import {describeWorkspaceSetup,type SetupState} from "@/lib/ui-v2-setup-status";
+import {describeWorkspaceSetup,selectedTestBenchReadiness,type SetupState} from "@/lib/ui-v2-setup-status";
+import {listPersistedTestBenches} from "@/lib/test-bench-client";
+import {listObservedTestBenchRuns} from "@/lib/observed-test-bench-runs";
+import type {TestBenchDefinition} from "@/server/test-bench/definition-contract";
+import type {ObservedRunSummary} from "@/server/test-bench/observed-run-store";
 import {useUiV2WorkspaceSlug} from "@/components/savant/ui-v2/mode";
 import {UiV2StateBanner} from "@/components/savant/ui-v2";
 import styles from "./operational-admin-v2.module.css";
@@ -18,6 +22,10 @@ type Result={
  issues:readonly string[];
 };
 const EMPTY:Result={scope:"",loading:true,repositories:null,skills:null,models:null,issues:[]};
+type CaseCheck={key:string;loading:boolean;definitions:readonly TestBenchDefinition[]|null;error:boolean};
+type RunCheck={key:string;loading:boolean;runs:readonly ObservedRunSummary[]|null;error:boolean};
+const EMPTY_CASES:CaseCheck={key:"",loading:true,definitions:null,error:false};
+const EMPTY_RUNS:RunCheck={key:"",loading:true,runs:null,error:false};
 const statusText:Record<SetupState,string>={
  observed:"Connection or source observed",
  "action-required":"Action required",
@@ -29,6 +37,10 @@ export function WorkspaceSetupChecklistV2(){
  const pathname=usePathname()||"/";
  const [result,setResult]=useState<Result>(EMPTY);
  const [retry,setRetry]=useState(0);
+ const [selectedSkillId,setSelectedSkillId]=useState("");
+ const [selectedSuiteId,setSelectedSuiteId]=useState("");
+ const [cases,setCases]=useState<CaseCheck>(EMPTY_CASES);
+ const [runs,setRuns]=useState<RunCheck>(EMPTY_RUNS);
  useEffect(()=>{
   if(!slug)return;
   const controller=new AbortController();

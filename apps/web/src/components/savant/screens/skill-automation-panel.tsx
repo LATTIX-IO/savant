@@ -182,7 +182,7 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
 
 /**
  * Evaluation generation (model drafts → evaluator validates → model executes → evaluator
- * scores) and SkillSpector safety results for one skill.
+ * scores) and security analysis results for one skill.
  */
 export function SkillAutomationPanel({ skillId }: { skillId: string }) {
   const [automation, setAutomation] = useState<SkillAutomation | null>(null);

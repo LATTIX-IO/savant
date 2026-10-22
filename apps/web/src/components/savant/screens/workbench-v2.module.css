@@ -136,3 +136,26 @@ button.dependencyTarget:hover {background:var(--sv2-selected);}
 .assetPreviewHeader h3 {font:600 13px var(--sv2-font-code);margin:0;overflow-wrap:anywhere;}
 .assetPreviewContent {margin:0;min-width:0;max-width:100%;padding:16px;overflow:auto;
  white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.7 var(--sv2-font-code);}
+
+/* PER-1615: bounded, keyboard-selectable source context. A line represents
+ * source membership, not runtime invocation or model execution. */
+.sourceContextGraph {display:grid;gap:12px;width:min(100%,900px);min-width:0;
+  padding:16px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-panel);
+  background:var(--sv2-surface);}
+.sourceContextGraph>.dependencyOrigin {justify-self:start;min-width:min(240px,100%);}
+.contextFileNodes {display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px 8px;min-width:0;}
+.contextFile {display:flex;align-items:stretch;gap:8px;min-width:0;}
+.contextEdge {display:flex;align-items:center;justify-content:center;flex:none;
+  width:20px;font:700 13px var(--sv2-font-code);color:var(--sv2-muted);}
+.contextFileNode {display:grid;align-content:start;gap:7px;flex:1;min-width:0;
+  text-align:left;padding:12px;border:1px solid var(--sv2-border);
+  border-radius:var(--sv2-radius-control);background:var(--sv2-bg);
+  color:var(--sv2-fg);font:12px/1.45 var(--sv2-font-body);cursor:pointer;}
+.contextFileNode strong {overflow-wrap:anywhere;font:600 12px/1.45 var(--sv2-font-code);}
+.contextFileNode span:last-child {font-size:10px;color:var(--sv2-muted);overflow-wrap:anywhere;}
+.contextFileNode:hover {background:var(--sv2-selected);}
+.contextFileNode:focus-visible {outline:2px solid var(--sv2-focus);outline-offset:2px;}
+.contextMissing {display:grid;gap:8px;padding:12px;border-top:1px solid var(--sv2-border);}
+.contextMissing>strong{font:600 12px var(--sv2-font-body)}
+.contextMissing .dependencyTarget{background:var(--sv2-recess);}
+@media(max-width:740px){.sourceContextGraph{padding:12px}.contextFileNodes{grid-template-columns:minmax(0,1fr)}}

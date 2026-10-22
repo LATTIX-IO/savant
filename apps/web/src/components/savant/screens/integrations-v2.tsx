@@ -26,7 +26,7 @@ const EMPTY:IntegrationEvidence={scope:"",loading:true,repositories:null,models:
 export function IntegrationsV2({legacy}:{legacy:ReactNode}){
  const slug=useUiV2WorkspaceSlug()??"";
  const pathname=usePathname()||"/";
- const [tab,setTab]=useState<Section>("source");
+ const [tab,setTab]=useState<Section>("setup");
  const [evidence,setEvidence]=useState<IntegrationEvidence>(EMPTY);
  const [retry,setRetry]=useState(0);
  useEffect(()=>{
@@ -78,7 +78,7 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
       <Link href={modelsHref}>Provider controls</Link></div>
   </section>
   <div className={styles.tabs} role="tablist" aria-label="Integration categories">
-    {(["source","models","clients","distribution","setup","router"] as const).map(area=>
+    {(["setup","source","models","clients","distribution","router"] as const).map(area=>
       <button type="button" role="tab" key={area} aria-selected={area===tab}
         onClick={()=>setTab(area)}>{area==="source"?"Source control":
          area==="models"?"Model providers":area==="clients"?"Agent clients":
@@ -124,7 +124,7 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
         </section>
         <section>
           <h3>Evaluation judge</h3>
-          <UiV2Status state="warning" label="Platform JEV judge · separate service"/>
+          <UiV2Status state="warning" label="Platform evaluation judge · independent service"/>
           <p className={styles.note}>{lanes.defaultJudgeCount} active BYO judge default(s)
             recorded as metadata. Test Bench does not dynamically route judging through
             that setting, so it cannot authorize a change of judge here.</p>
@@ -161,33 +161,33 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
             <td>{c.scope}</td>
           </tr>)}</tbody></table></UiV2TableViewport>}
     </>:tab==="setup"?<>
-      <h2>Setup guide · current server evidence</h2>
+      <div className={styles.sectionHead}><h2>Workspace setup</h2>
+        <Link href={defaultHref}>Open the complete Settings setup checklist</Link></div>
+      <p className={styles.note}>Settings is the canonical one-stop place for
+        connecting Git, indexing skills, configuring model credentials, and
+        verifying saved suites and actual evaluation runs. Integrations provides
+        the advanced provider and distribution inventories below.</p>
       <div className={styles.setup}>
-        {([
-          {title:"1 · Connect source control",ok:live.repositories!==null&&live.repositories.length>0,
-           href:sourceHref,action:"Manage source connections"},
-          {title:"2 · Choose repositories",ok:live.repositories!==null&&live.repositories.length>0,
-           href:repositoryHref,action:"Open repository inventory"},
-          {title:"3 · Index skills",ok:repoIndexed!==null&&repoIndexed>0,
-           href:repositoryHref,action:"Inspect index state"},
-          {title:"4 · Configure a supported evaluation executor",ok:providerReady,
-           href:modelsHref,action:"Manage model providers",unverified:false},
-          {title:"5 · Verify a real Test Bench run",ok:false,
-           href:evaluationsHref,action:"Inspect provider-backed results",unverified:true},
-        ]).map(item=><div key={item.title}>
-          <strong>{item.title}</strong><UiV2Status
-            state={item.unverified?"unavailable":item.ok?"ready":"warning"}
-            label={item.unverified?"Provider-backed completion not verified":
-              item.ok?"Connection metadata observed · runtime not verified":
-              "Action / evidence required"}/>
-          <Link href={item.href}>{item.action}</Link>
-        </div>)}
+        <div><strong>Source repositories</strong>
+          <UiV2Status state={live.repositories===null?"unavailable":
+            live.repositories.length>0?"ready":"warning"}
+            label={live.repositories===null?"Not available":
+              live.repositories.length>0?"Connected metadata observed":"Connect source control"}/>
+          <Link href={repositoryHref}>Manage sources</Link></div>
+        <div><strong>Indexed skill evidence</strong>
+          <UiV2Status state={repoIndexed===null?"unavailable":repoIndexed>0?"ready":"warning"}
+            label={repoIndexed===null?"Not available":repoIndexed>0?
+              `${repoIndexed} repository index(es) observed`:"No indexed repositories"}/>
+          <Link href={repositoryHref}>Inspect indexing</Link></div>
+        <div><strong>Test Bench provider</strong>
+          <UiV2Status state={providerReady?"ready":"warning"}
+            label={providerReady?"Connection metadata observed; runtime not verified":
+              "No eligible default workspace test executor"}/>
+          <Link href={modelsHref}>Manage provider credentials</Link></div>
+        <div><strong>Saved cases and provider-backed runs</strong>
+          <UiV2Status state="unavailable" label="Not verified by this integration inventory"/>
+          <Link href={defaultHref}>Continue guided setup</Link></div>
       </div>
-      <p className={styles.note}>An indexed or imported evaluation never completes step 5.
-         It requires a verified provider-backed case receipt, which this tenant-scoped
-         setup read model does not supply. Saved suites, recoverable keys, billing receipts
-         and live provider acceptance remain separate gates. No step uses browser-local simulated state.</p>
-      <Link href={defaultHref}>Workspace settings</Link>
     </>:<div className={styles.legacy}>
       <UiV2StateBanner state="warning"
        label="Existing router credential issuance remains controlled by its server-side authorization policy."/>

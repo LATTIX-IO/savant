@@ -67,6 +67,12 @@ function parseConfiguration(env) {
   if (!RESOURCE_ID.test(env.SAVANT_UAT_SKILL_UUID)) {
     throw new Error("SAVANT_UAT_SKILL_UUID must be one safe, known workspace-A skill ID.");
   }
+  // Optional bounded known fixture. Never guess or fabricate repository assets.
+  const assetPath=String(env.SAVANT_UAT_ASSET_PATH||"").trim();
+  if(assetPath && (!/^(references|scripts|eval|evals)\/[A-Za-z0-9_./@+-]{1,180}$/.test(assetPath) ||
+      assetPath.split("/").some(part=>!part||part==="."||part===".."||part.startsWith(".git")))){
+    throw new Error("SAVANT_UAT_ASSET_PATH must name one verified, safe relative Git asset.");
+  }
   if (!path.isAbsolute(env.SAVANT_UAT_STORAGE_STATE)) {
     throw new Error("Authenticated browser state must be an absolute path outside the repository.");
   }
@@ -89,6 +95,7 @@ function parseConfiguration(env) {
     origin: url.origin, hostname, statePath, productionReadOnly,
     workspaceA: workspaces[0], workspaceB: workspaces[1],
     workspaceDenied: workspaces[2], skillId: env.SAVANT_UAT_SKILL_UUID,
+    ...(assetPath?{assetPath}:{}),
   });
 }
 
@@ -159,6 +166,25 @@ async function performMainJourney(page, config, label, output) {
   // Discard the synthetic unsent draft before exercising browser history so a
   // genuine beforeunload guard cannot interrupt navigation or mutate Git.
   await page.getByRole("button", { name: "Discard draft" }).click();
+
+  // PER-1610: optional real, indexed Git asset fixture. Never mock a tree or
+  // mistake a read-only preview for executable workflow/dataflow evidence.
+  if(config.assetPath){
+    const tree=page.getByRole("group",{name:"Observed Git skill files"});
+    await tree.waitFor({state:"visible",timeout:20000});
+    const file=tree.getByRole("button").filter({hasText:config.assetPath}).first();
+    await file.waitFor({state:"visible"});
+    await file.click();
+    const inspected=page.getByRole("region",{name:"Selected Git asset"});
+    await inspected.waitFor({state:"visible"});
+    const content=inspected.locator("pre");
+    await content.waitFor({state:"visible"});
+    assert.ok((await content.textContent()||"").length>0,
+      "Fixture must resolve to actual non-empty source content, not an empty placeholder.");
+    await assertNoOuterOverflow(page);
+    await page.getByRole("button",{name:"Back to SKILL.md"}).click();
+    await page.getByRole("textbox",{name:"SKILL.md Markdown source"}).waitFor({state:"visible"});
+  }
 
   // Same-tenant deep links and client-side browser history must remain stable.
   // No writes: the draft above is reviewed but never submitted.
@@ -264,6 +290,14 @@ async function verifyTenantBoundaries(page, config) {
   assert.equal(await page.getByRole("textbox",
     { name: "SKILL.md Markdown source" }).count(), 0,
     "Workspace B must not read workspace A's source.");
+  if(config.assetPath){
+    const crossTenant=await page.request.get(config.origin+
+      tenantPath(config,config.workspaceB,"/api/skills/"+
+        encodeURIComponent(config.skillId)+"/assets")+
+      "?workspaceSlug="+encodeURIComponent(config.workspaceB));
+    assert.ok([403,404].includes(crossTenant.status()),
+      "Workspace B must not enumerate A's pinned skill Git assets.");
+  }
 
   await page.goto(config.origin + tenantPath(config, config.workspaceDenied, "/dashboard"),
     { waitUntil: "domcontentloaded" });

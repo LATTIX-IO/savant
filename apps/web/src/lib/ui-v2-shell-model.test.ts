@@ -115,7 +115,7 @@ test("UX-02 unknown and hostile tenant paths never spoof an active section or re
     "/skills/..", "/skills/%2e%2e", "/skills/%2Fsecret", "/skills/a%00b",
     "/skills/one?tab=private", "/settings#secret", "/settings/../skills",
     "//evil.test/x", "https://evil.test/skills", "/\\evil.test/skills",
-    "/workflows", "/discovery", "/reports", "/not-real",
+    "/workflows/unknown", "/discovery", "/reports", "/not-real",
   ]) {
     assert.equal(resolveUiV2Route(path).kind, "unavailable", path);
     assert.equal(getUiV2Navigation("a",path,EMPTY_SAVANT_SHELL_DATA.counts,true)
@@ -185,7 +185,7 @@ test("F1 active state reflects detail modes and preserves legacy contextual admi
     const items = getUiV2WorkspaceNavigation("org", path, EMPTY_SAVANT_SHELL_DATA.counts);
     assert.deepEqual(items.filter(x => x.active).map(x => x.id), [id], path);
   }
-  for (const invalid of ["/runs/run-private", "/workflows", "//evil", "/skills/%2e%2e"]) {
+  for (const invalid of ["/runs/run-private", "/workflows/unknown", "//evil", "/skills/%2e%2e"]) {
     assert.equal(getUiV2WorkspaceNavigation("org", invalid, EMPTY_SAVANT_SHELL_DATA.counts)
       .filter(x => x.active).length, 0);
   }
@@ -217,4 +217,16 @@ test("UX-04 Runs path is real, tenant-owned and preserves hostile path denial", 
   assert.deepEqual(buildUiV2RouteCrumbs("mine","/runs"),[
     {label:"Workspace",href:null,current:false},{label:"Runs",href:null,current:true},
   ]);
+});
+
+test("PER-1609 workflows preserve the six-workspace shell and tenant-owned deep links",()=>{
+  assert.equal(resolveUiV2Route("/workflows").kind,"collection");
+  assert.equal(resolveUiV2Route("/workflows/unknown").kind,"unavailable");
+  assert.equal(buildUiV2WorkspaceSwitchPath("org-b","/workflows"),"/o/org-b/workflows");
+  const nav=getUiV2WorkspaceNavigation("org-a","/workflows",EMPTY_SAVANT_SHELL_DATA.counts);
+  assert.deepEqual(nav.filter(item=>item.active).map(item=>item.id),["workbench"]);
+  assert.equal(nav.filter(item=>item.group==="primary").length,6);
+  const crumbs=buildUiV2RouteCrumbs("org-a","/workflows");
+  assert.equal(crumbs.at(-1)?.label,"Workflows");
+  assert.equal(crumbs.at(-1)?.current,true);
 });

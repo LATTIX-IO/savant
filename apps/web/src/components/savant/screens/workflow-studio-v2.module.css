@@ -1,0 +1,70 @@
+/* Scope all Workflow Studio styles to the Savant v2 application surface. */
+.page{display:grid;grid-template-rows:auto auto auto minmax(300px,1fr) auto;gap:10px;padding:16px;min-height:calc(100dvh - 64px);min-width:0;color:var(--sv2-fg);font:13px/1.45 var(--sv2-font-body)}
+.page *{box-sizing:border-box}
+.header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;justify-content:space-between}
+.header p{margin:4px 0;color:var(--sv2-muted);font-size:12px}
+.header a{color:var(--sv2-accent)}
+.header h1{margin:0;font:600 24px var(--sv2-font-body)}
+.actions,.selector,.meta,.connect,.sectionTitle{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.page button,.page input,.page select,.page textarea{font:inherit;color:var(--sv2-fg)}
+.page input,.page select{border:1px solid var(--sv2-border-strong);border-radius:var(--sv2-radius-control);background:var(--sv2-surface);min-height:33px;min-width:0;padding:6px}
+.page button{min-height:32px;cursor:pointer;border:1px solid var(--sv2-border-strong);border-radius:var(--sv2-radius-control);padding:6px 10px;background:var(--sv2-surface)}
+.page button:hover:not(:disabled){background:var(--sv2-selected)}
+.page button:focus-visible,.page input:focus-visible,.page select:focus-visible,.page textarea:focus-visible{outline:2px solid var(--sv2-focus);outline-offset:2px}
+.page button:disabled{opacity:.48;cursor:not-allowed}
+.selector{padding:12px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-panel);background:var(--sv2-surface)}
+.selector label{display:grid;gap:4px;min-width:min(240px,100%);font-size:12px}
+.selector label:first-child{min-width:min(320px,100%)}
+.meta{padding:6px 10px;color:var(--sv2-fg-2);font:11px var(--sv2-font-code);border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control)}
+.error{color:var(--sv2-critical);overflow-wrap:anywhere}
+.valid{color:var(--sv2-fg)}
+.warning,.notice{margin:0;padding:8px 12px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control);background:var(--sv2-recess);overflow-wrap:anywhere}
+.layout{display:grid;grid-template-columns:220px minmax(0,1fr)300px;min-height:580px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-panel);background:var(--sv2-surface);overflow:hidden;min-width:0}
+.sidebar,.inspector{overflow:auto;min-width:0;padding:12px}
+.sidebar{border-right:1px solid var(--sv2-border)}
+.inspector{border-left:1px solid var(--sv2-border)}
+.sectionTitle{justify-content:space-between}
+.layout h2{font:600 14px var(--sv2-font-body);margin:8px 0}
+.layout h3{font:600 12px var(--sv2-font-body);margin:14px 0 8px}
+.sidebar>button{display:grid;gap:3px;width:100%;margin-top:5px;text-align:left}
+.sidebar small,.graph small{font:10px var(--sv2-font-code);color:var(--sv2-muted)}
+.sidebar span{color:var(--sv2-muted);font:10px var(--sv2-font-code)}
+.sidebar .selected,.nodeSelected{border-color:var(--sv2-accent);background:var(--sv2-selected)}
+.graph{min-width:0;min-height:0;overflow:auto;padding:12px;background:var(--sv2-bg);background-image:radial-gradient(var(--sv2-border) .7px,transparent .7px);background-size:16px 16px}
+.help{color:var(--sv2-muted);font-size:11px}
+.flowPlane{position:relative;min-width:300px;min-height:210px;margin:14px 0;isolation:isolate}
+.wires{position:absolute;inset:0;color:var(--sv2-fg-2);pointer-events:none}
+.flowPlane>.node,.flowPlane>.nodeSelected{position:absolute;display:grid;gap:4px;
+ width:196px;height:80px;padding:10px;text-align:left;align-content:start;overflow:hidden;
+ overflow-wrap:anywhere;background:var(--sv2-surface)}
+.flowPlane>.node strong,.flowPlane>.nodeSelected strong{font-size:12px;max-height:35px;overflow:hidden}
+.flowPlane>.node span,.flowPlane>.nodeSelected span{font:10px var(--sv2-font-code);color:var(--sv2-muted)}
+.flowPlane>.nodeSelected{border:2px solid var(--sv2-accent);background:var(--sv2-selected)}
+.edges{list-style:none;padding:0;margin:10px 0;display:grid;gap:5px;max-width:100%}
+.edges li{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control);font:11px var(--sv2-font-code)}
+.edges li>span{overflow-wrap:anywhere}
+.connect{border-top:1px solid var(--sv2-border);padding-top:12px}
+.connect label,.fields label{display:grid;gap:4px;font-size:11px}
+.connect select{max-width:210px}
+.fields{display:grid;gap:12px}
+.fields label input,.fields label select{width:100%}
+.fields p{font-size:11px;color:var(--sv2-muted);line-height:1.5}
+.source{display:grid;grid-template-rows:auto minmax(400px,1fr);min-height:520px;gap:10px;padding:12px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-panel);background:var(--sv2-surface)}
+.source label{font-size:12px;font-weight:600}
+.source textarea{width:100%;min-height:400px;resize:vertical;white-space:pre;overflow:auto;font:12px/1.55 var(--sv2-font-code);border:1px solid var(--sv2-border);padding:12px;background:var(--sv2-surface)}
+.empty{border:1px dashed var(--sv2-border-strong);border-radius:var(--sv2-radius-panel);padding:48px 18px;color:var(--sv2-muted);text-align:center}
+.footer{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:var(--sv2-muted);font-size:11px}
+@media(max-width:1150px){.layout{grid-template-columns:200px minmax(0,1fr)}.inspector{grid-column:1 / -1;max-height:330px;border-top:1px solid var(--sv2-border);border-left:0}}
+@media(max-width:750px){.page{padding:10px;min-height:auto}.layout{grid-template-columns:minmax(0,1fr)}.sidebar{border-right:0;border-bottom:1px solid var(--sv2-border);max-height:220px}.inspector{grid-column:1;max-height:400px}.graph{min-height:350px}.selector label,.selector label:first-child{flex:1;min-width:100%}.source{min-height:350px}.nodes button{width:min(100%,240px)}}
+
+/* Human-editable typed data-flow ports remain accessible at narrow widths. */
+.portRow { display:grid; grid-template-columns:minmax(0,0.7fr) minmax(0,1.4fr) auto;
+  align-items:end; gap:6px; padding:8px 0; border-bottom:1px solid var(--sv2-border); }
+.portRow code { overflow-wrap:anywhere; font:10px var(--sv2-font-code); }
+.portRow label { min-width:0; }
+.portRow label input { width:100%; min-width:0; }
+.portRow button { min-width:0; }
+@media(max-width:750px) {
+  .portRow { grid-template-columns:minmax(0,1fr) auto; }
+  .portRow label { grid-column:1 / -1; grid-row:2; }
+}

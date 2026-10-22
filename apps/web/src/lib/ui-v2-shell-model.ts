@@ -55,6 +55,10 @@ export function resolveUiV2Route(appPath: string): UiV2RouteResolution {
     return unavailable;
   }
   const normalized = appPath === "/" ? "/dashboard" : appPath;
+  // Workflow Studio is a real authenticated v2 tenant route under Workbench.
+  if (normalized === "/workflows") return {
+    kind: "collection", navId: "skills", appPath: "/workflows", resourceId: null,
+  };
   // UX-04: real tenant-owned /runs route; preserve the 12-entry classic route registry.
   if (normalized === "/runs") return {
     kind: "collection", navId: "evaluations", appPath: "/runs", resourceId: null,
@@ -83,6 +87,8 @@ export function buildUiV2RouteCrumbs(
       ["Workspace", null], ["Page unavailable", "current"],
     ]);
   }
+  if (route.kind === "collection" && appPath === "/workflows") return buildUiV2Crumbs(workspaceSlug,
+    [["Workspace", null], ["Workbench", "/skills"], ["Workflows", "current"]]);
   if (route.kind === "collection" && appPath === "/runs") return buildUiV2Crumbs(workspaceSlug,
     [["Workspace", null], ["Runs", "current"]]);
   if (route.kind === "detail" && route.navId === "catalog") {
@@ -165,10 +171,10 @@ export function getUiV2WorkspaceNavigation(
     { id: "overview", label: "Overview", group: "primary", href: link("/dashboard"),
       picker: null, active: active === "overview", count: null },
     { id: "library", label: "Library", group: "primary", href: link("/skills"),
-      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail),
+      picker: null, active: ["skills","repositories","catalog"].includes(active ?? "") && !(active === "skills" && detail) && appPath!=="/workflows",
       count: counts.skills },
     { id: "workbench", label: "Workbench", group: "primary", href: null,
-      picker: "workbench", active: active === "skills" && detail, count: null },
+      picker: "workbench", active: (active === "skills" && detail)||appPath==="/workflows", count: null },
     { id: "evaluations", label: "Evaluations", group: "primary", href: link("/evaluations"),
       picker: null, active: active === "evaluations" && !detail && appPath !== "/runs", count: counts.evaluations },
     { id: "runs", label: "Runs", group: "primary", href: link("/runs"),

@@ -17,7 +17,7 @@ import {
   EMPTY_SAVANT_SHELL_DATA, type SavantShellData,
 } from "@/lib/shell-state";
 import { buildBinaryThemeToggleState } from "@/lib/theme-toggle";
-import { stripTenantPathPrefix } from "@/lib/tenant-paths";
+import { buildTenantAppPath, stripTenantPathPrefix } from "@/lib/tenant-paths";
 import {
   buildUiV2RouteCrumbs, buildUiV2WorkspaceSwitchPath, getUiV2WorkspaceNavigation,
   resolveUiV2Route, type UiV2WorkspaceNavId,
@@ -206,6 +206,14 @@ export function SavantShellV2({
                   {content}
                 </Link>;
               })}
+              {group.id === "primary" ? <Link
+                href={buildTenantAppPath(workspace.slug,"/workflows") as Route}
+                className={`${styles.navItem} ${styles.navSubItem} ${appPath==="/workflows"?styles.navSubActive:""}`}
+                aria-current={appPath==="/workflows"?"page":undefined}
+                title="Model Git-backed workflow specifications">
+                <Ic.Repo className={styles.icon} aria-hidden="true" />
+                <span>Workflow Studio</span>
+              </Link> : null}
             </div>;
           })}
           <button type="button" className={`${styles.navItem} ${styles.navButton}`}

@@ -152,7 +152,7 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
     return <span className="subtle" style={{ fontSize: 12.5 }}>Not scanned yet. Security analysis runs after repository synchronization.</span>;
   }
   if (scan.status !== "complete") {
-    return <div className="note brass"><span style={{ fontSize: 12.5 }}>{scan.error ?? "The last safety scan didn't complete."}</span></div>;
+    return <div className="note brass"><span style={{ fontSize: 12.5 }}>{"Security analysis unavailable. Retry repository sync or contact your workspace administrator."}</span></div>;
   }
   return (
     <div className="col" style={{ gap: 10 }}>

@@ -391,8 +391,23 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                   No tool invocation, runtime execution or data lineage has been observed.</p>
               </div>
             </UiV2CanvasRegion> : null}
-            {workspaceView !== "canvas" ? <div className={styles.sourceArea}>
-          {currentSource.phase === "loading" ? (
+            {workspaceView !== "canvas" ? <div className={styles.sourceArea}
+              aria-label={chosenPath?"Read-only pinned Git asset preview":"SKILL.md source editor"}>
+          {chosenPath ? (
+            <section className={styles.assetPreviewPanel} aria-label="Selected Git asset">
+              <header className={styles.assetPreviewHeader}>
+                <div><h3>{chosenPath.slice(assetData?.root.length?assetData.root.length+1:0)}</h3>
+                  <p className={styles.note}>Pinned Git · {sourceData?.sourceCommitSha?.slice(0,12)} · read-only</p></div>
+                <UiV2Button size="small" onClick={()=>openObservedFile(assetData?.root+"/SKILL.md")}>
+                  Back to SKILL.md
+                </UiV2Button>
+              </header>
+              {currentPreview.phase==="error"?
+                <div className={styles.alert} role="alert">{currentPreview.error}</div>:
+                selectedPreview?<pre className={styles.assetPreviewContent}>{selectedPreview.content}</pre>:
+                <p className={styles.status} role="status">Loading verified Git file content…</p>}
+            </section>
+          ) : currentSource.phase === "loading" ? (
             <p className={styles.status} role="status">Loading indexed SKILL.md from the repository…</p>
           ) : currentSource.phase === "error" ? (
             <div className={styles.alert} role="alert">{currentSource.error}</div>

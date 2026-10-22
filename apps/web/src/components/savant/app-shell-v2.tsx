@@ -23,6 +23,7 @@ import {
   resolveUiV2Route, type UiV2WorkspaceNavId,
 } from "@/lib/ui-v2-shell-model";
 import { SavantCommandPalette, type PaletteIntent } from "@/components/savant/savant-command-palette";
+import { SetupStatusBubbleV2 } from "@/components/savant/setup-status-bubble-v2";
 import { isGovernanceFeatureEnabled } from "@/lib/workspace-features";
 
 import styles from "./app-shell-v2.module.css";
@@ -222,6 +223,7 @@ export function SavantShellV2({
             </div>;
           })}
         </nav>
+        <SetupStatusBubbleV2 workspaceSlug={workspace.slug} />
         <div className={styles.profile} title={viewer.displayName}>
           <span className={styles.profileAvatar} aria-hidden="true">{viewer.initials}</span>
           <div className={styles.profileText}><strong>{viewer.displayName}</strong><small>{viewer.subtitle}</small></div>

@@ -79,7 +79,7 @@ export function LiveEvaluationAutomation({
       </div>
       <div className="panel-bd" style={{display:"grid",gap:12}}>
         <div style={{fontSize:12,color:"var(--ink-2)",lineHeight:1.55}}>
-          This uses configured NVIDIA NIM and Jev services. It does not execute external harnesses,
+          This uses configured execution and independent evaluation-judge services. It does not execute external harnesses,
           scripts, MCP tools or saved Test Bench drafts. Results are provisional until reviewed.
         </div>
         <div className="row" style={{alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -92,7 +92,7 @@ export function LiveEvaluationAutomation({
           {workspaceSlug&&loading?<span className="subtle">Checking evaluation service…</span>:null}
           {snapshot&&!snapshot.canGenerate?(
             <span className="subtle" style={{fontSize:12}}>
-              Live evaluation requires an authorized role and configured NIM/Jev services.
+              Live evaluation requires an authorized role and configured generation and evaluation-judge services.
             </span>
           ):null}
           {readOnly?<span className="subtle">Historical evaluation is read-only.</span>:null}

@@ -247,6 +247,11 @@ export function WorkflowStudioV2(){
   }
   function bindIndexedSkill(skillId:string){
     if(!selected||selected.kind!=="skill"||!repo||visibleSkills.phase!=="ready")return;
+    if(!skillId){
+      const extensions={...(selected.extensions??{})};
+      delete extensions.savantSkill;
+      changeNode(selected.id,{extensions});return;
+    }
     const item=repoSkills.find(entry=>entry.id===skillId);
     if(!item)return;
     const binding=createAuthoredWorkflowSkillBinding(item,repo.name);
@@ -260,10 +265,13 @@ export function WorkflowStudioV2(){
     if(!draft||!selected)return;
     const nodes=draft.nodes.map(node=>{
       if(node.id!==selected.id)return node;
-      if(kind==="opaque")return {...node,kind,native:node.native??{kind:"external"}};
+      const extensions={...(node.extensions??{})};
+      if(kind!=="skill")delete extensions.savantSkill;
+      if(kind==="opaque")return {...node,kind,extensions,
+        native:node.native??{kind:"external"}};
       const value={...node};
       delete value.native;
-      return {...value,kind};
+      return {...value,kind,extensions};
     });
     replaceDraft({...draft,nodes});
   }

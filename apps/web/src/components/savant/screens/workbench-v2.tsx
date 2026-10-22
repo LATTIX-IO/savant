@@ -9,7 +9,8 @@ import type { SkillDetailPayload, SkillSourcePayload } from "@savant/types";
 import { Ic } from "@/components/savant/icons";
 import { UiV2Button, UiV2CanvasRegion, UiV2EmptyState, UiV2StateBanner, UiV2Status } from "@/components/savant/ui-v2";
 import { useUiV2Mode, useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
-import { fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
+import { fetchSkillAssets, fetchSkillDetail, fetchSkillSource } from "@/lib/control-plane-client";
+import type { SkillAssetResponseData } from "@/lib/ui-v2-skill-assets";
 import { proposeFileEdits } from "@/lib/git-connections-client";
 import { parseMarkdownPreviewBlocks } from "@/lib/skill-builder";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
@@ -27,6 +28,7 @@ type LoadState<T> =
 type Notice = { scope: string; kind: "error" | "proposal"; message: string; proposalId: string | null };
 const emptyDetail: LoadState<SkillDetailPayload> = { scope: "", phase: "loading", data: null, error: null };
 const emptySource: LoadState<SkillSourcePayload> = { scope: "", phase: "loading", data: null, error: null };
+const emptyAssets: LoadState<SkillAssetResponseData> = { scope: "", phase: "loading", data: null, error: null };
 
 export function WorkbenchV2({ skillId }: { skillId: string }) {
   const enabled = useUiV2Mode();
@@ -37,6 +39,9 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const evaluationsHref = buildTenantAwareAppPath(pathname, "/evaluations") as Route;
   const [detail, setDetail] = useState<LoadState<SkillDetailPayload>>(emptyDetail);
   const [source, setSource] = useState<LoadState<SkillSourcePayload>>(emptySource);
+  const [assets, setAssets] = useState<LoadState<SkillAssetResponseData>>(emptyAssets);
+  const [assetPreview, setAssetPreview] = useState<LoadState<SkillAssetResponseData>>(emptyAssets);
+  const [assetSelection, setAssetSelection] = useState<{scope:string;path:string}|null>(null);
   const [draft, setDraft] = useState<{ scope: string; text: string }>({ scope: "", text: "" });
   const [notice, setNotice] = useState<Notice | null>(null);
   const [reviewed, setReviewed] = useState<{ scope: string; text: string; base: string } | null>(null);
@@ -95,7 +100,67 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
   const currentSource = source.scope === scope ? source : emptySource;
   const skill = currentDetail.phase === "ready" ? currentDetail.data.skill : null;
   const sourceData = currentSource.phase === "ready" ? currentSource.data : null;
+  const assetScope = sourceData?.mode === "repository" && sourceData.sourceCommitSha
+    ? `${scope}@${sourceData.sourceCommitSha}` : "";
+  const activeAssets = assets.scope === assetScope ? assets : emptyAssets;
+  const assetData = activeAssets.phase === "ready" ? activeAssets.data : null;
+  const chosenPath=assetSelection?.scope===assetScope?assetSelection.path:null;
+  const previewKey=chosenPath?`${assetScope}:${chosenPath}`:"";
+  const currentPreview=assetPreview.scope===previewKey?assetPreview:emptyAssets;
+  const selectedPreview=currentPreview.phase==="ready"?currentPreview.data.selection:null;
   const editorText = draft.scope === scope ? draft.text : "";
+  useEffect(()=>{
+    if(!enabled||!workspaceSlug||!assetScope||!sourceData)return;
+    const controller=new AbortController();
+    let active=true;
+    queueMicrotask(()=>{
+      if(active){setAssets({scope:assetScope,phase:"loading",data:null,error:null});
+        setAssetSelection(null);}
+    });
+    void fetchSkillAssets(skillId,{workspaceSlug,signal:controller.signal}).then(result=>{
+      if(!active||controller.signal.aborted)return;
+      if(result.data.commitSha!==sourceData.sourceCommitSha)
+        throw new Error("Asset index revision differs from the loaded source; reload Workbench.");
+      if(sourceData.sourcePath!==result.data.root+"/SKILL.md"
+        && sourceData.sourcePath!==result.data.root)
+        throw new Error("Indexed asset root differs from the loaded source path.");
+      setAssets({scope:assetScope,phase:"ready",data:result.data,error:null});
+    }).catch(error=>{
+      if(active&&!controller.signal.aborted)setAssets({scope:assetScope,phase:"error",data:null,
+        error:error instanceof Error?error.message:"Verified Git asset inventory unavailable."});
+    });
+    return ()=>{active=false;controller.abort();};
+  },[enabled,workspaceSlug,skillId,assetScope,retry,sourceData?.sourceCommitSha,sourceData?.sourcePath]);
+
+  useEffect(()=>{
+    if(!enabled||!workspaceSlug||!chosenPath||!previewKey||!assetScope)return;
+    const controller=new AbortController();
+    let active=true;
+    queueMicrotask(()=>{if(active)setAssetPreview({scope:previewKey,phase:"loading",data:null,error:null});});
+    void fetchSkillAssets(skillId,{workspaceSlug,path:chosenPath,signal:controller.signal})
+      .then(result=>{
+        if(!active||controller.signal.aborted)return;
+        if(result.data.commitSha!==sourceData?.sourceCommitSha
+          ||result.data.selection?.path!==chosenPath)
+          throw new Error("Requested file revision or path no longer matches the selected source.");
+        setAssetPreview({scope:previewKey,phase:"ready",data:result.data,error:null});
+      }).catch(error=>{
+        if(active&&!controller.signal.aborted)setAssetPreview({scope:previewKey,phase:"error",
+          data:null,error:error instanceof Error?error.message:"File preview unavailable."});
+      });
+    return ()=>{active=false;controller.abort();};
+  },[enabled,workspaceSlug,skillId,chosenPath,previewKey,assetScope,sourceData?.sourceCommitSha]);
+
+  function openObservedFile(path:string){
+    if(!assetData||!assetData.files.some(file=>file.path===path))return;
+    if(path===assetData.root+"/SKILL.md"){
+      setAssetSelection(null);setWorkspaceView("code");setMode("edit");
+      return;
+    }
+    setAssetSelection({scope:assetScope,path});
+    setWorkspaceView("code");
+  }
+
   const gate = getWorkbenchGate(sourceData, editorText);
   const pending = notice?.scope === scope && notice.kind === "proposal" ? notice : null;
   const visibleNotice = notice?.scope === scope ? notice : null;
@@ -209,14 +274,35 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
       <div className={styles.layout}>
         <aside className={styles.tree} aria-label="Indexed skill files">
           <h2>Source files</h2>
-          {sourceData?.mode === "repository" ? (
+          {assetData ? <>
+            <p className={styles.note}>Actual files at pinned Git commit <code>{assetData.commitSha.slice(0,12)}</code>. Open to inspect; only SKILL.md can be edited through reviewed proposals.</p>
+            <div className={styles.assetTree} role="group" aria-label="Observed Git skill files">
+              {assetData.files.map(file=><button key={file.path} type="button"
+                className={`${styles.assetItem} ${(chosenPath===file.path||
+                  (!chosenPath&&file.kind==="instructions"))?styles.assetSelected:""}`}
+                aria-pressed={chosenPath===file.path||(!chosenPath&&file.kind==="instructions")}
+                onClick={()=>openObservedFile(file.path)}>
+                <Ic.Repo className={styles.icon} aria-hidden="true" />
+                <span><strong>{file.relativePath}</strong>
+                  <small>{file.kind} · {file.bytes==null?"Size unreported":`${file.bytes} bytes`}</small></span>
+                {!chosenPath&&file.kind==="instructions"&&gate.kind==="ready"?
+                  <span className={styles.dirty} title="Draft not yet proposed">*</span>:null}
+              </button>)}
+            </div>
+            {!assetData.complete?<p className={styles.note} role="status">
+              Inventory truncated: {assetData.omitted} additional allowlisted files are not inspectable in this view.
+            </p>:null}
+          </>:sourceData?.mode==="repository"?<>
             <div className={styles.file} aria-current="page">
               <Ic.Repo className={styles.icon} aria-hidden="true" />
               <span>{sourceData.sourcePath}</span>
-              {gate.kind === "ready" ? <span className={styles.dirty} title="Draft not yet proposed">*</span> : null}
+              {gate.kind==="ready"?<span className={styles.dirty} title="Draft not yet proposed">*</span>:null}
             </div>
-          ) : <p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
-          <p className={styles.note}>Only the indexed SKILL.md is available through the production source API. Other files and graph dependencies are not editable here.</p>
+            {assetScope && activeAssets.phase==="error"?
+              <p className={styles.note} role="alert">Git asset inventory unavailable: {activeAssets.error}</p>:
+              <p className={styles.note} role="status">{assetScope?
+                "Loading authorized Git files…":"Indexed commit unavailable; additional files cannot be verified."}</p>}
+          </>:<p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
           {observedCanvas.evaluations.length > 0 ? <>
             <h2>Recorded evaluation assets</h2>
             {observedCanvas.evaluations.map(run =>
@@ -241,11 +327,11 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
             </div>
             <div className={styles.tabs} role="group" aria-label="Workbench viewing mode">
               <UiV2Button size="small" variant={mode === "edit" ? "primary" : "default"} aria-pressed={mode === "edit"}
-                onClick={() => { setMode("edit"); setWorkspaceView("code"); }}>Edit</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("edit"); setWorkspaceView("code"); }}>Edit</UiV2Button>
               <UiV2Button size="small" variant={mode === "preview" ? "primary" : "default"} aria-pressed={mode === "preview"}
-                onClick={() => { setMode("preview"); setWorkspaceView("code"); }}>Preview</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("preview"); setWorkspaceView("code"); }}>Preview</UiV2Button>
               <UiV2Button size="small" variant={mode === "review" ? "primary" : "default"} aria-pressed={mode === "review"}
-                onClick={() => { setMode("review"); setWorkspaceView("code"); }}>Compare</UiV2Button>
+                onClick={() => { setAssetSelection(null);setMode("review"); setWorkspaceView("code"); }}>Compare</UiV2Button>
             </div>
             {comparison ? <span className={styles.muted}>Original {comparison.originalLines} lines · Draft {comparison.proposedLines} lines</span> : null}
           </div>
@@ -260,7 +346,7 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
               <div className={styles.visualCanvas}>
                 <p className={styles.canvasLane}>Indexed source · Git-owned artifact</p>
                 {observedCanvas.source ? <button type="button" className={styles.canvasSource}
-                  onClick={() => { setWorkspaceView("code"); setMode("edit"); }}>
+                  onClick={() => { setAssetSelection(null);setWorkspaceView("code"); setMode("edit"); }}>
                   <span className={styles.canvasType}>SKILL.md · indexed source</span>
                   <strong>{observedCanvas.source.path}</strong>
                   <span>Revision: {observedCanvas.source.commit ?? "Not reported"}</span>
@@ -279,12 +365,49 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
                       </Link>)}</div>}
                 <p className={styles.note}>Evaluation association is skill-level only. A run is not proved
                   to have used the currently indexed source revision.</p>
-                <UiV2StateBanner state="unavailable"
-                  label="Tool and dependency graph not provided by the source API" />
+                <p className={styles.canvasLane}>Declared file dependencies · indexed SKILL.md</p>
+                {assetData?<div className={styles.dependencyGraph} aria-label="Observed dependency links from SKILL.md">
+                  <div className={styles.dependencyOrigin}>
+                    <strong>SKILL.md</strong><span>Git · {assetData.commitSha.slice(0,12)}</span>
+                  </div>
+                  {assetData.links.length===0?
+                    <p className={styles.note}>No Markdown file links declared in this indexed SKILL.md.</p>:
+                    assetData.links.map((link,i)=><div key={`${link.line}-${i}`} className={styles.dependencyEdge}>
+                      <span aria-hidden="true">→</span>
+                      {link.status==="verified"&&link.resolvedPath?
+                        <button type="button" className={styles.dependencyTarget}
+                          onClick={()=>openObservedFile(link.resolvedPath!)}>
+                          <strong>{link.raw}</strong>
+                          <small>Verified file · SKILL.md line {link.line}</small>
+                        </button>:
+                        <span className={styles.dependencyTarget}>
+                          <strong>{link.raw}</strong>
+                          <small>{link.status} · SKILL.md line {link.line}</small>
+                        </span>}
+                    </div>)}
+                </div>:<UiV2StateBanner state="unavailable"
+                  label="No ACL-verified, pinned repository tree available for dependency inspection" />}
+                <p className={styles.note}>These edges are authored Markdown file references only.
+                  No tool invocation, runtime execution or data lineage has been observed.</p>
               </div>
             </UiV2CanvasRegion> : null}
-            {workspaceView !== "canvas" ? <div className={styles.sourceArea}>
-          {currentSource.phase === "loading" ? (
+            {workspaceView !== "canvas" ? <div className={styles.sourceArea}
+              aria-label={chosenPath?"Read-only pinned Git asset preview":"SKILL.md source editor"}>
+          {chosenPath ? (
+            <section className={styles.assetPreviewPanel} aria-label="Selected Git asset">
+              <header className={styles.assetPreviewHeader}>
+                <div><h3>{chosenPath.slice(assetData?.root.length?assetData.root.length+1:0)}</h3>
+                  <p className={styles.note}>Pinned Git · {sourceData?.sourceCommitSha?.slice(0,12)} · read-only</p></div>
+                <UiV2Button size="small" onClick={()=>openObservedFile(assetData?.root+"/SKILL.md")}>
+                  Back to SKILL.md
+                </UiV2Button>
+              </header>
+              {currentPreview.phase==="error"?
+                <div className={styles.alert} role="alert">{currentPreview.error}</div>:
+                selectedPreview?<pre className={styles.assetPreviewContent}>{selectedPreview.content}</pre>:
+                <p className={styles.status} role="status">Loading verified Git file content…</p>}
+            </section>
+          ) : currentSource.phase === "loading" ? (
             <p className={styles.status} role="status">Loading indexed SKILL.md from the repository…</p>
           ) : currentSource.phase === "error" ? (
             <div className={styles.alert} role="alert">{currentSource.error}</div>
@@ -379,9 +502,27 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
               </dd>
             </dl>
           ) : <p className={styles.muted}>No verified source.</p>}
-          <h2>Workflow and dependencies</h2>
-          <UiV2Status state="unavailable" label="No indexed dependency graph" />
-          <p className={styles.note}>The prototype visual graph is not authoritative and is not executed in this Workbench.</p>
+          <h2>Observed source dependencies</h2>
+          {assetData ? <>
+            <UiV2Status state="ready" label="Pinned Git inventory" />
+            <dl>
+              <dt>Indexed source SHA</dt><dd className={styles.mono}>{assetData.commitSha}</dd>
+              <dt>Verified files</dt><dd>{assetData.files.length}{assetData.omitted>0?` + ${assetData.omitted} not shown`:""}</dd>
+              <dt>Declared Markdown links</dt><dd>{assetData.links.length}</dd>
+              <dt>Verified targets</dt><dd>{assetData.links.filter(link=>link.status==="verified").length}</dd>
+              <dt>Missing targets</dt><dd>{assetData.links.filter(link=>link.status==="missing").length}</dd>
+              <dt>Unsafe/unresolved</dt><dd>{assetData.links.filter(link=>link.status==="unsafe").length}</dd>
+              {selectedPreview?<><dt>Inspected file</dt><dd className={styles.mono}>{selectedPreview.path}</dd>
+                <dt>Content bytes</dt><dd>{selectedPreview.bytes}</dd>
+                <dt>Repository edit</dt><dd>Read-only preview. Propose changes through reviewed Git workflow.</dd>
+              </>:null}
+            </dl>
+            <p className={styles.note}>Git source and declared file references only.
+              Runtime execution and tool-level data-flow evidence are not implied.</p>
+          </> : <>
+            <UiV2Status state="unavailable" label="No ACL-verified pinned asset inventory" />
+            <p className={styles.note}>The prototype graph is not authoritative. Missing or denied repository data never renders synthetic dependencies.</p>
+          </>}
         </aside>
       </div>
     </div>

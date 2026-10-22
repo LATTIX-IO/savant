@@ -448,7 +448,7 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
     },
 
     async listTree(credential, locator, revision, context) {
-      const { data } = await providerJson<{ truncated: boolean; tree: Array<{ path: string; type: string; size?: number }> }>(
+      const { data } = await providerJson<{ truncated: boolean; tree: Array<{ path: string; type: string; size?: number; mode?: string }> }>(
         `${credential.apiBaseUrl}${repoPath(locator)}/git/trees/${encodeURIComponent(revision)}?recursive=1`,
         { provider: "github", credential, headers: githubHeaders(), repositoryKnown: true, subject: locator.fullName, ...context },
       );
@@ -464,6 +464,11 @@ export function createGitHubProvider(options?: GitHubProviderOptions): GitProvid
       const entries: RepositoryTreeEntry[] = [];
       for (const entry of data.tree) {
         if (entry.type !== "blob" && entry.type !== "tree") {
+          continue;
+        }
+        // GitHub represents symlinks as blob mode 120000. They must never
+        // enter the observed regular-file inventory or provider preview API.
+        if (entry.type === "blob" && !["100644", "100755"].includes(entry.mode ?? "")) {
           continue;
         }
         entries.push({ path: entry.path, kind: entry.type === "tree" ? "dir" : "file", ...(entry.size != null ? { size: entry.size } : {}) });

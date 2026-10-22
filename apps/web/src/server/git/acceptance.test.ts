@@ -89,7 +89,7 @@ function createFakeGitHub(publicKey: string) {
           tree.set(parts.slice(0, index).join("/"), "tree");
         }
       }
-      return json({ truncated: false, tree: [...tree].map(([entryPath, type]) => ({ path: entryPath, type })) });
+      return json({ truncated: false, tree: [...tree].map(([entryPath, type]) => ({ path: entryPath, type, ...(type === "blob" ? { mode: "100644" } : {}) })) });
     }
     const contents = /^\/repos\/LATTIX-IO\/lattix-skills\/contents\/(.+)$/.exec(path);
     if (contents?.[1] && url.searchParams.get("ref") === COMMIT) {

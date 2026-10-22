@@ -328,6 +328,32 @@ async function readLiveSkillSourceFile(input: {
   }
 }
 
+/**
+ * A source-index lookup only: no provider content or credentials are opened.
+ * Skill UUID/slug resolution stays identical to the established Workbench API.
+ * Callers MUST enforce repository and artifact read policy before Git IO.
+ */
+export async function lookupIndexedSkillAssetSource(
+  id: string,
+  context: ResolvedTenantContext,
+): Promise<{
+  skillId: string;
+  repositoryId: string;
+  providerType: SkillListItem["repoProvider"];
+  sourcePath: string;
+  sourceCommitSha: string | null;
+} | null> {
+  const loaded = await loadSkillSourceRecord(context, id);
+  if (!loaded?.sourceRow) return null;
+  return {
+    skillId: loaded.skill.id,
+    repositoryId: loaded.sourceRow.repositoryId,
+    providerType: loaded.sourceRow.providerType,
+    sourcePath: loaded.sourceRow.sourcePath,
+    sourceCommitSha: loaded.sourceRow.sourceCommitSha,
+  };
+}
+
 export async function getSkillSourceResponse(
   id: string,
   context: ResolvedTenantContext,

@@ -59,7 +59,7 @@ const fixtures: ContractFixture[] = [
       if (url.pathname === "/user/repos") return json([repo]);
       if (url.pathname === "/repositories/901" || url.pathname === "/repos/acme/skills") return json(repo);
       if (url.pathname === "/repos/acme/skills/commits/main") return new Response(SHA);
-      if (url.pathname === `/repos/acme/skills/git/trees/${SHA}`) return json({ truncated: false, tree: [{ path: "tier1", type: "tree" }, { path: SKILL_PATH, type: "blob", size: 20 }] });
+      if (url.pathname === `/repos/acme/skills/git/trees/${SHA}`) return json({ truncated: false, tree: [{ path: "tier1", type: "tree" }, { path: SKILL_PATH, type: "blob", mode: "100644", size: 20 }] });
       if (url.pathname === `/repos/acme/skills/contents/${SKILL_PATH}`) return new Response(SKILL_CONTENT);
       return undefined;
     },

@@ -5,7 +5,12 @@ import {withWorkspaceSlugQuery} from "./tenant-paths.ts";
 
 /** Transport for persisted, encrypted Test Bench *draft definitions*. No run endpoint. */
 export class TestBenchClientError extends Error{
-  constructor(message:string){super(message);this.name="TestBenchClientError";}
+  readonly status:number|null;
+  readonly code:string|null;
+  constructor(message:string,info?:{status?:number|null;code?:string|null}){
+    super(message);this.name="TestBenchClientError";
+    this.status=info?.status??null;this.code=info?.code??null;
+  }
 }
 export type TestBenchClientOptions={
   workspaceSlug:string;signal?:AbortSignal;fetcher?:typeof fetch;
@@ -57,7 +62,23 @@ async function request(
     ...(body===undefined?{}:{body:JSON.stringify(body)}),
     signal:options.signal??null,
   });
-  if(!response.ok)throw new TestBenchClientError(`Test Bench service rejected the request (HTTP ${response.status}).`);
+  if(!response.ok){
+    // Keep machine-readable readiness codes while never propagating raw server,
+    // SQL, key, provider, or user-supplied error messages to the browser.
+    let code:string|null=null;
+    try{
+      const payload:unknown=await response.json();
+      if(payload&&typeof payload==="object"&&!Array.isArray(payload)&&"error" in payload){
+        const err=(payload as {error?:unknown}).error;
+        if(err&&typeof err==="object"&&!Array.isArray(err)&&"code" in err){
+          const value=(err as {code?:unknown}).code;
+          if(typeof value==="string"&&/^[a-z][a-z0-9_]{1,79}$/.test(value))code=value;
+        }
+      }
+    }catch{/* Status remains authoritative when body is absent or invalid. */}
+    throw new TestBenchClientError(`Test Bench unavailable (HTTP ${response.status}).`,
+      {status:response.status,code});
+  }
   let json:unknown;
   try{json=await response.json();}
   catch{throw new TestBenchClientError("Invalid Test Bench JSON response.");}

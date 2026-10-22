@@ -163,7 +163,8 @@ test("F1 reference IA has six primary workspaces, two admin areas and no invente
     ["Overview","Library","Workbench","Evaluations","Runs","Insights"]);
   assert.deepEqual(list.filter(x => x.group === "admin").map(x => x.label),
     ["Integrations","Settings"]);
-  assert.equal(list.find(x => x.id === "workbench")?.picker, "workbench");
+  assert.equal(list.find(x => x.id === "workbench")?.picker, null);
+  assert.equal(list.find(x => x.id === "workbench")?.href, "/o/tenant%20one/workbench");
   assert.equal(list.find(x => x.id === "runs")?.picker, null);
   assert.equal(list.find(x => x.id === "runs")?.href, "/o/tenant%20one/runs");
   for (const item of list) {
@@ -171,13 +172,14 @@ test("F1 reference IA has six primary workspaces, two admin areas and no invente
       assert.match(item.href, /^\/o\/tenant%20one\//);
       assert.equal(resolveUiV2Route(item.href.replace(/^\/o\/tenant%20one/, "")).kind, "collection");
     } else {
-      assert.equal(item.picker, "workbench");
+      assert.fail("Every main workspace now has a usable, tenant-owned page route");
     }
   }
 });
 test("F1 active state reflects detail modes and preserves legacy contextual admin routes", () => {
   for (const [path, id] of [
     ["/skills", "library"], ["/repositories", "library"], ["/catalog/example", "library"],
+    ["/workbench","workbench"], ["/workflows","workbench"],
     ["/skills/source-id", "workbench"], ["/evaluations", "evaluations"], ["/runs","runs"],
     ["/evaluations/run-id", "runs"], ["/releases", "insights"],
     ["/connectors", "integrations"], ["/policies", "settings"],
@@ -229,4 +231,19 @@ test("PER-1609 workflows preserve the six-workspace shell and tenant-owned deep 
   const crumbs=buildUiV2RouteCrumbs("org-a","/workflows");
   assert.equal(crumbs.at(-1)?.label,"Workflows");
   assert.equal(crumbs.at(-1)?.current,true);
+});
+
+test("PER-1611 Workbench opens a real tenant-selectable destination and rejects hostile subpaths",()=>{
+  assert.deepEqual(resolveUiV2Route("/workbench"),{
+    kind:"collection",navId:"skills",appPath:"/workbench",resourceId:null,
+  });
+  assert.equal(buildUiV2WorkspaceSwitchPath("ws-b","/workbench"),"/o/ws-b/workbench");
+  assert.equal(getUiV2WorkspaceNavigation("ws-a","/workbench",EMPTY_SAVANT_SHELL_DATA.counts)
+    .filter(n=>n.active).map(n=>n.id).join(","),"workbench");
+  assert.equal(buildUiV2RouteCrumbs("ws-a","/workflows")[1]?.href,"/o/ws-a/workbench");
+  for(const path of ["/workbench/private","/workbench/..","/workbench%2fevil","/workbench?tenant=other"]){
+    assert.equal(resolveUiV2Route(path).kind,"unavailable",path);
+    assert.equal(buildUiV2WorkspaceSwitchPath("ws-b",path),"/o/ws-b/dashboard",path);
+  }
+  assert.equal(existsSync(fileURLToPath(new URL("../app/o/[workspaceSlug]/workbench/page.tsx",import.meta.url))),true);
 });

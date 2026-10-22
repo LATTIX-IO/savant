@@ -116,3 +116,20 @@ test("UX-07 authenticated journey covers every main and administrative workspace
   assert.match(source,/page\.keyboard\.press\("Escape"\)/);
   assert.doesNotMatch(source,/\.post\(|\.put\(|\.delete\(|createProposal\(|rotateAIConnection\(/);
 });
+
+test("PER-1610 optional owner UAT asset fixture rejects hostile paths before browser access",()=>{
+  assert.equal(parseConfiguration({...valid,SAVANT_UAT_ASSET_PATH:"references/policy.md"}).assetPath,
+    "references/policy.md");
+  assert.equal(parseConfiguration(valid).assetPath,undefined);
+  for(const path of ["../secrets","references/../private.env","/etc/passwd",
+    "references/%2e%2e/policy.md","references/.git/config","references//file.md",
+    "references/./file.md","https://outside.example.com"]){
+    assert.throws(()=>parseConfiguration({...valid,SAVANT_UAT_ASSET_PATH:path}),
+      /must name one verified, safe relative Git asset/,path);
+  }
+  const source=fs.readFileSync(path.join(__dirname,"ux-v2-authenticated-acceptance.cjs"),"utf8");
+  assert.match(source,/getByRole\("group",\{name:"Observed Git skill files"\}\)/);
+  assert.match(source,/getByRole\("region",\{name:"Selected Git asset"\}\)/);
+  assert.match(source,/workspaceSlug=/);
+  assert.doesNotMatch(source,/tenantPath\(config,config\.workspaceB,"\/api/);
+});

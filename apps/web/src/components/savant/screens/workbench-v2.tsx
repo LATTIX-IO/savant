@@ -274,14 +274,35 @@ export function WorkbenchV2({ skillId }: { skillId: string }) {
       <div className={styles.layout}>
         <aside className={styles.tree} aria-label="Indexed skill files">
           <h2>Source files</h2>
-          {sourceData?.mode === "repository" ? (
+          {assetData ? <>
+            <p className={styles.note}>Actual files at pinned Git commit <code>{assetData.commitSha.slice(0,12)}</code>. Open to inspect; only SKILL.md can be edited through reviewed proposals.</p>
+            <div className={styles.assetTree} role="group" aria-label="Observed Git skill files">
+              {assetData.files.map(file=><button key={file.path} type="button"
+                className={`${styles.assetItem} ${(chosenPath===file.path||
+                  (!chosenPath&&file.kind==="instructions"))?styles.assetSelected:""}`}
+                aria-pressed={chosenPath===file.path||(!chosenPath&&file.kind==="instructions")}
+                onClick={()=>openObservedFile(file.path)}>
+                <Ic.Repo className={styles.icon} aria-hidden="true" />
+                <span><strong>{file.relativePath}</strong>
+                  <small>{file.kind} · {file.bytes==null?"Size unreported":`${file.bytes} bytes`}</small></span>
+                {!chosenPath&&file.kind==="instructions"&&gate.kind==="ready"?
+                  <span className={styles.dirty} title="Draft not yet proposed">*</span>:null}
+              </button>)}
+            </div>
+            {!assetData.complete?<p className={styles.note} role="status">
+              Inventory truncated: {assetData.omitted} additional allowlisted files are not inspectable in this view.
+            </p>:null}
+          </>:sourceData?.mode==="repository"?<>
             <div className={styles.file} aria-current="page">
               <Ic.Repo className={styles.icon} aria-hidden="true" />
               <span>{sourceData.sourcePath}</span>
-              {gate.kind === "ready" ? <span className={styles.dirty} title="Draft not yet proposed">*</span> : null}
+              {gate.kind==="ready"?<span className={styles.dirty} title="Draft not yet proposed">*</span>:null}
             </div>
-          ) : <p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
-          <p className={styles.note}>Only the indexed SKILL.md is available through the production source API. Other files and graph dependencies are not editable here.</p>
+            {assetScope && activeAssets.phase==="error"?
+              <p className={styles.note} role="alert">Git asset inventory unavailable: {activeAssets.error}</p>:
+              <p className={styles.note} role="status">{assetScope?
+                "Loading authorized Git files…":"Indexed commit unavailable; additional files cannot be verified."}</p>}
+          </>:<p className={styles.muted}>No live indexed SKILL.md. Any fallback draft shown in the editor is read-only and is not verified repository content.</p>}
           {observedCanvas.evaluations.length > 0 ? <>
             <h2>Recorded evaluation assets</h2>
             {observedCanvas.evaluations.map(run =>

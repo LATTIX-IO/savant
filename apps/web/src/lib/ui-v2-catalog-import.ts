@@ -1,11 +1,12 @@
 import type {RepositoryListItem} from "@savant/types";
 
-/** Tenant-filtered inventory is returned by the authenticated API; this helper
- * only selects an eligible destination and never grants repository access. */
+/** Tenant-scoped inventory is returned by the authenticated API. Only repositories
+ * whose provider supports proposals and Git writes can be import destinations.
+ * The API still enforces repository authorization and proposal approval. */
 export function eligibleCatalogImportRepositories(
  repositories:readonly RepositoryListItem[],
 ):RepositoryListItem[]{
- return repositories.filter(item=>item.status!=="disabled");
+ return repositories.filter(item=>item.providerReadiness.supportsProvisioningWrites);
 }
 export function initialCatalogImportRepositoryId(
  repositories:readonly RepositoryListItem[],

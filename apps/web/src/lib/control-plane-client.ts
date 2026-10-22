@@ -38,6 +38,7 @@ import type {
 } from "@savant/types";
 
 import type { EvaluationDetailResponse } from "./evaluation-detail-helpers.ts";
+import type { SkillAssetApiResponse } from "./ui-v2-skill-assets.ts";
 
 import {
   extractWorkspaceSlugFromPathname,
@@ -385,6 +386,21 @@ export function fetchSkillSource(
   return fetchControlPlaneJson<SkillSourceResponse>(
     buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/source`, options),
     options?.signal ? { signal: options.signal } : undefined,
+  );
+}
+
+/**
+ * PER-1610: files and Markdown links observed at the skill's indexed Git SHA.
+ * Selecting a file never broadens the URL into an arbitrary Git file read.
+ */
+export function fetchSkillAssets(
+  id:string,
+  options?:TenantRequestOptions & {path?:string},
+):Promise<SkillAssetApiResponse>{
+  const requested=options?.path?buildControlPlaneQuery({path:options.path}):"";
+  return fetchControlPlaneJson<SkillAssetApiResponse>(
+    buildTenantScopedControlPlanePath(`/api/skills/${encodeURIComponent(id)}/assets${requested}`,options),
+    options?.signal?{signal:options.signal}:undefined,
   );
 }
 

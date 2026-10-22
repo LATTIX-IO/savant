@@ -21,7 +21,7 @@ test("PER-1614 setup bubble is above profile and links to tenant-owned Settings 
 test("PER-1614 status is based on server-owned source data, never a browser-local fake checklist",()=>{
  for(const token of ["fetchRepositoryList","fetchSkillList","fetchAIConnections",
     "workspaceSlug,signal:controller.signal","describeWorkspaceSetup","AbortController",
-    "report.completeness","report.observed","report.required"]){
+    "report.steps.filter","prerequisites.filter","observed/prerequisites.length"]){
    assert.ok(bubble.includes(token),token);
  }
  assert.match(bubble,/status.scope===workspaceSlug/);

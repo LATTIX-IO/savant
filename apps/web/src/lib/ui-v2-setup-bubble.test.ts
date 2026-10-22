@@ -26,5 +26,5 @@ test("PER-1614 status is based on server-owned source data, never a browser-loca
  }
  assert.match(bubble,/status.scope===workspaceSlug/);
  assert.doesNotMatch(bubble,/localStorage|sessionStorage|mock|fake|setTimeout|Math\.random|successToast/);
- assert.match(bubble,/remaining steps/);
+ assert.match(bubble,/Verify saved cases and actual runs in Settings/);
 });

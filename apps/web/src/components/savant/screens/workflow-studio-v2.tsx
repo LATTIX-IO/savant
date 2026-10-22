@@ -308,7 +308,7 @@ Git pull request is required before the workflow becomes available.`))return;
       const proposed=await proposeFileEdits(repositoryId,{
         title:`Savant: review workflow ${workflowId}`,
         body:`Versioned, non-executable workflow model for workflows/${workflowId}.json. Review all step definitions and branch protections before approval.`,
-        files:[{path:`workflows/${workflowId}.json`,content:JSON.stringify(spec,null,2)+"\\n"}],
+        files:[{path:`workflows/${workflowId}.json`,content:JSON.stringify(spec,null,2)+"\n"}],
       },{workspaceSlug:slug});
       if(liveScopeRef.current!==originalKey)return;
       setPendingProposal({key:originalKey,source:originalSource,id:proposed.data.id});

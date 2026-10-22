@@ -39,7 +39,7 @@ function classify(relative:string):SkillAssetKind|null{
 export function projectSkillAssets(input:{
   sourcePath:string;
   commitSha:string;
-  entries:readonly {path:string;kind:"file"|"dir";size?:number}[];
+  entries:readonly {path:string;kind:"file"|"dir";size?:number|undefined}[];
 }):SkillAssetProjection{
   if(!SHA.test(input.commitSha))throw new Error("source_revision_unverified");
   const root=skillAssetRoot(input.sourcePath);

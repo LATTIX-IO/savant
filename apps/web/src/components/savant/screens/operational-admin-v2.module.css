@@ -75,3 +75,27 @@
 .providerGuideDetails p{margin:0}
 .providerGuideDetails a{overflow-wrap:anywhere;color:var(--sv2-accent)}
 @media(max-width:900px){.providerGuideGrid,.providerGuideEnterprise{grid-template-columns:minmax(0,1fr)}}
+
+/* PER-1614: unified workspace setup, responsive and evidence-driven. */
+.setupGuide{display:grid;align-content:start;gap:16px;min-width:0}
+.setupHeader{display:flex;justify-content:space-between;align-items:start;gap:16px;flex-wrap:wrap}
+.setupHeader h2{margin:0 0 6px;font:600 17px var(--sv2-font-body)}
+.setupHeader .note{margin:0;max-width:76ch}
+.setupProgress{padding:12px;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control);
+ background:var(--sv2-recess);font:500 12px var(--sv2-font-body)}
+.setupSteps{padding:0;margin:0;list-style:none;display:grid;gap:10px}
+.setupStep{display:grid;align-items:center;grid-template-columns:30px minmax(0,1fr) auto;gap:14px;
+ min-width:0;border:1px solid var(--sv2-border);border-radius:var(--sv2-radius-control);padding:14px}
+.setupStepNumber{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;
+ background:var(--sv2-recess);font:600 12px var(--sv2-font-code)}
+.setupStepBody{display:grid;gap:6px;min-width:0}
+.setupStepBody h3{margin:0;font:600 13px var(--sv2-font-body)}
+.setupStepBody p{margin:0;font:12px/1.5 var(--sv2-font-body);color:var(--sv2-muted);max-width:76ch}
+.setupStatus{font:500 11px var(--sv2-font-code);color:var(--sv2-fg-2)}
+.setupStatus[data-state="observed"]{color:var(--sv2-success,var(--sv2-fg))}
+.setupStatus[data-state="action-required"]{color:var(--sv2-warning,var(--sv2-fg))}
+.setupStatus[data-state="not-verified"]{color:var(--sv2-muted)}
+.setupStep>.control{text-decoration:none;white-space:nowrap}
+@media(max-width:650px){.setupStep{grid-template-columns:30px minmax(0,1fr)}
+.setupStep>.control{grid-column:2;justify-self:start}
+}

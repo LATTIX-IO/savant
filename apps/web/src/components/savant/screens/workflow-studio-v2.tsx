@@ -4,14 +4,15 @@ import Link from "next/link";
 import type { Route } from "next";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { RepositoryListItem } from "@savant/types";
+import type { RepositoryListItem,SkillListItem } from "@savant/types";
 import type { WorkflowSpecification, WorkflowNodeKind } from "@savant/types/workflow-specification";
 import { parseWorkflowSpecification } from "@savant/schemas/workflow-specification";
-import { fetchRepositoryList } from "@/lib/control-plane-client";
+import { fetchRepositoryList,fetchSkillList } from "@/lib/control-plane-client";
 import { proposeFileEdits } from "@/lib/git-connections-client";
 import { buildTenantAwareAppPath, withWorkspaceSlugQuery } from "@/lib/tenant-paths";
 import { useUiV2WorkspaceSlug } from "@/components/savant/ui-v2/mode";
 import { workflowDocumentPath, workflowIdValid, workflowSaveGate, layoutWorkflowGraph } from "@/lib/ui-v2-workflow-model";
+import {createAuthoredWorkflowSkillBinding,describeAuthoredWorkflowSkillBinding} from "@/lib/ui-v2-workflow-skill-binding";
 import { addWorkflowConnection, addWorkflowPort, editWorkflowPortType,
   removeWorkflowNode, removeWorkflowPort, incompatibleWorkflowConnection } from "@/lib/ui-v2-workflow-editor";
 import styles from "./workflow-studio-v2.module.css";
@@ -22,12 +23,14 @@ type WorkflowRecord = {
 
 };
 type Inventory = { scope: string; phase: "loading"|"ready"|"error"; data: RepositoryListItem[]; message: string };
+type SkillInventory={scope:string;phase:"loading"|"ready"|"error";data:readonly SkillListItem[];message:string};
 type Loaded = { key: string; phase: "idle"|"loading"|"ready"|"missing"|"error"; record: WorkflowRecord|null; message: string };
 type EditMode = "graph"|"json";
 type IndexedWorkflow = {workflowId:string;version:string;sourceCommitSha:string;indexedAt:string};
 type IndexLoad = {key:string;phase:"idle"|"loading"|"ready"|"error";items:IndexedWorkflow[];message:string};
 const NO_INDEX:IndexLoad={key:"",phase:"idle",items:[],message:""};
 const EMPTY: Inventory = {scope:"",phase:"loading",data:[],message:""};
+const EMPTY_SKILLS:SkillInventory={scope:"",phase:"loading",data:[],message:""};
 const NONE: Loaded = {key:"",phase:"idle",record:null,message:""};
 const KINDS: readonly WorkflowNodeKind[]=["agent","skill","tool","model","decision","subworkflow","opaque"];
 
@@ -69,6 +72,7 @@ export function WorkflowStudioV2(){
   const slug=useUiV2WorkspaceSlug()??"";
   const pathname=usePathname()||"/";
   const [inventory,setInventory]=useState<Inventory>(EMPTY);
+  const [skillInventory,setSkillInventory]=useState<SkillInventory>(EMPTY_SKILLS);
   const [indexed,setIndexed]=useState<IndexLoad>(NO_INDEX);
   const [indexRetry,setIndexRetry]=useState(0);
   const readRef=useRef<AbortController|null>(null);
@@ -116,6 +120,12 @@ export function WorkflowStudioV2(){
     valid:validation.valid,dirty,repositorySupported:available});
   const canPropose=gate.allowed&&!alreadyProposed&&!busy;
   const selected=draft?.nodes.find(n=>n.id===selectedId)||null;
+  const visibleSkills=skillInventory.scope===slug?skillInventory:EMPTY_SKILLS;
+  const repoSkills=repo&&visibleSkills.phase==="ready"?
+    visibleSkills.data.filter(s=>s.repo.toLowerCase()===repo.name.toLowerCase()):[];
+  const authoredSkillRef=selected?.kind==="skill"?selected.extensions?.savantSkill:null;
+  const indexedSkillState=describeAuthoredWorkflowSkillBinding(authoredSkillRef,
+    visibleSkills.phase==="ready"?visibleSkills.data:null,repo?.name??"");
   const fromNode=draft?.nodes.find(n=>n.id===fromId)||null;
   const toNode=draft?.nodes.find(n=>n.id===toId)||null;
   const workbenchHref=buildTenantAwareAppPath(pathname,"/workbench") as Route;
@@ -130,6 +140,20 @@ export function WorkflowStudioV2(){
       if(!controller.signal.aborted)setInventory({scope:slug,phase:"error",data:[],
         message:e instanceof Error?e.message:"Repository inventory unavailable."});
     });
+    return ()=>controller.abort();
+  },[slug]);
+
+  useEffect(()=>{
+    if(!slug)return;
+    const controller=new AbortController();
+    queueMicrotask(()=>{if(!controller.signal.aborted)
+      setSkillInventory({scope:slug,phase:"loading",data:[],message:""});});
+    void fetchSkillList(undefined,{workspaceSlug:slug,signal:controller.signal})
+      .then(value=>{if(!controller.signal.aborted)
+        setSkillInventory({scope:slug,phase:"ready",data:value.data,message:""});})
+      .catch(error=>{if(!controller.signal.aborted)
+        setSkillInventory({scope:slug,phase:"error",data:[],
+          message:error instanceof Error?error.message:"Indexed skill list unavailable."});});
     return ()=>controller.abort();
   },[slug]);
 
@@ -220,6 +244,17 @@ export function WorkflowStudioV2(){
   function changeNode(id:string,values:Partial<WorkflowSpecification["nodes"][number]>){
     if(!draft)return;
     replaceDraft({...draft,nodes:draft.nodes.map(n=>n.id===id?{...n,...values}:n)});
+  }
+  function bindIndexedSkill(skillId:string){
+    if(!selected||selected.kind!=="skill"||!repo||visibleSkills.phase!=="ready")return;
+    const item=repoSkills.find(entry=>entry.id===skillId);
+    if(!item)return;
+    const binding=createAuthoredWorkflowSkillBinding(item,repo.name);
+    if(!binding){setMessage("The selected skill lacks a safe, pinned Git index revision.");return;}
+    changeNode(selected.id,{
+      label:item.name,
+      extensions:{...(selected.extensions??{}),savantSkill:binding},
+    });
   }
   function changeNodeKind(kind:WorkflowNodeKind){
     if(!draft||!selected)return;

@@ -67,3 +67,9 @@ test("PER-1623 Catalog list makes details and governed import immediately discov
  assert.match(server,/runtime\.assessments\.proposeFileEdits/);
  assert.doesNotMatch(dialog,/localStorage|sessionStorage|mockRepository|fakeProposal|Math\.random|dangerouslySetInnerHTML/);
 });
+
+test("PER-1623 catalog detail sanitizes external scanner failures",()=>{
+ const ui=readFileSync(fileURLToPath(new URL("../components/savant/screens/skill-hub.tsx",import.meta.url)),"utf8");
+ assert.doesNotMatch(ui,/skill\\.safety\\?\\.error/);
+ assert.match(ui,/Security assessment unavailable\\. Retry later or contact your workspace administrator\\./);
+});

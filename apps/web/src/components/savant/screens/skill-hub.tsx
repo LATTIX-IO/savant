@@ -381,7 +381,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                   ))}
                 </>
               ) : (
-                <span className="subtle" style={{ fontSize: 12.5 }}>{skill.safety?.status === "unavailable" ? skill.safety.error ?? "Scanning unavailable." : "Scan pending."}</span>
+                <span className="subtle" style={{ fontSize: 12.5 }}>{skill.safety?.status === "unavailable" ? "Security assessment unavailable. Retry later or contact your workspace administrator." : "Security analysis pending."}</span>
               )}
             </div>
           </div>

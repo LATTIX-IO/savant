@@ -134,7 +134,7 @@ test("UX-02 unknown and hostile tenant paths never spoof an active section or re
 test("UX-02 detail breadcrumbs remain tenant-owned and never mislabel marketplace as Overview", () => {
   assert.deepEqual(buildUiV2RouteCrumbs("org-a","/catalog/demo"),[
     {label:"Workspace",href:null,current:false},
-    {label:"Marketplace",href:"/o/org-a/catalog",current:false},
+    {label:"Catalog",href:"/o/org-a/catalog",current:false},
     {label:"Skill",href:null,current:true},
   ]);
   assert.deepEqual(buildUiV2RouteCrumbs("org-a","/skills/skill-id",{skillTitle:"Verified skill"}),[
@@ -157,10 +157,10 @@ test("UX-02 route changes restore content focus, with keyboard-closable workspac
   assert.doesNotMatch(source,/router\.push\(|history\.replaceState\(|dangerouslySetInnerHTML|sessionStorage|localStorage/);
 });
 
-test("F1 reference IA has six primary workspaces, two admin areas and no invented route", () => {
+test("PER-1623 direct Catalog navigation has seven primary workspaces, two admin areas and no invented route", () => {
   const list = getUiV2WorkspaceNavigation("tenant one", "/skills", EMPTY_SAVANT_SHELL_DATA.counts);
   assert.deepEqual(list.filter(x => x.group === "primary").map(x => x.label),
-    ["Overview","Library","Workbench","Evaluations","Runs","Insights"]);
+    ["Overview","Library","Workbench","Evaluations","Runs","Insights","Catalog"]);
   assert.deepEqual(list.filter(x => x.group === "admin").map(x => x.label),
     ["Integrations","Settings"]);
   assert.equal(list.find(x => x.id === "workbench")?.picker, null);
@@ -178,7 +178,7 @@ test("F1 reference IA has six primary workspaces, two admin areas and no invente
 });
 test("F1 active state reflects detail modes and preserves legacy contextual admin routes", () => {
   for (const [path, id] of [
-    ["/skills", "library"], ["/repositories", "library"], ["/catalog/example", "library"],
+    ["/skills", "library"], ["/repositories", "library"], ["/catalog/example", "catalog"], ["/catalog", "catalog"],
     ["/workbench","workbench"], ["/workflows","workbench"],
     ["/skills/source-id", "workbench"], ["/evaluations", "evaluations"], ["/runs","runs"],
     ["/evaluations/run-id", "runs"], ["/releases", "insights"],
@@ -227,7 +227,7 @@ test("PER-1609 workflows preserve the six-workspace shell and tenant-owned deep 
   assert.equal(buildUiV2WorkspaceSwitchPath("org-b","/workflows"),"/o/org-b/workflows");
   const nav=getUiV2WorkspaceNavigation("org-a","/workflows",EMPTY_SAVANT_SHELL_DATA.counts);
   assert.deepEqual(nav.filter(item=>item.active).map(item=>item.id),["workbench"]);
-  assert.equal(nav.filter(item=>item.group==="primary").length,6);
+  assert.equal(nav.filter(item=>item.group==="primary").length,7);
   const crumbs=buildUiV2RouteCrumbs("org-a","/workflows");
   assert.equal(crumbs.at(-1)?.label,"Workflows");
   assert.equal(crumbs.at(-1)?.current,true);

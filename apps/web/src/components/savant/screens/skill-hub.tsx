@@ -17,10 +17,11 @@ import {
   requestCatalogSync,
   type CatalogListResponse,
 } from "@/lib/git-connections-client";
-import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
+import { buildTenantAwareAppPath,extractWorkspaceSlugFromPathname } from "@/lib/tenant-paths";
 import type { CatalogSkillDetail } from "@/server/hub/catalog-read";
 
 import { SkillProposalNotice } from "./skill-assessment-findings";
+import { CatalogImportDialog } from "./catalog-import-dialog";
 
 const VERDICT_CHIP: Record<string, string> = {
   validated: "chip-moss",
@@ -35,6 +36,8 @@ const PAGE = 60;
 /** Workspace view of the public skill catalog: browse, analyze and import. */
 export function SkillHubScreen() {
   const pathname = usePathname() || "/";
+  const workspaceSlug=extractWorkspaceSlugFromPathname(pathname);
+  const [importTarget,setImportTarget]=useState<{scope:string;skill:{id:string;name:string;verdict:string}}|null>(null);
   const [filters, setFilters] = useState({ q: "", source: "", verdict: "" });
   const [draft, setDraft] = useState("");
   const [offset, setOffset] = useState(0);
@@ -71,8 +74,9 @@ export function SkillHubScreen() {
           </div>
           <h1 className="h-display">Skill catalog</h1>
           <div className="page-head-sub">
-            Skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other sources, safety-scanned with NVIDIA SkillSpector and
-            evaluated live (model-generated cases, independently validated and scored). Import any skill into a connected repository as a reviewed pull request.
+            Browse source-backed skills, inspect their safety assessments and evaluation results,
+            then use <strong>Import</strong> on any eligible row to choose a connected Git repository.
+            Imports create a reviewed proposal and pull request, not a direct write.
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
@@ -138,12 +142,13 @@ export function SkillHubScreen() {
                 <th style={{ width: 170 }}>Source</th>
                 <th style={{ width: 130 }}>Verdict</th>
                 <th style={{ width: 90, textAlign: "right" }}>Live eval</th>
-                <th style={{ width: 150, textAlign: "right" }}>SkillSpector</th>
+                <th style={{ width: 150, textAlign: "right" }}>Security risk</th>
+                <th style={{ minWidth: 190 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
-              {!data && !error && <tr><td colSpan={5} className="subtle">Loading…</td></tr>}
-              {data?.items.length === 0 && <tr><td colSpan={5} className="subtle">No skills match.</td></tr>}
+              {!data && !error && <tr><td colSpan={6} className="subtle">Loading…</td></tr>}
+              {data?.items.length === 0 && <tr><td colSpan={6} className="subtle">No skills match.</td></tr>}
               {data?.items.map((skill) => (
                 <tr key={skill.id}>
                   <td>
@@ -160,6 +165,20 @@ export function SkillHubScreen() {
                     <span className="mono">{skill.riskScore ?? "—"}</span>
                     {skill.safetyRecommendation && <div className="subtle" style={{ fontSize: 11 }}>{skill.safetyRecommendation.replace(/_/g, " ").toLowerCase()} · {skill.safetySeverity?.toLowerCase()}</div>}
                   </td>
+                  <td>
+                    <div className="row" style={{gap:8,flexWrap:"wrap"}}>
+                      <Link className="btn btn-sm btn-ghost"
+                        href={buildTenantAwareAppPath(pathname,`/catalog/${skill.id}`) as Route}
+                        aria-label={`View details for ${skill.name}`}>View details</Link>
+                      <button type="button" className="btn btn-sm btn-primary"
+                        disabled={!workspaceSlug||skill.verdict==="unsafe"}
+                        aria-label={`Import ${skill.name} into a repository`}
+                        title={skill.verdict==="unsafe"?"Unsafe skills cannot be imported":"Choose an authorized target repository"}
+                        onClick={()=>workspaceSlug&&setImportTarget({
+                          scope:workspaceSlug,skill:{id:skill.id,name:skill.name,verdict:skill.verdict}
+                        })}>Import</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -167,6 +186,10 @@ export function SkillHubScreen() {
         </div>
       </div>
 
+      {importTarget&&workspaceSlug&&importTarget.scope===workspaceSlug?
+        <CatalogImportDialog key={`${importTarget.scope}:${importTarget.skill.id}`}
+          skill={importTarget.skill} workspaceSlug={workspaceSlug}
+          onClose={()=>setImportTarget(null)}/>:null}
       {data && data.total > PAGE && (
         <div className="row" style={{ gap: 8, justifyContent: "center", marginTop: 12 }}>
           <button type="button" className="btn btn-ghost btn-sm" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - PAGE))}>Previous</button>
@@ -180,11 +203,15 @@ export function SkillHubScreen() {
 
 export function SkillHubSkillScreen({ id }: { id: string }) {
   const pathname = usePathname() || "/";
+  const workspaceSlug=extractWorkspaceSlugFromPathname(pathname);
   const [skill, setSkill] = useState<CatalogSkillDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [refresh, setRefresh] = useState(0);
   const [repositories, setRepositories] = useState<RepositoryListItem[]>([]);
   const [repositoryId, setRepositoryId] = useState("");
+  const [repositoryState,setRepositoryState]=useState<"loading"|"ready"|"error">("loading");
+  const [repositoryError,setRepositoryError]=useState<string|null>(null);
+  const [repositoryRetry,setRepositoryRetry]=useState(0);
   const [targetRoot, setTargetRoot] = useState("");
   const [owner, setOwner] = useState("");
   const [busy, setBusy] = useState<"analyze" | "import" | null>(null);
@@ -208,16 +235,25 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
   }, [id, refresh]);
 
   useEffect(() => {
-    let active = true;
-    fetchRepositoryList().then((response) => {
-      if (!active) return;
-      setRepositories(response.data);
-      setRepositoryId((current) => current || response.data[0]?.id || "");
-    }).catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
+    const controller=new AbortController();
+    if(!workspaceSlug)return;
+    queueMicrotask(()=>{if(!controller.signal.aborted){
+      setRepositories([]);setRepositoryId("");setRepositoryError(null);
+      setRepositoryState("loading");
+    }});
+    void fetchRepositoryList({workspaceSlug,signal:controller.signal}).then(response=>{
+      if(controller.signal.aborted)return;
+      const available=response.data.filter(repo=>repo.provider==="github"&&repo.providerReadiness.supportsProvisioningWrites);
+      setRepositories(available);
+      setRepositoryId(available.length===1?available[0]!.id:"");
+      setRepositoryState("ready");
+    }).catch(reason=>{
+      if(controller.signal.aborted)return;
+      setRepositoryError(reason instanceof Error?reason.message:"Repository list unavailable.");
+      setRepositoryState("error");
+    });
+    return ()=>controller.abort();
+  }, [workspaceSlug,repositoryRetry]);
 
   const evaluating = skill?.evalStatus === "queued" || skill?.evalStatus === "running";
   useEffect(() => {
@@ -241,7 +277,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
   }
 
   async function importSkill() {
-    if (!repositoryId) return;
+    if (!repositoryId || !repositories.some(repo=>repo.id===repositoryId) || !workspaceSlug) return;
     setBusy("import");
     setMessage(null);
     try {
@@ -282,6 +318,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           </div>
         </div>
         <div className="row" style={{ gap: 8 }}>
+          <a className="btn btn-primary" href="#catalog-import-panel">Import to Git repository</a>
           {skill.sourceUrl && <a className="btn btn-ghost" href={skill.sourceUrl} target="_blank" rel="noopener noreferrer">Source</a>}
           <button type="button" className="btn btn-ghost" disabled={busy !== null || evaluating} onClick={() => void analyze()}>
             {evaluating ? "Evaluating…" : skill.evalStatus === "complete" || skill.evalStatus === "needs_review" ? "Re-run live analysis" : "Run live analysis"}
@@ -302,7 +339,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           <div className="panel">
             <div className="panel-hd">
               <div className="panel-title">Live evaluation</div>
-              <span className="subtle" style={{ fontSize: 11.5 }}>{skill.evaluation?.models?.generator ?? "NVIDIA NIM"} drafts and runs · {"Evaluation judge"} validates and scores</span>
+              <span className="subtle" style={{ fontSize: 11.5 }}>Model-generated cases · independent evaluation judge reviews and scores</span>
             </div>
             <div className="panel-bd col" style={{ gap: 10 }}>
               {scorecard?.overallScore !== undefined ? (
@@ -331,7 +368,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
           </div>
 
           <div className="panel">
-            <div className="panel-hd"><div className="panel-title">Safety · NVIDIA SkillSpector</div></div>
+            <div className="panel-hd"><div className="panel-title">Safety assessment</div></div>
             <div className="panel-bd col" style={{ gap: 6 }}>
               {skill.safety?.status === "complete" ? (
                 <>
@@ -344,7 +381,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                   ))}
                 </>
               ) : (
-                <span className="subtle" style={{ fontSize: 12.5 }}>{skill.safety?.status === "unavailable" ? skill.safety.error ?? "Scanning unavailable." : "Scan pending."}</span>
+                <span className="subtle" style={{ fontSize: 12.5 }}>{skill.safety?.status === "unavailable" ? "Security assessment unavailable. Retry later or contact your workspace administrator." : "Security analysis pending."}</span>
               )}
             </div>
           </div>
@@ -372,17 +409,25 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
         </div>
 
         <div className="col" style={{ gap: "var(--gutter)" }}>
-          <div className="panel">
+          <div className="panel" id="catalog-import-panel">
             <div className="panel-hd"><div className="panel-title">Import into a repository</div></div>
             <div className="panel-bd col" style={{ gap: 10 }}>
-              {repositories.length === 0 ? (
-                <span className="subtle" style={{ fontSize: 12.5 }}>Connect a repository first (Repositories → Connect).</span>
+              {repositoryState==="loading"?<p role="status">Loading connected repositories…</p>:
+               repositoryState==="error"?<div role="alert" className="col" style={{gap:8}}>
+                 <span>Repository inventory unavailable: {repositoryError}</span>
+                 <button className="btn btn-ghost btn-sm" type="button" onClick={()=>setRepositoryRetry(n=>n+1)}>Retry repository check</button>
+               </div>:repositories.length===0 ? (
+                <span className="subtle" style={{ fontSize: 12.5 }}>
+                  No connected Git repositories. <Link href={buildTenantAwareAppPath(pathname,"/repositories") as Route}>Connect a repository</Link> first.
+                </span>
               ) : (
                 <>
                   <label className="col" style={{ gap: 4, fontSize: 12 }}>
-                    Repository
+                    Destination repository (required)
                     <select className="input" value={repositoryId} onChange={(event) => setRepositoryId(event.target.value)}>
-                      {repositories.map((repository) => <option key={repository.id} value={repository.id}>{repository.name}</option>)}
+                      <option value="">Choose a destination repository</option>
+                      {repositories.map((repository) => <option key={repository.id} value={repository.id}>
+                        {repository.name} · {repository.provider} · {repository.branch}</option>)}
                     </select>
                   </label>
                   <label className="col" style={{ gap: 4, fontSize: 12 }}>
@@ -393,7 +438,7 @@ export function SkillHubSkillScreen({ id }: { id: string }) {
                     Owner (optional)
                     <input className="input" value={owner} onChange={(event) => setOwner(event.target.value)} placeholder="e.g. platform-team" />
                   </label>
-                  <button type="button" className="btn btn-primary" disabled={busy !== null || !repositoryId || skill.verdict === "unsafe"} onClick={() => void importSkill()}>
+                  <button type="button" className="btn btn-primary" disabled={busy !== null || !repositoryId || skill.verdict === "unsafe" || Boolean(proposal)} onClick={() => void importSkill()}>
                     {busy === "import" ? "Preparing…" : "Propose import"}
                   </button>
                   <span className="subtle" style={{ fontSize: 11.5 }}>

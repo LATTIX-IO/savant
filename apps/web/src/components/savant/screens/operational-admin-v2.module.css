@@ -111,3 +111,14 @@
 .setupEvidenceFields select:focus-visible{outline:2px solid var(--sv2-focus);outline-offset:2px}
 .setupEvidencePicker .note{margin:0;max-width:85ch}
 @media(max-width:600px){.setupEvidenceFields{grid-template-columns:minmax(0,1fr)}}
+
+/* PER-1608: read-only enterprise AI capability discovery; not provider authorization. */
+.enterprisePreflight{display:grid;gap:12px;min-width:0}
+.enterprisePreflightGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.enterprisePreflight .providerGuideCard{display:grid;gap:10px;align-content:start;justify-items:stretch}
+.enterprisePreflight h3{font:600 13px var(--sv2-font-body);margin:0}
+.enterprisePreflight ul{margin:0;padding-left:17px;display:grid;gap:10px}
+.enterprisePreflight li{font:12px/1.5 var(--sv2-font-body)}
+.enterprisePreflight li strong,.enterprisePreflight li span,.enterprisePreflight li small{display:block}
+.enterprisePreflight li small{color:var(--sv2-muted);font:11px var(--sv2-font-code)}
+@media(max-width:1000px){.enterprisePreflightGrid{grid-template-columns:minmax(0,1fr)}}

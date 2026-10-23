@@ -37,8 +37,8 @@ test("PER-1602 native Claude Messages v1 adapter pins HTTPS origin, headers and 
     assert.deepEqual(Object.keys(body).sort(),
       ["model", "max_tokens", "system", "messages", "temperature", "stream"].sort());
     assert.equal(body.model, model);
-    assert.equal(body.system, messages[0].content);
-    assert.deepEqual(body.messages, [{role: "user", content: messages[1].content}]);
+    assert.equal(body.system, messages[0]!.content);
+    assert.deepEqual(body.messages, [{role: "user", content: messages[1]!.content}]);
     assert.equal(body.stream, false);
     assert.ok(!("tools" in body));
     return json(reply());

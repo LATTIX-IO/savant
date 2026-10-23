@@ -94,7 +94,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
                   <div style={{ margin: "0 0 12px" }}><EvalLimitationsNote limitations={skill.evaluation?.limitations} /></div>
                   <p style={{ margin: "0 0 12px", fontSize: 13, color: "var(--text-muted)" }}>
                     {scorecard.passCount ?? 0} pass · {scorecard.investigateCount ?? 0} investigate · {scorecard.failCount ?? 0} fail across {scorecard.sampleCount ?? 0} cases.
-                    {metrics?.drafted ? ` Jev accepted ${metrics.accepted ?? 0} of ${metrics.drafted} LLM-drafted cases.` : ""}
+                    {metrics?.drafted ? ` Independent evaluation accepted ${metrics.accepted ?? 0} of ${metrics.drafted} model-drafted cases.` : ""}
                     {skill.evaluation?.models?.judge ? ` Drafted and run by ${skill.evaluation.models.generator}, validated and scored by ${skill.evaluation.models.judge}.` : ""}
                   </p>
                   {skill.evaluation?.cases && skill.evaluation.cases.length > 0 && (
@@ -116,7 +116,7 @@ export default async function CatalogSkillPage({ params }: { params: Params }) {
             </div>
 
             <div className="cat-panel">
-              <h2>Safety (NVIDIA SkillSpector)</h2>
+              <h2>Security assessment</h2>
               {skill.safety && skill.safety.status === "complete" ? (
                 <>
                   <div style={{ marginBottom: 12 }}><SafetyBreakdown safety={skill.safety} /></div>

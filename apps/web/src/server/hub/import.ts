@@ -129,7 +129,7 @@ export async function proposeCatalogImport(sql: Sql, runtime: GitRuntime, actor:
     throw new GitProviderError("INVALID_REQUEST", "That catalog skill wasn't found.", { status: 404 });
   }
   if (skill.verdict === "unsafe") {
-    throw new GitProviderError("INVALID_REQUEST", "This skill failed Savant's safety scan (SkillSpector: do not install) and can't be imported.", { status: 409 });
+    throw new GitProviderError("INVALID_REQUEST", "This skill failed Savant's safety policy and cannot be imported.", { status: 409 });
   }
   const root = validateImportRoot(input.targetRoot || defaultImportRoot(skill));
   const repo = await openRepositoryFiles(runtime, actor.organizationId, input.repositoryId);
@@ -162,8 +162,8 @@ export async function proposeCatalogImport(sql: Sql, runtime: GitRuntime, actor:
   const lines = [
     `Imports **${skill.name}** from ${skill.sourceName}${skill.sourceUrl ? ` (${skill.sourceUrl})` : ""} into \`${root}\`.`,
     "",
-    `- Savant verdict: **${skill.verdict}**${skill.safetyRecommendation ? ` · SkillSpector: ${skill.safetyRecommendation.replace(/_/g, " ").toLowerCase()}${skill.riskScore !== null ? ` (risk ${skill.riskScore}/100)` : ""}` : " · not yet safety-scanned"}`,
-    `- Live evaluation: ${skill.evalScore !== null ? `${skill.evalScore}/100 (LLM-drafted, Jev-validated cases included under eval/)` : "not run; starter eval files are scaffolded"}`,
+    `- Savant verdict: **${skill.verdict}**${skill.safetyRecommendation ? ` · security assessment: ${skill.safetyRecommendation.replace(/_/g, " ").toLowerCase()}${skill.riskScore !== null ? ` (risk ${skill.riskScore}/100)` : ""}` : " · not yet safety-scanned"}`,
+    `- Live evaluation: ${skill.evalScore !== null ? `${skill.evalScore}/100 (model-drafted, independently judged cases included under eval/)` : "not run; starter eval files are scaffolded"}`,
     `- License: ${skill.license ?? "not declared — confirm reuse rights before merging"}`,
     "",
     "The skill is added with status `draft`. Review the instructions and evaluations before promoting it.",

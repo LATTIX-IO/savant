@@ -2,7 +2,7 @@ import { describeSafetyDecision, SAFETY_DECISION_LABEL, safetyDecision } from "@
 import type { EvalLimitation } from "@/server/evaluation/limitations";
 
 /**
- * SkillSpector's raw output (numeric risk, recommendation and severity) next
+ * Recorded security evidence (numeric risk, recommendation and severity) next
  * to Savant's policy decision, so the policy never hides the scanner's view.
  * Works in server and client components.
  */
@@ -14,7 +14,7 @@ export function SafetyBreakdown({
   compact?: boolean;
 }) {
   if (!safety || safety.status === "unavailable" || safety.recommendation === null) {
-    return <span style={{ fontSize: 12.5, opacity: 0.75 }}>{safety?.status === "unavailable" ? "Safety scanning is temporarily unavailable." : "SkillSpector scan pending."}</span>;
+    return <span style={{ fontSize: 12.5, opacity: 0.75 }}>{safety?.status === "unavailable" ? "Safety scanning is temporarily unavailable." : "Security analysis pending."}</span>;
   }
   const decision = safetyDecision(safety.recommendation, safety.riskScore);
   const cells: Array<[string, string]> = [
@@ -36,7 +36,7 @@ export function SafetyBreakdown({
       {!compact && (
         <div style={{ fontSize: 12.5, opacity: 0.85 }}>
           {describeSafetyDecision(decision)}
-          {safety.scannerVersion ? ` SkillSpector ${safety.scannerVersion}${safety.llmUsed ? ", static + LLM review" : ", static analysis"}.` : ""}
+          {safety.scannerVersion ? ` ${safety.llmUsed ? "Static and model-assisted review completed." : "Static security analysis completed."}` : ""}
         </div>
       )}
     </div>

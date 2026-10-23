@@ -79,7 +79,7 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
     path: "/catalog",
     title: "Skill catalog",
     description:
-      "Agent skills from Anthropic, OpenAI, skills.sh, ClawHub and SkillsMP, safety-scanned with NVIDIA SkillSpector and evaluated live by Savant.",
+      "Agent skills from Anthropic, OpenAI, skills.sh, ClawHub and SkillsMP, safety-assessed and independently evaluated by Savant.",
     changeFrequency: "daily",
     priority: 0.8,
   },

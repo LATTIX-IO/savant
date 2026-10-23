@@ -1,8 +1,8 @@
 /**
- * How Savant turns a SkillSpector result into a decision. SkillSpector's own
+ * How Savant turns a security scan into a decision. The underlying
  * recommendation is conservative: many packages come back CAUTION with a very
- * low risk score. Savant passes CAUTION below SKILLSPECTOR_PASS_RISK (default
- * 20) while always showing SkillSpector's raw output — the numeric risk and
+ * low risk score. Savant passes CAUTION below the configured risk threshold (default
+ * 20) while always showing recorded security evidence — the numeric risk and
  * both qualitative ratings (recommendation and severity) — next to the
  * decision, so nothing is hidden by the policy.
  */
@@ -32,14 +32,14 @@ export const SAFETY_DECISION_LABEL: Record<SafetyDecision, string> = {
 export function describeSafetyDecision(decision: SafetyDecision, threshold = safetyPassRisk()): string {
   switch (decision) {
     case "pass":
-      return "SkillSpector rated the package safe.";
+      return "The security assessment rated this package safe.";
     case "pass_low_risk":
-      return `SkillSpector rated it CAUTION, but its risk score is below ${threshold}/100, so Savant's policy passes it. Its findings are still listed for review.`;
+      return `The assessment recommended caution, but its risk score is below ${threshold}/100, so Savant's policy passes it. Its findings are still listed for review.`;
     case "caution":
-      return `SkillSpector rated it CAUTION with a risk score of ${threshold}/100 or more; review the findings before use.`;
+      return `The assessment recommends caution with a risk score of ${threshold}/100 or more; review its findings before use.`;
     case "block":
-      return "SkillSpector recommends not installing this package.";
+      return "The security assessment advises against importing or installing this package.";
     default:
-      return "No completed SkillSpector scan yet.";
+      return "No completed security analysis yet.";
   }
 }

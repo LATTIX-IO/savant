@@ -149,10 +149,10 @@ function RunDetails({ run }: { run: SkillAutomationRun }) {
 
 function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
   if (!scan) {
-    return <span className="subtle" style={{ fontSize: 12.5 }}>Not scanned yet. SkillSpector runs in the background after each sync.</span>;
+    return <span className="subtle" style={{ fontSize: 12.5 }}>Not scanned yet. Security analysis runs after repository synchronization.</span>;
   }
   if (scan.status !== "complete") {
-    return <div className="note brass"><span style={{ fontSize: 12.5 }}>{scan.error ?? "The last safety scan didn't complete."}</span></div>;
+    return <div className="note brass"><span style={{ fontSize: 12.5 }}>{"Security analysis unavailable. Retry repository sync or contact your workspace administrator."}</span></div>;
   }
   return (
     <div className="col" style={{ gap: 10 }}>
@@ -182,7 +182,7 @@ function SafetyDetails({ scan }: { scan: SkillSafetyScan | null }) {
 
 /**
  * Evaluation generation (model drafts → evaluator validates → model executes → evaluator
- * scores) and SkillSpector safety results for one skill.
+ * scores) and security analysis results for one skill.
  */
 export function SkillAutomationPanel({ skillId }: { skillId: string }) {
   const [automation, setAutomation] = useState<SkillAutomation | null>(null);
@@ -249,7 +249,7 @@ export function SkillAutomationPanel({ skillId }: { skillId: string }) {
           <div className="col" style={{ gap: 2 }}>
             <div className="panel-title">Evaluation generation</div>
             <span className="subtle" style={{ fontSize: 11.5 }}>
-              {automation?.services.generationModel ?? "NVIDIA NIM"} drafts and runs cases · {"Independent evaluation judge"} validates and scores
+              Evaluation model drafts and runs cases · independent evaluation judge validates and scores
             </span>
           </div>
           {automation && (
@@ -283,7 +283,7 @@ export function SkillAutomationPanel({ skillId }: { skillId: string }) {
         <div className="panel-hd">
           <div className="col" style={{ gap: 2 }}>
             <div className="panel-title">Skill safety</div>
-            <span className="subtle" style={{ fontSize: 11.5 }}>NVIDIA SkillSpector · prompt injection, exfiltration, excessive agency, dangerous code, supply chain</span>
+            <span className="subtle" style={{ fontSize: 11.5 }}>Security assessment · prompt injection, exfiltration, excessive agency, dangerous code, supply chain</span>
           </div>
         </div>
         <div className="panel-bd">

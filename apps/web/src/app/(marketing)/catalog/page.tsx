@@ -60,8 +60,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
             Skills worth <em>trusting</em>.
           </h1>
           <p className="page-lede">
-            Agent skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other reputable sources. Savant scans each one with
-            NVIDIA SkillSpector and evaluates it live, with an LLM drafting and running test cases and Jev validating and scoring them.
+            Agent skills from Anthropic, OpenAI, skills.sh, ClawHub, SkillsMP and other reputable sources. Savant assesses them for security risks and evaluates model-generated test cases using independent scoring.
             Workspaces import any skill into their own repositories through a reviewed pull request. Every listing on each hub is
             enumerated; packages are fetched, scanned and evaluated most-popular first as daily capacity allows.
           </p>
@@ -119,7 +118,7 @@ export default async function CatalogPage({ searchParams }: { searchParams: Sear
                 <div className="cat-meta">
                   <span className="cat-badge" data-verdict={skill.verdict}>{skill.status === "listed" ? "Queued for analysis" : skill.status === "fetch_failed" ? "Fetch failed" : VERDICT_LABEL[skill.verdict]}</span>
                   {skill.evalScore !== null && <span>Live eval {Math.round(skill.evalScore)}/100</span>}
-                  {skill.riskScore !== null && <span>SkillSpector {skill.riskScore}/100 · {skill.safetyRecommendation?.replace(/_/g, " ").toLowerCase()} · {skill.safetySeverity?.toLowerCase()}</span>}
+                  {skill.riskScore !== null && <span>Security risk {skill.riskScore}/100 · {skill.safetyRecommendation?.replace(/_/g, " ").toLowerCase()} · {skill.safetySeverity?.toLowerCase()}</span>}
                 </div>
                 <h3>{skill.name}</h3>
                 {skill.description && <p>{skill.description}</p>}

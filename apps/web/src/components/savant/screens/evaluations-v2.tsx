@@ -10,16 +10,17 @@ import { UiV2EmptyState, UiV2Metric, UiV2PageHeader, UiV2StateBanner, UiV2Status
   UiV2TableViewport } from "@/components/savant/ui-v2";
 import { fetchEvaluationDashboard, fetchSkillList, fetchSkillSource } from "@/lib/control-plane-client";
 import { buildTenantAwareAppPath } from "@/lib/tenant-paths";
-import { listPersistedTestBenches } from "@/lib/test-bench-client";
+import { listPersistedTestBenches,TestBenchClientError } from "@/lib/test-bench-client";
 import type { TestBenchDefinition } from "@/server/test-bench/definition-contract";
 import { PersistedTestBenchCasesV2 } from "./persisted-test-bench-cases-v2";
+import { TestBenchAvailabilityNotice } from "./test-bench-availability-notice";
 import { evaluationLifecycle, visibleEvaluationRuns } from "@/lib/ui-v2-evaluations-model";
 import styles from "./evaluations-v2.module.css";
 
 type Inventory = {scope:string; phase:"loading"|"ready"; skills:readonly SkillListItem[]|null;
   dashboard:EvaluationDashboardPayload|null; errors:readonly string[]};
 type Definitions = {scope:string;skillId:string;phase:"loading"|"ready"|"error";
-  definitions:readonly TestBenchDefinition[]|null;error:string|null};
+  definitions:readonly TestBenchDefinition[]|null;error:TestBenchClientError|null};
 type Source = {scope:string;skillId:string;ready:boolean;source:SkillSourcePayload|null};
 const INIT:Inventory={scope:"",phase:"loading",skills:null,dashboard:null,errors:[]};
 const INIT_DEFS:Definitions={scope:"",skillId:"",phase:"loading",definitions:null,error:null};
@@ -73,7 +74,8 @@ export function EvaluationsV2() {
       setDefinitions({scope:slug,skillId,phase:suites.status==="fulfilled"?"ready":"error",
         definitions:suites.status==="fulfilled"?suites.value:null,
         error:suites.status==="rejected"?
-          "Saved suites unavailable. Production database/key activation may still be required.":null});
+          suites.reason instanceof TestBenchClientError?suites.reason:
+            new TestBenchClientError("Saved encrypted suites could not be loaded."):null});
       setSource({scope:slug,skillId,ready:true,
         source:indexed.status==="fulfilled"?indexed.value.data:null});
     });
@@ -118,8 +120,8 @@ export function EvaluationsV2() {
           </label>
           {visible.phase==="loading"?<p role="status">Loading workspace evaluations…</p>:
             selected===null?<UiV2EmptyState message="No indexed skills available. Connect a repository in Library first."/>:
-            saved.phase==="error"?<UiV2StateBanner state="unavailable"
-              label={saved.error??"Saved Test Bench could not be loaded."}/>:
+            saved.phase==="error"?<TestBenchAvailabilityNotice
+              error={saved.error} pathname={pathname} onRetry={()=>setReload(x=>x+1)}/>:
             tab==="datasets"?(
               saved.definitions===null?<p role="status">Loading saved dataset cases…</p>:
               saved.definitions.length===0?<UiV2EmptyState message="No saved suite case datasets for this skill."/>:
@@ -138,10 +140,14 @@ export function EvaluationsV2() {
                   pathname={pathname} readOnly={!canAuthor}/>
               </>
             )}
-          <p className={styles.note}>Reference dataset catalog is not available from the production API.
-            Cases belong to encrypted, revisioned suites; no workspace-wide dataset inventory is inferred.
-            Estimated run cost is not a provider billing receipt. Runtime/Test Bench activation may be unavailable
-            until production key and schema recovery gates complete.</p>
+          {tab==="datasets"&&saved.phase==="ready"?<p className={styles.note}>
+            Saved datasets are case collections inside encrypted, revisioned suites
+            for the selected skill. A workspace-wide reference dataset inventory
+            is not available from the service.</p>:null}
+          {tab==="suites"&&saved.phase==="ready"?<p className={styles.note}>
+            Indexed benchmark results are historical scorecards. Actual Test Bench
+            execution and provider costs require separate confirmed run evidence;
+            estimated usage is not an invoice.</p>:null}
         </div>
         <aside className={styles.aside}>
           <h2>Coverage by tier</h2>

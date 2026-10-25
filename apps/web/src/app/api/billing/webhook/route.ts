@@ -196,11 +196,18 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
   if (stripeSubscriptionId) {
     const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    if (subscription.status !== "trialing" && subscription.status !== "active") {
+      throw new Error("checkout_subscription_not_active");
+    }
     const primaryItem = subscription.items.data[0];
     resolvedCycle = resolveBillingCycleFromStripeInterval(primaryItem?.price.recurring?.interval);
     resolvedSeats = typeof primaryItem?.quantity === "number"
       ? normalizeSeatCount(primaryItem.quantity, onboardingSession?.seats ?? 1)
       : null;
+  }
+
+  if (!stripeSubscriptionId || session.status !== "complete") {
+    throw new Error("checkout_subscription_unconfirmed");
   }
 
   const provisionTenant = extractProvisionTenantInput(session, {
@@ -234,6 +241,7 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
 
     const primaryItem = syncedSubscription.items.data[0];
     await syncBillingSubscriptionState({
+      allowReplacement: true,
       organizationId: provisionedTenant.organizationId,
       stripeCustomerId: provisionedTenant.stripeCustomerId,
       stripeSubscriptionId: syncedSubscription.id,
@@ -259,17 +267,20 @@ async function handleSubscriptionChanged(subscription: Stripe.Subscription) {
     return;
   }
 
-  const primaryItem = subscription.items.data[0];
+  // Re-fetch current Stripe state instead of applying an event snapshot.
+  // A delayed created/updated event must not restore an already-canceled plan.
+  const current = await stripe!.subscriptions.retrieve(subscription.id);
+  const primaryItem = current.items.data[0];
 
   await syncBillingSubscriptionState({
-    organizationId: normalizeOptionalString(subscription.metadata?.tenantId),
-    stripeCustomerId: typeof subscription.customer === "string"
-      ? subscription.customer
-      : subscription.customer?.id ?? null,
-    stripeSubscriptionId: subscription.id,
+    organizationId: normalizeOptionalString(current.metadata?.tenantId),
+    stripeCustomerId: typeof current.customer === "string"
+      ? current.customer
+      : current.customer?.id ?? null,
+    stripeSubscriptionId: current.id,
     stripePriceId: primaryItem?.price.id ?? null,
-    status: subscription.status,
-    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    status: current.status,
+    cancelAtPeriodEnd: current.cancel_at_period_end,
     cycle: resolveBillingCycleFromStripeInterval(primaryItem?.price.recurring?.interval),
     seats: typeof primaryItem?.quantity === "number"
       ? normalizeSeatCount(primaryItem.quantity, 1)

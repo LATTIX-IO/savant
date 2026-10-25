@@ -285,8 +285,12 @@ export async function POST(request: Request) {
       mode: "subscription" as const,
       line_items: [checkoutLineItemFor(validatedDraft.value.cycle, validatedDraft.value.seats)],
       // 14-day free trial — matches the landing page promise.
+      // No card is required during the 14-day trial. Without a payment
+      // method at trial expiry, Stripe cancels the subscription and access ends.
+      payment_method_collection: "if_required" as const,
       subscription_data: {
         trial_period_days: 14,
+        trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } },
         metadata: correlatedMetadata,
       },
       // Allow promo codes; never hurts conversion.

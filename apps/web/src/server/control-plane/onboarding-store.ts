@@ -1,5 +1,7 @@
 import "server-only";
 
+import { shouldSyncSubscription } from "@/lib/billing-subscription";
+
 import {
   createCheckoutIdempotencyKey,
   normalizeSeatCount,
@@ -84,6 +86,7 @@ export type SubscriptionStateInput = {
   cancelAtPeriodEnd: boolean;
   cycle: BillingCycle | null;
   seats: number | null;
+  allowReplacement?: boolean;
 };
 
 function toIsoString(value: Date | string): string {
@@ -617,9 +620,10 @@ export async function claimWebhookEvent(
     set
       status = 'processing',
       last_error = null,
-      processed_at = null
+      processed_at = null,
+      created_at = now()
     where stripe_event_id = ${stripeEventId}
-      and status = 'failed'
+      and (status = 'failed' or (status = 'processing' and created_at < now() - interval '10 minutes'))
     returning stripe_event_id
   `;
 
@@ -1064,14 +1068,22 @@ export async function syncBillingSubscriptionState(
     billing_cycle: BillingCycle;
     seat_count: number;
     stripe_customer_id: string;
+    stripe_subscription_id: string;
   }[]>`
-    select billing_cycle, seat_count, stripe_customer_id
+    select billing_cycle, seat_count, stripe_customer_id, stripe_subscription_id
     from billing_subscriptions
     where organization_id = ${organizationId}
     limit 1
   `;
 
   const existingRow = existing[0];
+  if (existingRow && !shouldSyncSubscription({
+    stripeSubscriptionId: existingRow.stripe_subscription_id,
+    stripeCustomerId: existingRow.stripe_customer_id,
+  }, {
+    stripeSubscriptionId: input.stripeSubscriptionId,
+    stripeCustomerId: input.stripeCustomerId ?? existingRow.stripe_customer_id,
+  }, input.allowReplacement === true)) return;
   const seatCount = normalizeSeatCount(input.seats ?? existingRow?.seat_count ?? 1, 1);
   const billingCycle = input.cycle ?? existingRow?.billing_cycle ?? "annual";
   const stripeCustomerId = input.stripeCustomerId ?? existingRow?.stripe_customer_id ?? null;
@@ -1079,6 +1091,14 @@ export async function syncBillingSubscriptionState(
   if (!stripeCustomerId) {
     return;
   }
+
+  const linked = await sql<{ stripe_customer_id: string }[]>`
+    select stripe_customer_id from billing_accounts
+    where organization_id = ${organizationId}
+      and stripe_customer_id = ${stripeCustomerId}
+    limit 1
+  `;
+  if (linked.length === 0) return;
 
   await sql`
     insert into billing_subscriptions (
@@ -1111,5 +1131,8 @@ export async function syncBillingSubscriptionState(
       seat_count = excluded.seat_count,
       cancel_at_period_end = excluded.cancel_at_period_end,
       updated_at = now()
+    where billing_subscriptions.stripe_customer_id = excluded.stripe_customer_id
+      and (billing_subscriptions.stripe_subscription_id = excluded.stripe_subscription_id
+           or ${input.allowReplacement === true})
   `;
 }

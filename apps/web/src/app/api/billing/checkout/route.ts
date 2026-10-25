@@ -223,7 +223,7 @@ export async function POST(request: Request) {
   try {
     if (billingReady.required) {
       const expected = process.env.STRIPE_EXPECTED_ACCOUNT_ID;
-      const account = await stripeClient.accounts.retrieve();
+      const account = await stripeClient.accounts.retrieve(expected!);
       if (account.id !== expected || !account.charges_enabled) {
         console.error("[billing/checkout] merchant account not authorized for live checkout");
         return NextResponse.json(

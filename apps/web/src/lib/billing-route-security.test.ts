@@ -6,7 +6,7 @@ const load = (relative: string) => readFileSync(new URL(relative, import.meta.ur
 
 test("tenant admin role derives from all organization users before matching the actor", () => {
   const source = load("../server/control-plane/tenant-authorization.ts");
-  const cte = source.split("with ordered_users as (")[1]?.split(")")[0] ?? "";
+  const cte = source.split("with ordered_users as (")[1]?.split("    select\n      ordered_users.id")[0] ?? "";
   assert.ok(cte.includes("row_number() over"), "must rank organization members");
   assert.ok(!cte.includes("users.external_subject ="), "must not rank only current actor");
   assert.match(source, /where ordered_users\.external_subject = /, "must filter actor after ranking");

@@ -16,10 +16,25 @@ Required **production-only** Vercel settings for `savant-web`:
 | --- | --- |
 | `SAVANT_LIVE_CHECKOUT_ENABLED` | `true` **only after all checks are met** |
 | `STRIPE_EXPECTED_ACCOUNT_ID` | Savant Stripe `acct_...` (not the Lattix account) |
-| `STRIPE_SECRET_KEY` | Savant live restricted/secret key (encrypted) |
+| `STRIPE_SECRET_KEY` | Savant `rk_live_...` restricted key (preferred), or `sk_live_...`; store as sensitive |
 | `STRIPE_WEBHOOK_SECRET` | Signing secret for **Savant** live webhook (encrypted) |
 | `STRIPE_PRICE_ID_MONTHLY` | Savant active recurring USD $1/seat/month |
 | `STRIPE_PRICE_ID_YEARLY` | Savant active recurring USD $10/seat/year |
+
+### Restricted API key permissions
+
+Production `STRIPE_SECRET_KEY` can be a restricted `rk_live_` key. Stripe SDK authentication accepts restricted keys, but individual operations must be authorized. Grant only:
+
+- **Account: Read** — `GET /v1/account` to bind credentials to the expected Savant merchant, not a connected account.
+- **Prices: Read** — verify both live billing prices before checkout.
+- **Checkout Sessions: Write** — create hosted subscription checkout sessions.
+- **Customers: Write** — update tenant correlation metadata after checkout.
+- **Subscriptions: Read + Write** — retrieve subscription item data and attach tenant metadata.
+- **Customer Portal: Write** — required only after the authenticated self-service billing portal is implemented.
+
+Stripe may group Read and Write permissions differently in the Dashboard; confirm the actual API calls against the key's permissions before activation. Do **not** grant refunds, payouts, transfers, Connect account management, or broad unrestricted access for this application. A forbidden merchant-read request returns checkout-unavailable without creating a persistent onboarding checkout row.
+
+The key is live only if it begins `rk_live_` or `sk_live_`. `rk_test_` and `sk_test_` are test credentials. Do not paste or commit either type of key. Test Stripe's account verification and both price lookup operations with a purpose-built restricted key before production activation.
 
 Existing `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID` values may belong to a prior account. They are intentionally not used for production onboarding after this change. Rotate or remove stale credentials once confirmed; do not copy production credentials into `savant-staging`.
 

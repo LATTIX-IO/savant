@@ -52,11 +52,11 @@ async function requireTenantAdminActorRow(
       select
         users.id,
         users.email,
+        users.external_subject,
+        users.status,
         row_number() over (order by users.created_at asc, users.email asc) = 1 as is_first_member
       from users
       where users.organization_id = ${context.tenant.organizationId}
-        and users.external_subject = ${context.identity.subject}
-        and users.status = 'active'
     )
     select
       ordered_users.id,
@@ -69,6 +69,8 @@ async function requireTenantAdminActorRow(
     from ordered_users
     left join group_memberships on group_memberships.user_id = ordered_users.id
     left join groups on groups.id = group_memberships.group_id
+    where ordered_users.external_subject = ${context.identity.subject}
+      and ordered_users.status = 'active'
     group by ordered_users.id, ordered_users.email, ordered_users.is_first_member
     limit 1
   `;

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
+import { liveCheckoutReadiness } from "@/lib/stripe-live-config";
 import {
   buildCheckoutClientReferenceId,
   buildOnboardingSuccessPath,
@@ -99,6 +100,14 @@ export async function POST(request: Request) {
         "checkout_unavailable",
         "Checkout is not available right now. Please try again later.",
       ),
+      { status: 503 },
+    );
+  }
+  const billingReady = liveCheckoutReadiness();
+  if (!runtimeAccess.isSandbox && !billingReady.ready) {
+    console.error("[billing/checkout] live checkout prerequisites missing:", billingReady.missing.join(", "));
+    return NextResponse.json(
+      createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
       { status: 503 },
     );
   }
@@ -212,6 +221,34 @@ export async function POST(request: Request) {
   }
 
   try {
+    if (billingReady.required) {
+      const expected = process.env.STRIPE_EXPECTED_ACCOUNT_ID;
+      const account = await stripeClient.accounts.retrieve();
+      if (account.id !== expected || !account.charges_enabled) {
+        console.error("[billing/checkout] merchant account not authorized for live checkout");
+        return NextResponse.json(
+          createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+          { status: 503 },
+        );
+      }
+      for (const [cycle, amount, interval] of [
+        ["monthly", 100, "month"],
+        ["annual", 1000, "year"],
+      ] as const) {
+        const price = await stripeClient.prices.retrieve(
+          process.env[cycle === "monthly" ? "STRIPE_PRICE_ID_MONTHLY" : "STRIPE_PRICE_ID_YEARLY"]!,
+        );
+        if (!price.active || price.livemode !== true || price.currency !== "usd"
+          || price.unit_amount !== amount || price.recurring?.interval !== interval
+          || price.type !== "recurring") {
+          console.error("[billing/checkout] production Stripe price validation failed:", cycle);
+          return NextResponse.json(
+            createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+            { status: 503 },
+          );
+        }
+      }
+    }
     const successUrl = `${baseUrl}${buildOnboardingSuccessPath({
       sessionId: "{CHECKOUT_SESSION_ID}",
       onboardingSessionId: onboardingSession?.id ?? null,

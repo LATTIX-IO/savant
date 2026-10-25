@@ -23,6 +23,9 @@ test("production checkout is disabled by default", () => {
 
 test("only explicitly configured live merchant and prices pass production readiness", () => {
   assert.deepEqual(liveCheckoutReadiness(live), { required: true, ready: true, missing: [] });
+  assert.deepEqual(liveCheckoutReadiness({ ...live, STRIPE_SECRET_KEY: "rk_live_fixture" }), { required: true, ready: true, missing: [] });
+  assert.equal(liveCheckoutReadiness({ ...live, STRIPE_SECRET_KEY: "rk_test_fixture" }).ready, false);
+  assert.equal(liveCheckoutReadiness({ ...live, STRIPE_SECRET_KEY: "rk_live_" }).ready, false);
   assert.equal(liveCheckoutReadiness({ ...live, STRIPE_SECRET_KEY: "sk_test_example" }).ready, false);
   assert.equal(liveCheckoutReadiness({ ...live, STRIPE_EXPECTED_ACCOUNT_ID: "acct_" }).ready, false);
   assert.equal(liveCheckoutReadiness({ ...live, STRIPE_PRICE_ID_YEARLY: "price_invalid-hyphen" }).ready, false);

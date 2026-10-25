@@ -229,6 +229,10 @@ test("isProtectedDashboardPath exempts only self-authenticated telemetry and wor
   assert.equal(isProtectedDashboardPath("/api/skill-runs-export"), true);
   assert.equal(isProtectedDashboardPath("/api/internal"), true);
   assert.equal(isProtectedDashboardPath("/api/intelligence"), true);
+  assert.equal(isProtectedDashboardPath("/api/billing/webhook"), false);
+  assert.equal(isProtectedDashboardPath("/api/billing/readiness"), false);
+  assert.equal(isProtectedDashboardPath("/api/billing/checkout"), true);
+  assert.equal(isProtectedDashboardPath("/api/billing/portal"), true);
   assert.equal(isProtectedDashboardPath("/api/improvements/abc/review"), true);
 });
 

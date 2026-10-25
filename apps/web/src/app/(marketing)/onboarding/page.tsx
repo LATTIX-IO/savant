@@ -12,6 +12,7 @@ import {
 } from "@/lib/onboarding-runtime";
 import { buildOnboardingSuccessPath, normalizeWorkspaceSlug, shouldResumeOnboardingCheckout } from "@/lib/onboarding";
 import { stripePricingTableId, stripePublishableKey } from "@/lib/stripe";
+import { isProductionBillingDeployment } from "@/lib/stripe-live-config";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 import { OnboardingWizard } from "@/components/marketing/onboarding-wizard";
 import { isControlPlaneDatabaseConfigured } from "@/server/control-plane/database";
@@ -112,8 +113,10 @@ export default async function OnboardingPage({
     ?? (viewer.isAuthenticated
       ? normalizeWorkspaceSlug(viewer.displayName) ?? "workspace"
       : "");
-  const publishableKey = stripePublishableKey();
-  const pricingTableId = stripePricingTableId();
+  // Production must use Savant-owned, authenticated server-side Checkout.
+  // A legacy pricing-table embed cannot enforce merchant-account and price verification.
+  const publishableKey = isProductionBillingDeployment() ? null : stripePublishableKey();
+  const pricingTableId = isProductionBillingDeployment() ? null : stripePricingTableId();
 
   return (
     <OnboardingWizard

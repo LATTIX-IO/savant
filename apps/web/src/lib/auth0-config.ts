@@ -271,6 +271,9 @@ export function buildAuthStatusHref({
 const SELF_AUTHENTICATED_API_PREFIXES = ["/api/skill-runs", "/api/internal/", "/api/public/", "/api/mcp"] as const;
 
 export function isSelfAuthenticatedApiPath(pathname: string): boolean {
+  // Stripe signs its own webhook calls and cannot present an Auth0 browser session.
+  // Readiness exposes only a boolean and is intentionally CDN-cacheable.
+  if (pathname === "/api/billing/webhook" || pathname === "/api/billing/readiness") return true;
   return SELF_AUTHENTICATED_API_PREFIXES.some((prefix) =>
     prefix.endsWith("/")
       ? pathname.startsWith(prefix)

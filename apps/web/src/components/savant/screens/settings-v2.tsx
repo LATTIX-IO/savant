@@ -5,6 +5,7 @@ import type {Route} from "next";
 import {usePathname} from "next/navigation";
 import {useEffect,useState,type ReactNode} from "react";
 import type {WorkspaceSettingsPayload} from "@savant/types";
+import { BillingPortalButton } from "@/components/savant/billing-portal-button";
 import {inspectUiV2ProviderLanes} from "@/lib/ui-v2-provider-lanes";
 import {ProviderConnectionGuide} from "./provider-connection-guide";
 import {WorkspaceSetupChecklistV2} from "./workspace-setup-checklist-v2";
@@ -118,6 +119,7 @@ export function SettingsV2({settings,legacy}:{settings:WorkspaceSettingsPayload;
       <p className={styles.note}>No fabricated access-sync activity is displayed.</p>
     </>:tab==="billing"?<>
       <h2>Billing</h2>
+      <BillingPortalButton workspaceSlug={settings.general.workspaceSlug}/>
       <UiV2StateBanner state="warning"
         label="Billing changes and invoices require existing owner entitlements."/>
       <button type="button" className={styles.control} onClick={openEditor}>

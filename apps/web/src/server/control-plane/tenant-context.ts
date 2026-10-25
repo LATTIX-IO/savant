@@ -7,6 +7,8 @@ import {
   type AuthSessionUser,
 } from "@/lib/auth0-session";
 import { normalizeWorkspaceSlug } from "@/lib/onboarding";
+import { assessTenantBilling } from "@/lib/billing-entitlement";
+import { isProductionBillingDeployment } from "@/lib/stripe-live-config";
 import { buildTenantAppPath } from "@/lib/tenant-paths";
 
 import {
@@ -215,6 +217,7 @@ export async function resolvePreferredTenantAppPath(
 export async function resolveTenantMembershipForUser(
   user: AuthSessionUser | null | undefined,
   workspaceSlug: string,
+  options?: { allowInactiveBilling?: boolean },
 ): Promise<ResolvedTenantContext> {
   const normalizedWorkspaceSlug = normalizeTenantSlugOrThrow(workspaceSlug);
 
@@ -256,6 +259,34 @@ export async function resolveTenantMembershipForUser(
     );
   }
 
+  if (isProductionBillingDeployment() && !options?.allowInactiveBilling) {
+    const sql = getControlPlaneDatabase();
+    const billingRows = await sql<{
+      organization_created_at: Date | string;
+      stripe_customer_id: string | null;
+      stripe_mode: string | null;
+      subscription_status: string | null;
+    }[]>`
+      select organizations.created_at as organization_created_at,
+        billing_accounts.stripe_customer_id, billing_accounts.stripe_mode,
+        billing_subscriptions.status as subscription_status
+      from organizations
+      left join billing_accounts on billing_accounts.organization_id = organizations.id
+      left join billing_subscriptions on billing_subscriptions.organization_id = organizations.id
+      where organizations.id = ${tenant.organizationId}
+      limit 1
+    `;
+    const billing = billingRows[0];
+    const decision = assessTenantBilling(billing ? {
+      organizationCreatedAt: billing.organization_created_at,
+      stripeCustomerId: billing.stripe_customer_id,
+      stripeMode: billing.stripe_mode,
+      subscriptionStatus: billing.subscription_status,
+    } : null);
+    if (decision === "payment_required") {
+      throw new TenantContextError("subscription_inactive", "This workspace requires an active subscription.", 402);
+    }
+  }
   return {
     identity,
     tenant,

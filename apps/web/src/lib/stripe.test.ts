@@ -40,6 +40,8 @@ test("readConfiguredStripeEnvValue trims surrounding whitespace and quotes", () 
 test("stripeMode detects configured test and live environments", () => {
   assert.equal(stripeMode({ STRIPE_SECRET_KEY: "sk_test_example" }), "test");
   assert.equal(stripeMode({ STRIPE_SECRET_KEY: "sk_live_example" }), "live");
+  assert.equal(stripeMode({ STRIPE_SECRET_KEY: "rk_live_fixture" }), "live");
+  assert.equal(stripeMode({ STRIPE_SECRET_KEY: "rk_test_fixture" }), "test");
   assert.equal(stripeMode({ STRIPE_SECRET_KEY: '  "sk_test_example"\n' }), "test");
   assert.equal(
     stripeMode({ NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_test_example" }),

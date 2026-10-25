@@ -1,5 +1,6 @@
 "use client";
 import {useUiV2Mode} from "@/components/savant/ui-v2/mode";
+import { BillingPortalButton } from "@/components/savant/billing-portal-button";
 import {SettingsV2} from "./settings-v2";
 
 import type {
@@ -143,7 +144,7 @@ function ClassicSettingsScreen({
           {activeSection === "members" && <MembersSection members={settings.members} />}
           {activeSection === "security" && <SecuritySection settings={settings.security} />}
           {activeSection === "notifications" && <NotificationsSection settings={settings.notifications} />}
-          {activeSection === "billing" && <BillingSection settings={settings.billing} />}
+          {activeSection === "billing" && <BillingSection settings={settings.billing} workspaceSlug={settings.general.workspaceSlug} />}
         </div>
       </div>
     </div>
@@ -1680,7 +1681,7 @@ function NotificationsSection({ settings }: { settings: WorkspaceNotificationSet
   );
 }
 
-function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
+function BillingSection({ settings, workspaceSlug }: { settings: WorkspaceBillingSettings; workspaceSlug: string }) {
   const remainingSkills = settings.skillsIncluded != null
     ? Math.max(settings.skillsIncluded - settings.activeSkills, 0)
     : null;
@@ -1698,6 +1699,7 @@ function BillingSection({ settings }: { settings: WorkspaceBillingSettings }) {
         title="Plan"
         sub={[settings.planName, buildBillingCycleLabel(settings.billingCycle)].filter(Boolean).join(" · ") || settings.planName}
       >
+        <FormRow label="Billing management"><BillingPortalButton workspaceSlug={workspaceSlug} /></FormRow>
         <FormRow label="Current plan">
           <div className="row" style={{ gap: 10 }}>
             <span className="chip chip-ink">{settings.planName}</span>

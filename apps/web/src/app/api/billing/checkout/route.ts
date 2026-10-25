@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
+import { liveCheckoutReadiness } from "@/lib/stripe-live-config";
+import { verifyLiveBillingPreflight } from "@/lib/stripe-live-catalog";
 import {
   buildCheckoutClientReferenceId,
   buildOnboardingSuccessPath,
@@ -102,6 +104,22 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const billingReady = liveCheckoutReadiness();
+  if (!runtimeAccess.isSandbox && !billingReady.ready) {
+    console.error("[billing/checkout] live checkout prerequisites missing:", billingReady.missing.join(", "));
+    return NextResponse.json(
+      createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+      { status: 503 },
+    );
+  }
+  const stripeClient = stripe;
+  if (!runtimeAccess.isSandbox && billingReady.required) {
+    const readiness = await verifyLiveBillingPreflight(stripeClient);
+    if (readiness !== "ready") {
+      console.error("[billing/checkout] Stripe readiness check failed:", readiness);
+      return NextResponse.json(createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."), { status: 503 });
+    }
+  }
   const baseUrl = resolveCheckoutBaseUrl(request);
   const cancelUrl = `${baseUrl}/onboarding?cycle=${validatedDraft.value.cycle}&seats=${validatedDraft.value.seats}&cancelled=1`;
   const workspaceUrl = buildWorkspaceUrl(validatedDraft.value.workspaceSlug);
@@ -133,8 +151,6 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-
-  const stripeClient = stripe;
 
   if (runtimeAccess.isSandbox) {
     const outcome = sandboxCheckoutOutcome();
@@ -233,8 +249,12 @@ export async function POST(request: Request) {
       mode: "subscription" as const,
       line_items: [checkoutLineItemFor(validatedDraft.value.cycle, validatedDraft.value.seats)],
       // 14-day free trial — matches the landing page promise.
+      // No card is required during the 14-day trial. Without a payment
+      // method at trial expiry, Stripe cancels the subscription and access ends.
+      payment_method_collection: "if_required" as const,
       subscription_data: {
         trial_period_days: 14,
+        trial_settings: { end_behavior: { missing_payment_method: "cancel" as const } },
         metadata: correlatedMetadata,
       },
       // Allow promo codes; never hurts conversion.

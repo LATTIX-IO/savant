@@ -51,6 +51,10 @@ export default async function TenantWorkspaceLayout({
         redirect(`/signin?returnTo=${encodeURIComponent(buildTenantAppPath(workspaceSlug, "/dashboard"))}`);
       }
 
+      if (error.status === 402) {
+        redirect(`/billing/recover?workspaceSlug=${encodeURIComponent(workspaceSlug)}`);
+      }
+
       if (error.status === 404) {
         notFound();
       }

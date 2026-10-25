@@ -34,7 +34,7 @@ export function liveCheckoutReadiness(
   if (configured(env.SAVANT_LIVE_CHECKOUT_ENABLED)?.toLowerCase() !== "true") {
     missing.push("SAVANT_LIVE_CHECKOUT_ENABLED");
   }
-  if (!configured(env.STRIPE_SECRET_KEY)?.startsWith("sk_live_")) {
+  if (!(/^(sk|rk)_live_[A-Za-z0-9]+$/.test(configured(env.STRIPE_SECRET_KEY) ?? ""))) {
     missing.push("STRIPE_SECRET_KEY (live)");
   }
   if (!/^acct_[A-Za-z0-9]+$/.test(configured(env.STRIPE_EXPECTED_ACCOUNT_ID) ?? "")) {

@@ -17,7 +17,7 @@ export async function GET() {
   }
   const billing = await verifyLiveBillingPreflight(stripe);
   if (billing !== "ready" || !isControlPlaneDatabaseConfigured) {
-    return NextResponse.json({ ready: false }, { status: 503, headers });
+    return NextResponse.json({ ready: false, stage: billing !== "ready" ? billing : "database" }, { status: 503, headers });
   }
   try {
     const sql = getControlPlaneDatabase();
@@ -30,6 +30,6 @@ export async function GET() {
     const ready = Boolean(row?.billing_accounts && row.billing_subscriptions && row.billing_webhook_events);
     return NextResponse.json({ ready }, { status: ready ? 200 : 503, headers });
   } catch {
-    return NextResponse.json({ ready: false }, { status: 503, headers });
+    return NextResponse.json({ ready: false, stage: "database" }, { status: 503, headers });
   }
 }

@@ -6,7 +6,7 @@
     "db:migrate": "node ./scripts/apply-db-schema.mjs",
     "dev": "next dev",
     "build": "next build",
-    "vercel-build": "node --experimental-strip-types --test src/lib/billing-entitlement.test.ts src/lib/billing-subscription.test.ts src/lib/stripe-live-config.test.ts src/lib/stripe-merchant.test.ts src/lib/stripe.test.ts src/lib/billing-route-security.test.ts && node ./scripts/migrate-on-deploy.mjs && next build",
+    "vercel-build": "node --experimental-strip-types --test src/lib/billing-entitlement.test.ts src/lib/billing-subscription.test.ts src/lib/stripe-live-config.test.ts src/lib/stripe-merchant.test.ts src/lib/stripe.test.ts src/lib/billing-route-security.test.ts src/lib/auth0-config.test.ts && node ./scripts/migrate-on-deploy.mjs && next build",
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit"

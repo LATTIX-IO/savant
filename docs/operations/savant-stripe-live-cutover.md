@@ -1,58 +1,65 @@
-# Savant: Stripe live merchant cutover (PER-681)
+# Savant live billing — operational runbook (PER-681)
 
-Status: **blocked on Savant Stripe account authorization and live billing acceptance**.
+## Merchant and catalog
 
-## Ownership and isolation
+Legal entity: Lattix Technologies Corp. Customer-facing service: Savant.
 
-Lattix Technologies Corp. is the legal merchant; **Savant must use its own Stripe account**. Never copy credentials or product/price IDs from the existing corporate Lattix account or an earlier Connect test sandbox. No secrets are stored in Git.
+- Savant Stripe merchant: `acct_1UUUQuRXtgzihaET` — verified charges and payouts enabled, distinct from the Lattix merchant.
+- Live product: `prod_VVVsMOvk4P2oMl` (Savant Seat).
+- Monthly: `price_1UUUrERXtgzihaETqV0MC7DF`, USD $1/seat/month.
+- Annual: `price_1UUUrGRXtgzihaETyZiLSGlr`, USD $10/seat/year.
+- Live webhook: `we_1UUUrMRXtgzihaET9lQ9ZoKG`, `https://savantskills.app/api/billing/webhook`.
+- Stripe Customer Portal: `bpc_1UUW8NRXtgzihaETq3pxNZXc`; invoice history, payment method updates, cancel at period end, monthly/annual plan and seat-quantity changes (1–500 seats) enabled.
 
-## Implementation
+## Production environment
 
-Production onboarding uses the authenticated POST `/api/billing/checkout` route, which verifies live configuration before invoking Stripe and refuses the legacy embedded pricing table. Checkout verifies the active Stripe account ID and `charges_enabled` as well as both live catalog prices and their USD recurring amounts.
+In Vercel project `savant-web`, **production only**:
 
-Required **production-only** Vercel settings for `savant-web`:
-
-| Name | Value/source |
+| Variable | Value |
 | --- | --- |
-| `SAVANT_LIVE_CHECKOUT_ENABLED` | `true` **only after all checks are met** |
-| `STRIPE_EXPECTED_ACCOUNT_ID` | Savant Stripe `acct_...` (not the Lattix account) |
-| `STRIPE_SECRET_KEY` | Savant `rk_live_...` restricted key (preferred), or `sk_live_...`; store as sensitive |
-| `STRIPE_WEBHOOK_SECRET` | Signing secret for **Savant** live webhook (encrypted) |
-| `STRIPE_PRICE_ID_MONTHLY` | Savant active recurring USD $1/seat/month |
-| `STRIPE_PRICE_ID_YEARLY` | Savant active recurring USD $10/seat/year |
+| `STRIPE_EXPECTED_ACCOUNT_ID` | `acct_1UUUQuRXtgzihaET` |
+| `STRIPE_PRICE_ID_MONTHLY` | `price_1UUUrERXtgzihaETqV0MC7DF` |
+| `STRIPE_PRICE_ID_YEARLY` | `price_1UUUrGRXtgzihaETyZiLSGlr` |
+| `STRIPE_SECRET_KEY` | Sensitive Savant `rk_live_...` (preferred) or `sk_live_...` |
+| `STRIPE_WEBHOOK_SECRET` | Sensitive `whsec_...` for the *Savant live webhook* |
+| `SAVANT_LIVE_CHECKOUT_ENABLED` | `true` only for authorized live rollout; `false` for immediate checkout kill switch |
+| `APP_BASE_URL` | `https://savantskills.app` |
+| `DATABASE_URL` | Production PostgreSQL control plane (0001/0002+ migrations applied) |
 
-### Restricted API key permissions
+Never write secrets in this document, GitHub, logs or application responses. The old embedded pricing table and publishable key are excluded from production onboarding to prevent account mixing.
 
-Production `STRIPE_SECRET_KEY` can be a restricted `rk_live_` key. Stripe SDK authentication accepts restricted keys, but individual operations must be authorized. Grant only:
+## Restricted API key permissions
 
-- **Account: Read** — `GET /v1/account` to bind credentials to the expected Savant merchant, not a connected account.
-- **Prices: Read** — verify both live billing prices before checkout.
-- **Checkout Sessions: Write** — create hosted subscription checkout sessions.
-- **Customers: Write** — update tenant correlation metadata after checkout.
-- **Subscriptions: Read + Write** — retrieve subscription item data and attach tenant metadata.
-- **Customer Portal: Write** — required only after the authenticated self-service billing portal is implemented.
+Stripe's production key may be restricted. Required operations:
 
-Stripe may group Read and Write permissions differently in the Dashboard; confirm the actual API calls against the key's permissions before activation. Do **not** grant refunds, payouts, transfers, Connect account management, or broad unrestricted access for this application. A forbidden merchant-read request returns checkout-unavailable without creating a persistent onboarding checkout row.
+- **Account Read**: `GET /v1/account` to verify the key belongs to Savant, rather than its parent merchant.
+- **Prices Read**: fetch and validate both active recurring products and amounts.
+- **Checkout Sessions Write**: initiate hosted subscription onboarding.
+- **Customers Write**: add verified tenant metadata after checkout.
+- **Subscriptions Read + Write**: retrieve current subscription state and attach tenant metadata.
+- **Customer Portal Sessions Write**: create short-lived authenticated portal sessions.
 
-The key is live only if it begins `rk_live_` or `sk_live_`. `rk_test_` and `sk_test_` are test credentials. Do not paste or commit either type of key. Test Stripe's account verification and both price lookup operations with a purpose-built restricted key before production activation.
+No payout, refund, transfer, account creation, Connect, or general unrestricted access is necessary. If one of these checks fails, Checkout fails closed with 503. Verify the key begins `rk_live_`, not `rk_test_`.
 
-Existing `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` and `NEXT_PUBLIC_STRIPE_PRICING_TABLE_ID` values may belong to a prior account. They are intentionally not used for production onboarding after this change. Rotate or remove stale credentials once confirmed; do not copy production credentials into `savant-staging`.
+## Runtime contract
 
-Register a Savant live webhook at `https://savantskills.app/api/billing/webhook`. Minimum existing subscriptions lifecycle events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`. Ensure the URL matches the actual public production hostname and that database schema `0002_onboarding.sql` and subsequent migrations have been applied.
+1. A signed-in user creates a workspace draft. Production Checkout validates the merchant, price catalog, and persistent database **before** creating a session.
+2. Stripe-hosted checkout creates a subscription with **14-day trial, no card required**. At trial expiry without a payment method, Stripe cancels the subscription rather than charging without authorization.
+3. Stripe posts signed `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted` to `/api/billing/webhook`. The Auth0 proxy permits this route; the handler verifies `stripe-signature` on the raw body, claims event IDs, provisions tenant metadata, and reconciles the *current* subscription state.
+4. Newly created tenants are authorized only if the linked live subscription is `trialing` or `active`. Statuses `canceled`, `unpaid`, `past_due`, `paused`, and pending sync fail closed.
+5. Previously existing synthetic workspaces created before `2026-10-25T18:00:00Z` with no live billing account remain grandfathered. **This cutoff must not roll forward.** Never permit newly created, unbilled organizations via the legacy exception.
+6. Authenticated owners/admins access `POST /api/billing/portal` from Classic or v2 Settings; inactive subscriptions can access `/billing/recover` without bypassing tenant role checks. Customer Portal holds the payment method, invoice and cancellation controls.
+7. `GET /api/billing/readiness` is a CDN-cacheable, nonsecret readiness endpoint. 200 means the deployed live key can verify the Savant account and catalog and the billing DB tables exist; 503 means no-go. This does not by itself prove webhook delivery or an actual charged card.
 
-The 14-day trial remains unchanged. The current onboarding flow collects payment information by default during Checkout despite marketing copy suggesting no card requirement. Resolve the intended policy and update copy or Checkout behavior before external launch.
+## Acceptance evidence and next checks
 
-## Remaining release blockers
-
-1. Connect **Savant**, not Lattix, in Stripe integrations and confirm its `acct_` account identity, verification/charges capability, settlement/payout setup, and actual products/prices.
-2. Configure production keys and webhook secret through Vercel's protected secret storage. Set `SAVANT_LIVE_CHECKOUT_ENABLED=true` only after acceptance.
-3. Complete authorization and entitlement enforcement: current tenant membership is not gated on paid/trialing subscription; billing-state read model is not an access control.
-4. Implement tenant-owner-scoped Stripe Customer Portal and cancellation/downgrade UX.
-5. Prove webhook replay, reordered events, payment failure, expired trial, tenant isolation, and fresh subscription provisioning with exact-head tests.
-6. Run **live** low-value/authorized payment acceptance, refund/cancel cleanup, Stripe Dashboard reconciliation and post-deployment logs before claiming payment readiness.
-
-Security: current webhook uses verified raw-body signatures, but sequence ordering and stale-subscription overwrite still require hardening. Do not enable external customer payments before addressing these controls.
+- Exact-head Vercel Next.js build, TypeScript, and billing-focused Node tests must pass.
+- Production readiness endpoint must return **HTTP 200** after the production environment is activated and redeployed.
+- Exercise fresh authenticated onboarding, successful cardless trial, valid webhook processing, tenant association, card addition via portal, recurring invoice and cancellation. Check duplicate/reordered webhook delivery and cross-tenant unauthorized portal access.
+- Reconcile actual live payment and refund/cancellation in Savant Stripe (no test cards in live mode). **Do not claim successful live payment acceptance without evidence of a settled live charge.**
+- Known follow-up: automated self-service restart of a *fully canceled* subscription is not yet available; the recovery page directs users to support. Subscription portal can manage active/trialing subscriptions and cancel at period end.
+- Separately review tax registration / Stripe Tax configuration, customer receipt branding and dispute/support processes before broad public marketing.
 
 ## Recovery
 
-For a suspected merchant mix-up or broken payments, set `SAVANT_LIVE_CHECKOUT_ENABLED=false` (or remove it), redeploy `savant-web` and verify new Checkout sessions return HTTP 503. Do **not** disable the webhook until existing subscriber obligations and event queues have been reconciled.
+To block new paid enrollments quickly, set `SAVANT_LIVE_CHECKOUT_ENABLED=false` in `savant-web` production and redeploy. Do **not** disable the webhook or delete subscription data; existing customers still require webhook reconciliation, portal access and customer support. If a deployment is defective, use a verified Vercel production rollback to the previous working deployment, and inspect runtime logs without revealing keys.

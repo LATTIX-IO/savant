@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { auth0 } from "@/lib/auth0";
 import { liveCheckoutReadiness } from "@/lib/stripe-live-config";
+import { verifyStripeMerchant } from "@/lib/stripe-merchant";
 import {
   buildCheckoutClientReferenceId,
   buildOnboardingSuccessPath,
@@ -15,6 +16,7 @@ import {
 import {
   checkoutLineItemFor,
   isStripeConfigured,
+  readConfiguredStripeEnvValue,
   resolveCheckoutBaseUrl,
   stripe,
   stripeMode,
@@ -111,6 +113,49 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
+  const stripeClient = stripe;
+  // Authenticate merchant identity and catalog BEFORE writing a checkout_pending
+  // onboarding row. Failure must not strand users on the success/waiting screen.
+  if (!runtimeAccess.isSandbox && billingReady.required && stripeClient) {
+    try {
+      if (billingReady.required) {
+        const merchantResult = await verifyStripeMerchant({
+          secretKey: readConfiguredStripeEnvValue(process.env, "STRIPE_SECRET_KEY")!,
+          expectedAccountId: process.env.STRIPE_EXPECTED_ACCOUNT_ID!,
+        });
+        if (merchantResult !== "verified") {
+          console.error("[billing/checkout] merchant verification failed:", merchantResult);
+          return NextResponse.json(
+            createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+            { status: 503 },
+          );
+        }
+        for (const [cycle, amount, interval] of [
+          ["monthly", 100, "month"],
+          ["annual", 1000, "year"],
+        ] as const) {
+          const price = await stripeClient.prices.retrieve(
+            process.env[cycle === "monthly" ? "STRIPE_PRICE_ID_MONTHLY" : "STRIPE_PRICE_ID_YEARLY"]!,
+          );
+          if (!price.active || price.livemode !== true || price.currency !== "usd"
+            || price.unit_amount !== amount || price.recurring?.interval !== interval
+            || price.type !== "recurring") {
+            console.error("[billing/checkout] production Stripe price validation failed:", cycle);
+            return NextResponse.json(
+              createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+              { status: 503 },
+            );
+          }
+        }
+      }
+    } catch (error) {
+      console.error("[billing/checkout] live merchant preflight failed:", summarizeCheckoutError(error));
+      return NextResponse.json(
+        createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
+        { status: 503 },
+      );
+    }
+  }
   const baseUrl = resolveCheckoutBaseUrl(request);
   const cancelUrl = `${baseUrl}/onboarding?cycle=${validatedDraft.value.cycle}&seats=${validatedDraft.value.seats}&cancelled=1`;
   const workspaceUrl = buildWorkspaceUrl(validatedDraft.value.workspaceSlug);
@@ -142,8 +187,6 @@ export async function POST(request: Request) {
       { status: 503 },
     );
   }
-
-  const stripeClient = stripe;
 
   if (runtimeAccess.isSandbox) {
     const outcome = sandboxCheckoutOutcome();
@@ -221,34 +264,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    if (billingReady.required) {
-      const expected = process.env.STRIPE_EXPECTED_ACCOUNT_ID;
-      const account = await stripeClient.accounts.retrieve(expected!);
-      if (account.id !== expected || !account.charges_enabled) {
-        console.error("[billing/checkout] merchant account not authorized for live checkout");
-        return NextResponse.json(
-          createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
-          { status: 503 },
-        );
-      }
-      for (const [cycle, amount, interval] of [
-        ["monthly", 100, "month"],
-        ["annual", 1000, "year"],
-      ] as const) {
-        const price = await stripeClient.prices.retrieve(
-          process.env[cycle === "monthly" ? "STRIPE_PRICE_ID_MONTHLY" : "STRIPE_PRICE_ID_YEARLY"]!,
-        );
-        if (!price.active || price.livemode !== true || price.currency !== "usd"
-          || price.unit_amount !== amount || price.recurring?.interval !== interval
-          || price.type !== "recurring") {
-          console.error("[billing/checkout] production Stripe price validation failed:", cycle);
-          return NextResponse.json(
-            createApiErrorResponse("checkout_unavailable", "Checkout is temporarily unavailable."),
-            { status: 503 },
-          );
-        }
-      }
-    }
     const successUrl = `${baseUrl}${buildOnboardingSuccessPath({
       sessionId: "{CHECKOUT_SESSION_ID}",
       onboardingSessionId: onboardingSession?.id ?? null,

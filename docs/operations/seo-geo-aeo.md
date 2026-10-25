@@ -45,3 +45,21 @@ INDEXNOW_KEY=... pnpm seo:indexnow      # ping Bing/Yandex/Seznam/Naver with the
 1. **Google Search Console.** Add the `savantskills.app` property with a DNS TXT record (in Cloudflare once the zone is live) or `GOOGLE_SITE_VERIFICATION`, then submit `https://savantskills.app/sitemap.xml`.
 2. **Bing Webmaster Tools.** Import from Search Console or use `BING_SITE_VERIFICATION`, then submit the sitemap.
 3. **Validate structured data** with the [Rich Results Test](https://search.google.com/test/rich-results) and the [Schema Markup Validator](https://validator.schema.org/).
+
+## Search-intent acquisition (October 2026)
+
+The positioning hierarchy is **AI agent skill management** (primary category), **AI skill evaluation and regression testing** (quality-engineering intent), and **enterprise AI skill governance** (enterprise purchasing intent). "Organizational skills" remains a brand-level concept, but should not be the only term visible to a searcher unfamiliar with Savant. Keyword demand is a hypothesis until verified with Search Console impressions and actual conversion signals; do not claim measured search volume.
+
+The following answer-first pages use `src/lib/seo-guides.ts` as their shared source for visible HTML, titles/descriptions, article schema, and `llms-full.txt`:
+
+- `/ai-agent-skill-management` — registry, SKILL.md source control, owners, versions, multi-platform deployment boundaries.
+- `/ai-skill-evaluation` — rubric cases, holdouts, paired baselines, failure severity, release gates.
+- `/enterprise-ai-skill-governance` — authorization, provenance, evidence, approved versions, platform coverage limits.
+
+Each page links to related guides and a real docs/catalog or signup CTA. The homepage, docs and footer link back to the guides. Article structured data must agree with the visible text. No invented statistics, fake ratings, or unsupported provider-wide integration guarantees.
+
+`/signup` is a redirect into Auth0/onboarding, **not an indexable content page**: it is intentionally excluded from `sitemap.xml` and receives `noindex` via headers and metadata. Preserve its conversion links.
+
+**After deploy:** Verify each page is HTTP 200 with a self-canonical, descriptive title, HTML body text, JSON-LD, and a sitemap entry; confirm `/signup` is excluded and noindex. Submit updated URLs through IndexNow after verifying key registration. Search Console and Bing ownership require explicit account access and may remain open operations.
+
+**30-day acquisition KPIs:** nonbranded clicks and impressions by landing page; indexed-versus-submitted URLs; answer-engine referral sessions; guide-to-signup clicks; and trial activations attributed to guide entry. Do not infer AI-answer citations from ordinary pageviews.

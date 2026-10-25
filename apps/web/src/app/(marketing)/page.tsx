@@ -99,6 +99,18 @@ export default async function LandingPage() {
       <DistributionMap />
       <EnterpriseTrust />
       <Pricing signedIn={signedIn} />
+      <section className="section section-alt" aria-labelledby="agent-guides-title">
+        <div className="shell">
+          <div className="sh-meta"><span className="sh-index">Guides</span><span className="sh-label">Manage and evaluate AI agent skills</span></div>
+          <h2 id="agent-guides-title" className="display-2" style={{ marginTop: 28 }}>Make agent skills measurable, not just reusable.</h2>
+          <p className="sh-copy" style={{ maxWidth: 780 }}>Start with the practical operating model: a canonical skill registry, reliable evaluation cases, and policy-controlled releases. These guides explain the controls and the integration boundaries.</p>
+          <ul className="doc-points" style={{ marginTop: 30 }}>
+            <li><Link href="/ai-agent-skill-management" className="text-link">AI agent skill management and version control</Link></li>
+            <li><Link href="/ai-skill-evaluation" className="text-link">AI skill evaluation and regression testing</Link></li>
+            <li><Link href="/enterprise-ai-skill-governance" className="text-link">Enterprise AI skill governance</Link></li>
+          </ul>
+        </div>
+      </section>
       <FAQ />
       <FinalCTA signedIn={signedIn} />
     </SiteFrame>

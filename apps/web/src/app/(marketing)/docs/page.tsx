@@ -56,6 +56,14 @@ export default async function DocsPage() {
                 <p>{guide.body}</p>
               </article>
             ))}
+            <article className="doc-section">
+              <h2 className="display-3">Explore the core practice</h2>
+              <ul className="doc-points">
+                <li><Link href="/ai-agent-skill-management">AI agent skill management</Link></li>
+                <li><Link href="/ai-skill-evaluation">Evaluating and regression-testing skills</Link></li>
+                <li><Link href="/enterprise-ai-skill-governance">Enterprise skill governance</Link></li>
+              </ul>
+            </article>
             <div className="section-cta">
               <Link
                 href={viewer.isAuthenticated ? "/dashboard" : "/signup"}

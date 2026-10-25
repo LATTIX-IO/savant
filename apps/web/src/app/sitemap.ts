@@ -10,7 +10,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   const origin = resolveSiteOrigin();
   const lastModified = new Date();
 
-  return PUBLIC_ROUTES.map((route) => ({
+  return PUBLIC_ROUTES.filter((route) => route.indexable !== false).map((route) => ({
     url: `${origin}${route.path === "/" ? "" : route.path}`,
     lastModified,
     changeFrequency: route.changeFrequency,

@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { FAQ_ITEMS } from "./marketing-content.ts";
+import { SEO_GUIDES } from "./seo-guides.ts";
 import {
   AI_CRAWLERS,
   buildBreadcrumbJsonLd,
   buildDocsJsonLd,
   buildFaqJsonLd,
+  buildGuideJsonLd,
   buildLlmsFullTxt,
   buildLlmsTxt,
   buildRobotsTxt,
@@ -42,9 +44,10 @@ test("isNoindexPath covers private surfaces without catching public pages", () =
     assert.equal(isNoindexPath(path), true, path);
   }
 
-  for (const route of PUBLIC_ROUTES) {
+  for (const route of PUBLIC_ROUTES.filter((item) => item.indexable !== false)) {
     assert.equal(isNoindexPath(route.path), false, route.path);
   }
+  assert.equal(isNoindexPath("/signup"), true, "redirect-only signup must not be indexed");
 
   assert.equal(isNoindexPath("/operations"), false, "prefix match must respect segment boundaries");
 });
@@ -144,4 +147,25 @@ test("resolveIndexNowKey accepts only spec-shaped keys", () => {
   assert.equal(resolveIndexNowKey({ INDEXNOW_KEY: "short" }), null);
   assert.equal(resolveIndexNowKey({ INDEXNOW_KEY: "has spaces in it" }), null);
   assert.equal(resolveIndexNowKey({}), null);
+});
+
+
+test("intent-specific public guides are unique, substantial, and present in the sitemap inventory", () => {
+  const paths = SEO_GUIDES.map((guide) => guide.path);
+  assert.equal(new Set(paths).size, paths.length);
+  for (const guide of SEO_GUIDES) {
+    const route = PUBLIC_ROUTES.find((candidate) => candidate.path === guide.path);
+    assert.equal(route?.title, guide.title);
+    assert.equal(route?.description, guide.description);
+    assert.ok(guide.sections.length >= 4, guide.path);
+    assert.ok(guide.faq.length >= 3, guide.path);
+    assert.ok(guide.sections.every((section) => section.id && section.paragraphs.length && section.bullets.length));
+    assert.match(buildLlmsTxt(ORIGIN), new RegExp(guide.path));
+    assert.ok(buildLlmsFullTxt(ORIGIN).includes(guide.headline) || buildLlmsFullTxt(ORIGIN).includes(guide.lede));
+    const article = buildGuideJsonLd(ORIGIN, guide);
+    assert.equal(article["@type"], "TechArticle");
+    assert.equal(article.url, ORIGIN + guide.path);
+    assert.equal(article.description, guide.description);
+  }
+  assert.equal(PUBLIC_ROUTES.find((r) => r.path === "/signup")?.indexable, false);
 });

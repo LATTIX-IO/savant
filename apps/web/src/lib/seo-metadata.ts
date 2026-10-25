@@ -31,6 +31,11 @@ export function buildRootMetadata(env = process.env): Metadata {
     creator: "Lattix Technologies Corp.",
     publisher: "Lattix Technologies Corp.",
     keywords: [
+      "AI agent skill management",
+      "AI skill evaluation",
+      "enterprise AI skill governance",
+      "managed agent skills",
+      "SKILL.md",
       "AI skill governance",
       "agent skills",
       "prompt management",

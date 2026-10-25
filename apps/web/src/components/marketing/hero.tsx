@@ -7,15 +7,15 @@ export function Hero({ signedIn }: { signedIn: boolean }) {
     <section className="hero" data-nav="" aria-labelledby="hero-title">
       <div className="shell hero-grid">
         <div className="hero-copy">
-          <p className="hero-eyebrow">The system of record for organizational skills</p>
+          <p className="hero-eyebrow">AI agent skill management and governance</p>
           <h1 id="hero-title" className="display-1 hero-title">
             Turn expertise into
             <br />
             <em>governed</em> capability.
           </h1>
           <p className="hero-sub">
-            Codify expertise as versioned skills, prove they work, govern every release, and keep
-            every AI surface aligned.
+            Manage AI agent skills as versioned Git assets, evaluate changes before release, and
+            give teams a traceable approval path across AI workflows.
           </p>
           <div className="hero-ctas">
             {signedIn ? (

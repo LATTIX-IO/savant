@@ -11,7 +11,7 @@ import { buildPublicPageMetadata } from "@/lib/seo-metadata";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = buildPublicPageMetadata("/signup");
+export const metadata = buildPublicPageMetadata("/signup", { robots: { index: false, follow: false } });
 
 type SignupSearchParams = {
   cycle?: string;

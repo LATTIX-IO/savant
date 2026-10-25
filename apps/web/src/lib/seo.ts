@@ -1,3 +1,4 @@
+import { SEO_GUIDES, type SeoGuide, type GuidePath } from "./seo-guides.ts";
 import {
   CONTACT,
   DOCS_GUIDES,
@@ -51,7 +52,8 @@ export function isIndexableDeployment(env: SeoEnv = process.env): boolean {
 // ---------------------------------------------------------------------------
 
 export type PublicRoute = {
-  path: "/" | "/docs" | "/catalog" | "/security" | "/signup";
+  path: "/" | "/docs" | "/catalog" | "/security" | "/signup" | GuidePath;
+  indexable?: boolean;
   title: string;
   description: string;
   changeFrequency: "daily" | "weekly" | "monthly";
@@ -93,11 +95,19 @@ export const PUBLIC_ROUTES: PublicRoute[] = [
   },
   {
     path: "/signup",
+    indexable: false,
     title: "Create your Savant workspace",
     description: "Start a 14-day Savant trial. Sign up and configure your workspace in under a minute.",
     changeFrequency: "monthly",
     priority: 0.5,
   },
+  ...SEO_GUIDES.map((guide) => ({
+    path: guide.path,
+    title: guide.title,
+    description: guide.description,
+    changeFrequency: "monthly" as const,
+    priority: 0.7,
+  })),
 ];
 
 /**
@@ -125,7 +135,7 @@ export const CRAWL_DISALLOWED_PREFIXES = [
  * with `X-Robots-Tag: noindex`. Transactional pages are crawlable (not in
  * robots.txt) on purpose: a crawler has to fetch them to see the noindex.
  */
-export const NOINDEX_PATH_PREFIXES = [...CRAWL_DISALLOWED_PREFIXES, "/auth-status", "/onboarding", "/signin"] as const;
+export const NOINDEX_PATH_PREFIXES = [...CRAWL_DISALLOWED_PREFIXES, "/auth-status", "/onboarding", "/signin", "/signup"] as const;
 
 export function isNoindexPath(pathname: string): boolean {
   return NOINDEX_PATH_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -236,6 +246,10 @@ export function buildLlmsTxt(origin: string): string {
     `- [Security](${url("/security")}): Identity, data handling, provenance, audit, and bounded improvement.`,
     `- [Start a trial](${url("/signup")}): Create a workspace with a ${PRICING.trialDays}-day free trial.`,
     "",
+    "## Practical guides",
+    "",
+    ...SEO_GUIDES.map((guide) => `- [${guide.title}](${url(guide.path)}): ${guide.description}`),
+    "",
     "## Optional",
     "",
     `- [Full text](${url("/llms-full.txt")}): Every public page's content as plain Markdown.`,
@@ -284,6 +298,14 @@ export function buildLlmsFullTxt(origin: string): string {
     lines.push(`### ${item.q}`, "", item.a, "");
   }
 
+  lines.push("## Practical guides", "");
+  for (const guide of SEO_GUIDES) {
+    lines.push(`### ${guide.title} (${origin}${guide.path})`, "", guide.lede, "");
+    for (const section of guide.sections) {
+      lines.push(`#### ${section.heading}`, "", ...section.paragraphs, "", ...section.bullets.map((point) => `- ${point}`), "");
+    }
+    for (const item of guide.faq) lines.push(`#### ${item.question}`, "", item.answer, "");
+  }
   return lines.join("\n");
 }
 
@@ -425,6 +447,27 @@ export function buildDocsJsonLd(origin: string): JsonLdNode {
       text: guide.body,
       url: `${origin}/docs#${guide.id}`,
     })),
+  };
+}
+
+/** Credible page-level article entity tied to the same guide facts people see. */
+export function buildGuideJsonLd(origin: string, guide: SeoGuide): JsonLdNode {
+  const url = `${origin}${guide.path}`;
+  return {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    "@id": `${url}#article`,
+    headline: guide.title,
+    description: guide.description,
+    url,
+    mainEntityOfPage: url,
+    datePublished: guide.published,
+    dateModified: guide.published,
+    inLanguage: "en",
+    author: { "@id": `${origin}/#organization` },
+    publisher: { "@id": `${origin}/#organization` },
+    keywords: guide.keywords.join(", "),
+    articleSection: guide.sections.map((section) => section.heading),
   };
 }
 

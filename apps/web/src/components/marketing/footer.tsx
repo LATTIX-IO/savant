@@ -18,6 +18,9 @@ export function Footer() {
               <li><Link href="/#how-it-works">How it works</Link></li>
               <li><Link href="/#pricing">Pricing</Link></li>
               <li><Link href="/docs">Docs</Link></li>
+              <li><Link href="/ai-agent-skill-management">AI skill management</Link></li>
+              <li><Link href="/ai-skill-evaluation">AI skill evaluation</Link></li>
+              <li><Link href="/enterprise-ai-skill-governance">Enterprise AI governance</Link></li>
             </ul>
           </div>
           <div>

@@ -111,11 +111,11 @@ export function stripeMode(env: StripeEnv = process.env): StripeMode {
     return "unconfigured";
   }
 
-  if (candidate.startsWith("sk_live_") || candidate.startsWith("pk_live_")) {
+  if (candidate.startsWith("sk_live_") || candidate.startsWith("rk_live_") || candidate.startsWith("pk_live_")) {
     return "live";
   }
 
-  if (candidate.startsWith("sk_test_") || candidate.startsWith("pk_test_")) {
+  if (candidate.startsWith("sk_test_") || candidate.startsWith("rk_test_") || candidate.startsWith("pk_test_")) {
     return "test";
   }
 

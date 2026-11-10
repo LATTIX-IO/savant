@@ -12,6 +12,7 @@ import {useUiV2WorkspaceSlug} from "@/components/savant/ui-v2/mode";
 import {fetchRepositoryList,fetchAIConnections,fetchConnectorDashboard} from "@/lib/control-plane-client";
 import {inspectUiV2ProviderLanes} from "@/lib/ui-v2-provider-lanes";
 import {ProviderConnectionGuide} from "./provider-connection-guide";
+import {EnterpriseAIProviderPreflight} from "./enterprise-ai-provider-preflight";
 import {getUiV2RepositoryHealth} from "@/lib/ui-v2-library-model";
 import {buildTenantAwareAppPath} from "@/lib/tenant-paths";
 import styles from "./operational-admin-v2.module.css";
@@ -136,6 +137,7 @@ export function IntegrationsV2({legacy}:{legacy:ReactNode}){
             a production provider or infer production readiness from its status.</p>
         </section>
       </div>
+      <EnterpriseAIProviderPreflight workspaceSlug={slug}/>
       <ProviderConnectionGuide executorLabel={lanes.workspaceOpenAiExecutor?.label??null}
        testAction={<Link href={modelsHref} className={styles.control}>
         Configure existing test API provider
